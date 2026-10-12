@@ -1,0 +1,22 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Site configuration & secrets
+config.R
+mail_config.txt
+
+# Slurm outputs
+slurm-*.out
+slurm-*.err
+
+# Site-specific ops scripts & authoring workspace (kept out of the public repo)
+local/
+docs_assets/
+
+# Misc
+__pycache__/
+.zcode/
+*.log

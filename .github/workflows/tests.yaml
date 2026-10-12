@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  r-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - name: Install testthat
+        run: Rscript -e 'install.packages(c("testthat", "shiny"), repos = "https://cloud.r-project.org")'
+
+      - name: Run R test suite
+        run: Rscript -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'
+
+      - name: Synthetic-ID allowlist scan
+        run: python3 tests/check_synthetic_ids.py
+
+      - name: Python syntax check
+        run: python3 -m py_compile mail_notify.py
+
+  app-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - name: Install R dependencies (app runtime)
+        run: Rscript -e 'install.packages(c("shiny", "shinydashboard", "shinyFiles", "httpuv"), repos = "https://cloud.r-project.org", Ncpus = 2)'
+
+      - name: Install browser stack
+        run: |
+          python3 -m pip install --user selenium
+          firefox --version
+          geckodriver --version
+
+      - name: Smoke (app object builds, no site config needed)
+        run: Rscript -e 'invisible(shiny::shinyAppFile("app.R")); cat("smoke OK\n")'
+
+      - name: Browser E2E (import regression, 3 fixtures)
+        run: bash tests/e2e/run_e2e.sh
