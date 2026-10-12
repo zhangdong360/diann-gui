@@ -492,9 +492,11 @@ server <- function(input, output, session) {
   volumes <- BASE_VOLUMES[file.exists(unname(BASE_VOLUMES))]
   user <- Sys.getenv("USER"); if (!nzchar(user)) user <- Sys.info()[["user"]]
 
-  # 运行用户无权访问数据根目录时, 文件浏览器会静默显示为空 — 在此明确提示
+  # 运行用户无权访问数据根目录时, 文件浏览器会静默显示为空 — 在此明确提示。
+  # 不存在的卷 (如 e2e/演示用的合成根 /share/home/demo) 静默跳过:
+  # 选择器本就按 file.exists 过滤, 这类卷是配置里的既定测试设施而非故障
   acc <- file.access(unname(BASE_VOLUMES), 4)
-  denied <- is.na(acc) | acc != 0
+  denied <- (is.na(acc) | acc != 0) & file.exists(unname(BASE_VOLUMES))
   if (any(denied)) {
     showNotification(
       HTML(paste0(
