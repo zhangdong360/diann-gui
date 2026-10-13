@@ -20,7 +20,15 @@ jobs:
           needs: check
 
       - name: Install package
-        run: R CMD INSTALL --no-multiarch .
+        run: |
+          OUT=$(R CMD INSTALL --no-multiarch . 2>&1) || true
+          echo "$OUT"
+          if echo "$OUT" | grep -qE "^\* DONE"; then
+            echo "install OK"
+          else
+            echo "$OUT" | grep -E "^(ERROR|Error|There is no package|undefined exports)" | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
 
       - name: Run R test suite
         run: |
@@ -63,7 +71,15 @@ jobs:
           needs: check
 
       - name: Install package
-        run: R CMD INSTALL --no-multiarch .
+        run: |
+          OUT=$(R CMD INSTALL --no-multiarch . 2>&1) || true
+          echo "$OUT"
+          if echo "$OUT" | grep -qE "^\* DONE"; then
+            echo "install OK"
+          else
+            echo "$OUT" | grep -E "^(ERROR|Error|There is no package|undefined exports)" | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
 
       - name: Install browser stack
         run: |
