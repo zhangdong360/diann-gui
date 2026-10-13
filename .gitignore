@@ -20,3 +20,4 @@ docs_assets/
 __pycache__/
 .zcode/
 *.log
+!R/config.R
