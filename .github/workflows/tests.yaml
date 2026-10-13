@@ -15,8 +15,11 @@ jobs:
         with:
           r-version: release
 
-      - name: Install testthat
-        run: Rscript -e 'install.packages(c("testthat", "shiny"), repos = "https://cloud.r-project.org")'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::testthat
+            any::shiny
 
       - name: Run R test suite
         run: |
@@ -54,8 +57,13 @@ jobs:
         with:
           r-version: release
 
-      - name: Install R dependencies (app runtime)
-        run: Rscript -e 'install.packages(c("shiny", "shinydashboard", "shinyFiles", "httpuv"), repos = "https://cloud.r-project.org", Ncpus = 2)'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::shiny
+            any::shinydashboard
+            any::shinyFiles
+            any::httpuv
 
       - name: Install browser stack
         run: |
