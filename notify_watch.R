@@ -22,13 +22,29 @@ self_dir <- local({
   if (length(f)) dirname(normalizePath(f[1], mustWork = FALSE)) else getwd()
 })
 
-# 站点配置: 与 app.R 加载同一份 config.R (可提供 MAIL_PYTHON 等)
-cfg <- file.path(self_dir, "config.R")
-if (file.exists(cfg)) source(cfg)
+# 站点/用户配置: 与 app.R 加载同一份 (探测顺序须两处一致, 见 app.R 的 resolve_user_config)
+resolve_user_config <- function(dir) {
+  env <- Sys.getenv("DIANN_GUI_CONFIG")
+  if (nzchar(env) && file.exists(env)) return(normalizePath(env, mustWork = FALSE))
+  user_cfg <- file.path(path.expand("~"), ".diann_gui", "config.R")
+  if (file.exists(user_cfg)) return(user_cfg)
+  local_cfg <- file.path(dir, "config.R")
+  if (file.exists(local_cfg)) return(local_cfg)
+  ""
+}
+cfg <- resolve_user_config(self_dir)
+if (nzchar(cfg)) source(cfg)
 
 # 与 app.R 相同的脚本同目录推导; MAIL_PYTHON 缺省由 notify_common.R 从 PATH 探测
 MAIL_PY <- file.path(self_dir, "mail_notify.py")
-MAIL_CONF <- file.path(self_dir, "mail_config.txt")
+# 邮件凭据搜索链 (与 app.R 一致): DIANN_GUI_MAIL_CONF → ~/.diann_gui/ → 脚本同目录
+MAIL_CONF <- local({
+  env <- Sys.getenv("DIANN_GUI_MAIL_CONF")
+  if (nzchar(env) && file.exists(env)) return(env)
+  user_mc <- file.path(path.expand("~"), ".diann_gui", "mail_config.txt")
+  if (file.exists(user_mc)) return(user_mc)
+  file.path(self_dir, "mail_config.txt")
+})
 
 st_arg <- getarg("--state", "")
 if (nzchar(st_arg)) NOTIFY_STATE <- st_arg

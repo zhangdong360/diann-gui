@@ -24,6 +24,9 @@ jobs:
       - name: Synthetic-ID allowlist scan
         run: python3 tests/check_synthetic_ids.py
 
+      - name: Launcher syntax check
+        run: bash -n bin/diann-gui
+
       - name: Python syntax check
         run: python3 -m py_compile mail_notify.py
 

@@ -1,10 +1,40 @@
-[English](README.md) | 简体中文
+> [English](README.md) | 简体中文
 
 # DIANN GUI
 
 一个把 [DIA-NN](https://github.com/vdemichev/DiaNN) 搬进浏览器的 Shiny 应用：
 在网页上构建 DIA-NN 命令、以 Slurm 批处理作业方式提交到 HPC 集群（运行官方
 DIA-NN 容器镜像 Apptainer/Singularity `.sif`），并集中监控作业队列、日志与结果。
+
+## 自行部署（推荐方式）
+
+每位用户以**自己的账号**运行自己的一份拷贝：作业以你本人提交、输出归你所有、
+文件权限就是普通 Unix 权限——没有第三方运行用户，没有共享队列身份，不需要
+管理员配 ACL。
+
+```bash
+git clone https://github.com/zhangdong360/diann-gui.git
+cd diann_gui
+bin/diann-gui --init   # 可选: 按模板生成 ~/.diann_gui/config.R 设置文件
+bin/diann-gui          # 启动, 随机端口; 终端会打印访问地址
+```
+
+- **远程集群？** 先建 SSH 隧道：`ssh -L <端口>:localhost:<端口> 用户@集群`，
+  然后本地浏览器打开 `http://localhost:<端口>`。
+- **RStudio Server 用户**：在内置终端里运行 `bin/diann-gui` 即可——RStudio
+  会自动代理端口并弹出浏览器窗口。同样以本人身份运行，零管理操作。
+- **配置**位于 `~/.diann_gui/config.R`（模板 `config.example.R`；环境变量
+  `DIANN_GUI_CONFIG` 指定的文件同样有效）。常用项：`SIF_DIRS` 指向共享只读的
+  DIA-NN 镜像目录（如 `/share/app/tools/diann`）、R 包在站点库时设 `EXTRA_LIB`、
+  可选的邮件凭据（`~/.diann_gui/mail_config.txt`，也支持 `DIANN_GUI_MAIL_CONF`
+  环境变量）。
+- **管理员一次性操作**：把 `diann*.sif` 镜像放到全员可读的共享目录（如
+  `/share/app/tools/diann`），并把三个 R 包（`shiny`、`shinydashboard`、
+  `shinyFiles`）装进系统库或站点库（或让大家 `EXTRA_LIB` 指过去）。仅此而已；
+  数据各自放自己的家目录。
+
+中央 shiny-server 部署（固定 URL 的共享实例，所有作业以服务器的运行用户执行）
+仍作为部署变体受支持——见[中央部署（shiny-server）](#中央部署shiny-server)。
 
 ## 功能特性
 
@@ -29,7 +59,7 @@ DIA-NN 容器镜像 Apptainer/Singularity `.sif`），并集中监控作业队�
 
 ```mermaid
 flowchart LR
-    B[浏览器] --> SS["shiny-server :3838（运行用户）"]
+    B[浏览器] --> SS["Shiny 应用（app.R，你的账号）"]
     SS --> A["app.R"]
     A -->|"sbatch"| Q[Slurm 队列]
     Q --> CN["计算节点<br/>apptainer exec --bind ... diann.sif diann-linux ..."]
@@ -43,11 +73,15 @@ flowchart LR
 |---|---|
 | 安装 **Slurm** 的 Linux | 应用通过 `sbatch`/`squeue`/`sacct`/`scancel`/`scontrol` 与集群交互 |
 | **R** ≥ 4.0 | 需安装 `shiny`、`shinydashboard`、`shinyFiles` 三个包 |
-| **shiny-server** | 或其他托管 Shiny 应用的方式（如 `shiny::runApp`） |
 | **Apptainer 或 Singularity** | 以及一个 DIA-NN 的 `.sif` 容器镜像 |
 | **python3** | 可选，仅邮件通知需要（纯标准库） |
+| **shiny-server** | 可选——仅"中央部署"变体需要；自行部署用 `bin/diann-gui` 启动 |
 
-## 快速部署
+## 中央部署（shiny-server）
+
+变体：把**一个共享实例**固定在某个 URL 供多人使用。注意此模式下所有作业都以
+shiny-server 的 `run_as` 用户运行（而不是点击的人），跨用户文件访问需要显式的
+组/ACL 配置，且全部 GUI 作业共享一个队列身份。自行部署模式没有这些问题。
 
 1. 在运行 shiny-server 的服务器（通常是 Slurm 登录/管理节点）上**克隆**：
 
@@ -102,9 +136,13 @@ flowchart LR
 
 ## 邮件通知（可选）
 
+凭据文件放 `~/.diann_gui/mail_config.txt`（自行部署推荐）或与 app.R 同目录
+（中央部署），三处搜索链也可用环境变量 `DIANN_GUI_MAIL_CONF` 指定：
+
 ```bash
-cp mail_config.example.txt mail_config.txt   # 编辑 smtp_host / smtp_user / smtp_pass 等
-chmod 600 mail_config.txt
+mkdir -p ~/.diann_gui
+cp mail_config.example.txt ~/.diann_gui/mail_config.txt   # 编辑 smtp_host / smtp_user / smtp_pass 等
+chmod 600 ~/.diann_gui/mail_config.txt
 ```
 
 - `smtp_port` 为 `465` 走 SSL，其他端口走 STARTTLS；126/163/QQ 邮箱请填
@@ -119,7 +157,10 @@ chmod 600 mail_config.txt
 
 ## 多用户权限模型
 
-默认情况下应用以 shiny-server `run_as` 用户运行，产出文件归该用户所有。
+自行部署（推荐）：应用以你本人运行，产出文件归你所有，与命令行行为一致，
+通常无需本节。
+
+中央部署变体：应用以 shiny-server `run_as` 用户运行，产出文件归该用户所有。
 若实验室成员要用其他账号读取结果（典型场景：`lab` 数据账号持有原始
 数据、shiny 运行应用）：
 

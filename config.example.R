@@ -1,75 +1,73 @@
 # ============================================================
-# diann_gui site configuration
+# diann_gui 用户设置模板 (自托管模式)
 #
-# Copy this file to `config.R` (next to app.R) and edit it for your
-# cluster. config.R is gitignored — keep site-specific values there.
-# Every variable defined in config.R overrides the built-in default in
-# app.R; anything left undefined falls back to the default.
+# 生成/启用方式 (任选其一):
+#   bin/diann-gui --init          # 复制本模板到 ~/.diann_gui/config.R
+#   或手动: mkdir -p ~/.diann_gui && cp config.example.R ~/.diann_gui/config.R
 #
-# The defaults below are commented out: uncomment and edit what you need.
+# 配置发现顺序 (app.R / notify_watch.R): 环境变量 DIANN_GUI_CONFIG 指定的文件
+# → ~/.diann_gui/config.R → 与 app.R 同目录的 config.R (中央部署变体)。
+#
+# 默认即"用户家目录模式", 零配置可用: 数据/输出根 = 你的家目录,
+# 作业以当前用户提交, 文件权限与你自己跑命令行完全一致。
+# 下面各项全部注释着——取消注释并修改才生效; 未定义的项用 app.R 内置默认。
+# 模板中的 DIANN_GUI_USER_HOME 令牌会被 bin/diann-gui --init 替换为你的家目录。
 # ============================================================
 
-# ---- R environment ----------------------------------------------------
+# ---- R 环境 --------------------------------------------------------------
 
-# Extra R library tree that contains the dependency packages
-# (shiny, shinydashboard, shinyFiles). Leave unset to use R's default
-# .libPaths().
-# EXTRA_LIB <- "/path/to/R/site-library"
+# 依赖包 (shinydashboard / shinyFiles 等) 所在的额外包库。若系统 R 库里已装齐
+# 则无需设置; 也可指向集群上全员可读的共享包库。
+# EXTRA_LIB <- "/share/app/tools/R/site-library"
 
-# ---- DIA-NN container images ------------------------------------------
+# ---- DIA-NN 容器镜像 ------------------------------------------------------
 
-# Directories scanned recursively for DIA-NN container images matching
-# diann*.sif. The version dropdown in the GUI is built from the scan.
-# SIF_DIRS <- c("/srv/DIA-NN")
+# 递归扫描 diann*.sif 的目录 (建议: 管理员把镜像统一放在 /share/app/tools/diann/
+# 这类全员可读的共享位)。GUI 的版本下拉由扫描结果生成。
+# SIF_DIRS <- c("/share/app/tools/diann")
 
-# Image preselected in the dropdown. Empty string = first scanned image.
-# DEFAULT_SIF <- "/srv/DIA-NN/tools/diann-2.7.0.sif"
+# 默认选中的镜像。留空 = 扫描到的第一个。
+# DEFAULT_SIF <- "/share/app/tools/diann/diann-2.7.0.sif"
 
-# ---- Data locations ----------------------------------------------------
+# ---- 数据位置 -------------------------------------------------------------
 
-# Root of the data tree browsable from the GUI (FASTA, RAW files and
-# output directories are expected under this tree). Defaults to the run
-# user's home directory.
-# DATA_HOME <- "/share/home/demo"
+# GUI 文件选择器的数据根 (RAW/FASTA/输出目录都应放在它下面)。
+# 默认 = 你的家目录, 一般无需设置; 数据放 ~/data 下即可。
+# DATA_HOME <- "DIANN_GUI_USER_HOME/data"
 
-# Built-in contaminant FASTA (cRAP) added to the command when contaminant
-# quantification is enabled. Empty string = no preselected FASTA.
-# CON_FASTA <- "/path/to/cRAP.fasta"
+# 内置污染物 FASTA (cRAP), 勾选"启用污染物扣除"时附加到命令。
+# 留空 = 无预选 (想要 cRAP 扣除时, 自行下载一份 cRAP FASTA 并在此指向它)。
+# CON_FASTA <- "DIANN_GUI_USER_HOME/data/fasta/cRAP_contaminants.fasta"
 
-# ---- Slurm --------------------------------------------------------------
+# ---- Slurm ----------------------------------------------------------------
 
-# Slurm partitions offered in the submit form; the first one is the default.
+# 提交表单提供的分区; 第一个是默认值。
 # SLURM_PARTITIONS <- c("compute")
 
-# ---- Apptainer / Singularity --------------------------------------------
+# ---- Apptainer / Singularity ----------------------------------------------
 
-# Directories searched for the `apptainer` binary inside generated sbatch
-# scripts (each is prepended to PATH if <dir>/apptainer exists).
-# APPTAINER_PATHS <- c("/usr/local/bin")
+# 生成的 sbatch 脚本中查找 apptainer 可执行文件的目录 (存在 <目录>/apptainer
+# 则加入 PATH)。按你集群的实际安装位置填写。
+# APPTAINER_PATHS <- c("/share/app/conda/conda24/envs/apptainer/bin")
 
-# Environment module to load as a fallback when apptainer is not found on
-# PATH. Empty string disables the module fallback.
+# PATH 上找不到 apptainer 时的环境模块兜底。留空 = 关闭模块兜底。
 # APPTAINER_MODULE_FALLBACK <- "apptainer/1.4.5"
 
-# Extra host paths bind-mounted into the container (apptainer --bind).
-# Apptainer only binds $HOME and the working directory by default — add
-# paths here if your data lives elsewhere (e.g. a shared /share).
+# 额外绑定进容器的宿主路径 (apptainer --bind)。apptainer 默认只绑 $HOME 与
+# 工作目录——数据在别处 (如共享盘 /share) 时需要加。
 # BIND_PATHS <- c("/share")
 
-# ---- Shared output directories (multi-user setups) ----------------------
+# ---- 共享输出目录 (仅多账户共读同一目录时需要) -------------------------------
 
-# Unix group applied to GUI-created output directories: every directory
-# the GUI creates is chmod 2770 (setgid + group-writable) and chgrp'd to
-# this group, walking up the tree to DATA_HOME. Use this when lab members
-# access outputs under a different account than the app's run user, and
-# make sure the run user and those users share the group. Empty string
-# disables the repair entirely (fine for single-user deployments).
-# SHARED_GROUP <- "diann"
+# GUI 创建的输出目录逐层 chmod 2770 + chgrp 到该组 (自上而下修到 DATA_HOME)。
+# 单人自托管: 保持为空即可 (完全关闭组修复)。仅当同事要用**另一个账号**读你的
+# 输出目录时才设置, 并确保双方共享该 Unix 组。
+# SHARED_GROUP <- ""
 
-# ---- Email notifications (optional) --------------------------------------
+# ---- 邮件通知 (可选) -------------------------------------------------------
 
-# Python 3 interpreter used to send completion emails. Leave unset to
-# auto-detect python3 on PATH. Emails are only sent when a mail_config.txt
-# file (see mail_config.example.txt) exists next to app.R; without it the
-# feature stays disabled.
+# 发送完成邮件用的 python3。留空 = 自动探测 PATH 上的 python3。
+# 凭据文件搜索链: 环境变量 DIANN_GUI_MAIL_CONF → ~/.diann_gui/mail_config.txt
+# → 与 app.R 同目录的 mail_config.txt (模板见 mail_config.example.txt)。
+# 三处都不存在时邮件功能整体停用 (不影响其他功能)。
 # MAIL_PYTHON <- "/usr/bin/python3"

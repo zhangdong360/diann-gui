@@ -17,11 +17,22 @@ app_dir <- local({
   }
 })
 
-# Optional site configuration: copy config.example.R to config.R next to
-# app.R and set your cluster's paths there. Anything defined in config.R
-# overrides the built-in defaults below.
-CONFIG_FILE <- file.path(app_dir, "config.R")
-if (file.exists(CONFIG_FILE)) source(CONFIG_FILE)
+# 配置发现 (与 notify_watch.R 的 resolve_user_config 保持一致, 改动须两处同步):
+#   1. 环境变量 DIANN_GUI_CONFIG 指向的文件 —— 程序化注入点, 供一键部署/包装器使用
+#   2. ~/.diann_gui/config.R —— 每用户设置面 (模板见 config.example.R, 或 bin/diann-gui --init 生成)
+#   3. <app_dir>/config.R —— 与应用同目录的站点配置 (中央 shiny-server 部署沿用)
+# 均不存在时用内置默认: 数据根=用户家目录, 即自托管模式开箱即用
+resolve_user_config <- function(dir) {
+  env <- Sys.getenv("DIANN_GUI_CONFIG")
+  if (nzchar(env) && file.exists(env)) return(normalizePath(env, mustWork = FALSE))
+  user_cfg <- file.path(path.expand("~"), ".diann_gui", "config.R")
+  if (file.exists(user_cfg)) return(user_cfg)
+  local_cfg <- file.path(dir, "config.R")
+  if (file.exists(local_cfg)) return(local_cfg)
+  ""
+}
+CONFIG_FILE <- resolve_user_config(app_dir)
+if (nzchar(CONFIG_FILE)) source(CONFIG_FILE)
 
 # Optional extra R library tree holding the GUI's dependency packages
 if (!exists("EXTRA_LIB")) EXTRA_LIB <- NULL
@@ -54,7 +65,10 @@ source(file.path(app_dir, "ui_params.R"), local = TRUE)
 # ============================================================
 
 # SIF 镜像扫描目录（递归查找 diann*.sif，下拉框按版本去重，保留扫描到的第一个）
-if (!exists("SIF_DIRS")) SIF_DIRS <- c(path.expand("~"))
+# 默认为空: 递归扫描家目录在 NFS 上可能极慢 (阻塞启动)。请在配置里显式指向
+# 镜像目录 (见 config.example.R, 例如共享位 /share/app/tools/diann);
+# 版本下拉为空时 GUI 也会给出同样的提示。
+if (!exists("SIF_DIRS")) SIF_DIRS <- character(0)
 if (!exists("DEFAULT_SIF")) DEFAULT_SIF <- ""  # empty = use the first scanned image
 
 # 文件/目录浏览根（自动过滤不存在的路径）
@@ -112,7 +126,14 @@ if (!exists("BIND_PATHS")) BIND_PATHS <- character(0)
 # config.R; without it python3 is looked up on PATH. Without mail_config.txt
 # the whole feature stays dormant (no enqueue, no watcher, no mail UI hints).
 MAIL_PY <- file.path(app_dir, "mail_notify.py")
-MAIL_CONF <- file.path(app_dir, "mail_config.txt")
+# 邮件凭据搜索链 (与 notify_watch.R 一致): DIANN_GUI_MAIL_CONF → ~/.diann_gui/ → 脚本同目录
+MAIL_CONF <- local({
+  env <- Sys.getenv("DIANN_GUI_MAIL_CONF")
+  if (nzchar(env) && file.exists(env)) return(env)
+  user_mc <- file.path(path.expand("~"), ".diann_gui", "mail_config.txt")
+  if (file.exists(user_mc)) return(user_mc)
+  file.path(app_dir, "mail_config.txt")
+})
 
 # ============================================================
 # Job completion email notifications (optional)
@@ -203,6 +224,8 @@ PARAM_DOC <- {
 # SIF 镜像扫描（模块级执行一次）
 # ============================================================
 scan_sif_images <- function(dirs) {
+  dirs <- dirs[!is.na(dirs) & nzchar(dirs)]
+  if (!length(dirs)) return(data.frame(ver = character(), path = character()))
   paths <- unlist(lapply(dirs, function(d) {
     if (dir.exists(d)) {
       list.files(d, pattern = "(?i)^diann.*\\.sif$", full.names = TRUE, recursive = TRUE)
@@ -502,7 +525,7 @@ server <- function(input, output, session) {
       HTML(paste0(
         "<b>数据目录不可访问</b><br>当前 GUI 以用户 <b>", user, "</b> 运行, 无权读取 ",
         paste(sprintf("%s (%s)", names(BASE_VOLUMES)[denied], unname(BASE_VOLUMES)[denied]), collapse = ", "),
-        "。<br>请让管理员将 shiny-server 的 run_as 改为该目录的属主用户并重启服务。"
+        "。<br>请检查该目录对当前用户的读权限 (属主/组/ACL), 或在配置中改指一个可读的数据根。"
       )),
       type = "error", duration = NULL
     )
