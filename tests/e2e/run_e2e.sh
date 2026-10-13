@@ -22,7 +22,8 @@ PASS=0
 if [ -z "$URL" ]; then
   LOG="$(mktemp /tmp/diann_e2e.XXXX.log)"
   echo "[e2e] 启动本地实例 :$PORT (日志 $LOG)"
-  Rscript -e "shiny::runApp('$REPO', port = $PORT, launch.browser = FALSE)" > "$LOG" 2>&1 &
+  R CMD INSTALL --no-multiarch . > /dev/null 2>&1 || { echo "[e2e] FAIL: R CMD INSTALL"; exit 1; }
+  Rscript -e "diann.gui::run_app(port = $PORT, host = '127.0.0.1', launch.browser = FALSE)" > "$LOG" 2>&1 &
   APP_PID=$!
   URL="http://127.0.0.1:$PORT/"
   trap 'kill $APP_PID 2>/dev/null' EXIT

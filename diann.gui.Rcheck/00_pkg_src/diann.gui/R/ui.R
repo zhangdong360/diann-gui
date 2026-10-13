@@ -1,0 +1,236 @@
+# ============================================================
+# ui.R — 应用界面 (dashboardPage)
+# inputId/DOM/JS 条件为三重契约的一部分 (server + 旗标映射 + e2e), 不得单独改动。
+# ============================================================
+app_ui <- function() {
+ui <- dashboardPage(
+  dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION))),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
+      menuItem("任务队列", tabName = "monitor", icon = icon("list-ul")),
+      menuItem("参数速查", tabName = "help", icon = icon("book")),
+      menuItem("更新说明", tabName = "changelog", icon = icon("history"))
+    )
+  ),
+  dashboardBody(
+    tags$head(PARAM_CSS_TAG),
+    tabItems(
+      # ==================== 提交分析 ====================
+      tabItem(tabName = "analysis",
+        fluidRow(
+          box(title = "1. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
+              column(4,
+                selectInput("sif_version", "版本 (自动扫描 diann*.sif):", choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected"))
+              ),
+              column(4,
+                checkboxInput("use_custom_sif", "使用自定义镜像路径", FALSE),
+                conditionalPanel("input.use_custom_sif == 1",
+                  textInput("custom_sif", "sif 文件完整路径:", placeholder = "/path/to/diann-x.y.z.sif")
+                )
+              ),
+              column(4,
+                tags$label("当前生效镜像:"), br(),
+                verbatimTextOutput("sif_display"),
+                helpText("不同版本通过不同 sif 镜像实现；若版本下拉为空请检查 config.R 中的 SIF_DIRS。")
+              )
+          )
+        ),
+        fluidRow(
+          box(title = "2. 文件与数据库", status = "primary", solidHeader = TRUE, width = 12,
+              column(3,
+                radioButtons("raw_mode", "RAW 输入方式:", inline = TRUE,
+                             choices = c("选择文件" = "files", "扫描目录" = "dir")),
+                conditionalPanel("input.raw_mode == 'files'",
+                  shinyFilesButton("raw_files", "选择 RAW 文件", "选择待分析的原始文件 (可多选)", multiple = TRUE)
+                ),
+                conditionalPanel("input.raw_mode == 'dir'",
+                  shinyDirButton("raw_dir_btn", "选择 RAW 目录", "选择包含原始文件的目录 (递归扫描)"),
+                  verbatimTextOutput("raw_dir_display")
+                ),
+                verbatimTextOutput("raw_path_display"),
+                helpText("注意: DIA-NN 会在 RAW 目录生成 *.raw.quant 缓存并自动复用, 同一目录混用不同谱库/版本的分析可能报 library size mismatch, 必要时删除 *.raw.quant")
+              ),
+              column(3,
+                shinyFilesButton("lib_file", "选择光谱库", "选择光谱库 (可选, .speclib/.parquet/.tsv/.msp/.sptxt)", multiple = FALSE),
+                verbatimTextOutput("lib_path_display"),
+                helpText("与 FASTA 至少提供一个")
+              ),
+              column(3,
+                shinyFilesButton("fasta_file", "选择 FASTA", "选择蛋白序列库 (可多选, 无库分析时必选)", multiple = TRUE),
+                verbatimTextOutput("fasta_path_display"),
+                checkboxInput("cont_exclude", "启用污染物扣除 (cRAP)", FALSE),
+                conditionalPanel("input.cont_exclude == 1",
+                  textInput("cont_tag", "排除标签 (--cont-quant-exclude):", "cRAP-"),
+                  helpText("自动附加内置 cRAP 污染物库 (125 条) 并从定量中排除该类蛋白")
+                )
+              ),
+              column(3,
+                shinyFilesButton("ref_file", "选择校准库", "选择专用校准谱库 --ref (可选)", multiple = FALSE),
+                verbatimTextOutput("ref_path_display"),
+                helpText("可选: 仅用于校准的小型谱库")
+              )
+          )
+        ),
+        fluidRow(
+          box(title = "3. 输出设置", status = "success", solidHeader = TRUE, width = 4,
+              shinyDirButton("out_dir", "选择输出目录", "选择结果存放目录"),
+              verbatimTextOutput("out_path_display"),
+              textInput("report_name", "主报告文件名 (自动加 .tsv):", "report"),
+              shinyDirButton("temp_dir", "选择临时目录 --temp (可选)", "选择临时目录"),
+              verbatimTextOutput("temp_path_display"),
+              checkboxInput("convert_only", "仅执行 RAW→DIA 转换 (--convert)", FALSE),
+              helpText("勾选后忽略分析参数; 转换后的 .dia 文件保存在 RAW 文件所在目录")
+          ),
+          box(title = "4. 分析参数", status = "warning", solidHeader = TRUE, width = 8,
+              fluidRow(
+                column(4, actionButton("preset_lib", "预设: FASTA 生成预测库", icon = icon("magic"), width = "100%")),
+                column(4, actionButton("preset_convert", "预设: RAW 转 DIA (仅转换)", icon = icon("file-export"), width = "100%")),
+                column(4, helpText("预设仅切换常用开关组合, 其余参数仍可手动调整。"))
+              ),
+              br(),
+              param_tabs_ui()
+          )
+        ),
+        fluidRow(
+          box(title = "命令导入 (自动识别并填充参数)", status = "info", solidHeader = TRUE, width = 12,
+              collapsible = TRUE, collapsed = TRUE,
+              column(8,
+                textAreaInput("import_cmd", "粘贴 DIA-NN 命令 (支持 Windows GUI 生成的命令、本页预览的 Slurm 脚本):",
+                              height = "90px",
+                              placeholder = "diann.exe --f C:\\data\\run.raw --lib C:\\lib.parquet --qvalue 0.01 --matrices ...")
+              ),
+              column(4,
+                actionButton("import_btn", "解析并填充参数", icon = icon("download"), class = "btn-primary", width = "100%"),
+                checkboxInput("use_imported_raws", "覆盖 RAW 文件 (用导入路径)", FALSE),
+                checkboxInput("use_imported_lib", "覆盖光谱库 library (用导入路径)", FALSE),
+                checkboxInput("use_imported_fasta", "覆盖 FASTA (用导入路径)", FALSE),
+                checkboxInput("use_imported_ref", "覆盖校准库 ref (用导入路径)", FALSE),
+                checkboxInput("use_imported_out", "覆盖输出目录 (用导入路径)", FALSE),
+                checkboxInput("use_imported_temp", "覆盖临时目录 (用导入路径)", FALSE)
+              ),
+              verbatimTextOutput("import_result")
+          )
+        ),
+        fluidRow(
+          box(title = "5. Slurm 资源", status = "info", solidHeader = TRUE, width = 12,
+              column(3, textInput("job_name", "任务名称:", "DIANN_Task")),
+              column(3, selectInput("partition", "计算分区:", choices = cfg_get("SLURM_PARTITIONS"), selected = cfg_get("SLURM_PARTITIONS")[1])),
+              column(3, numericInput("mem_gb", "内存 (GB):", 64, min = 1, max = 4096)),
+              column(3, numericInput("time_h", "时限 (小时, 留空=不限):", NA, min = 1)),
+              helpText("CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, 由「4. 分析参数 → 常规 → 线程数」决定。")
+          )
+        ),
+        fluidRow(
+          box(title = "6. 命令预览与提交", status = "danger", solidHeader = TRUE, width = 12,
+              fluidRow(
+                column(4,
+                  textInput("notify_email", "邮箱通知 (可选):", placeholder = "someone@126.com, someone2@126.com"),
+                  helpText("作业结束时自动发送邮件, 含项目简介与结果简介; 多个邮箱用英文逗号分隔。")
+                ),
+                column(8,
+                  textAreaInput("project_desc", "项目简介 (可选, 随完成邮件发送):",
+                                height = "70px",
+                                placeholder = "例如: 小鼠单细胞 DIA 数据, 考察 XX 处理组的蛋白组差异…")
+                )
+              ),
+              fluidRow(
+                column(8,
+                  uiOutput("validation_msgs"),
+                  tags$div(class = "scrollbox", verbatimTextOutput("preview"))
+                ),
+                column(4,
+                  actionButton("submit_job", "提交 Slurm 任务", icon = icon("paper-plane"),
+                               class = "btn-lg btn-success", width = "100%"),
+                  br(), br(),
+                  helpText("提交前请确认上方校验提示为空、命令预览符合预期。",
+                           "Slurm 脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 slurm-<任务ID>.out/.err。")
+                )
+              )
+          )
+        )
+      ),
+
+      # ==================== 任务队列 ====================
+      tabItem(tabName = "monitor",
+        fluidRow(
+          box(title = "集群节点资源 (sinfo)", status = "info", solidHeader = TRUE, width = 12,
+              tableOutput("sinfo_table")
+          )
+        ),
+        fluidRow(
+          box(title = "运行队列 (squeue)", status = "primary", solidHeader = TRUE, width = 12,
+              checkboxInput("auto_refresh", "自动刷新 (10 秒)", TRUE),
+              actionButton("refresh_q", "立即刷新", icon = icon("sync")),
+              tags$div(class = "scrollbox", verbatimTextOutput("squeue_output"))
+          )
+        ),
+        fluidRow(
+          box(title = "近期历史 (sacct, 最近一天)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
+              tableOutput("sacct_table"),
+              helpText("作业ID: Slurm 作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 (已完成/运行中/排队中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻")
+          )
+        ),
+        fluidRow(
+          box(title = "取消作业", status = "danger", solidHeader = TRUE, width = 4,
+              numericInput("cancel_id", "作业 ID:", NA),
+              actionButton("cancel_btn", "scancel 取消该作业", icon = icon("ban"), class = "btn-danger", width = "100%")
+          ),
+          box(title = "运行日志查看 (slurm-<ID>.out 尾部)", status = "warning", solidHeader = TRUE, width = 8,
+              fluidRow(
+                column(4, numericInput("log_id", "作业 ID:", NA)),
+                column(8,
+                  shinyDirButton("log_dir_btn", "指定日志目录 (可选, 留空自动定位)", "选择包含日志的目录"),
+                  verbatimTextOutput("log_dir_display")
+                )
+              ),
+              actionButton("view_log", "查看日志 (尾部 120 行)", icon = icon("file-alt")),
+              tags$div(class = "scrollbox", verbatimTextOutput("log_output"))
+          )
+        ),
+        fluidRow(
+          box(title = "本会话提交记录", status = "info", solidHeader = TRUE, width = 12,
+              tableOutput("jobs_table"),
+              verbatimTextOutput("notify_status")
+          )
+        )
+      ),
+
+      # ==================== 参数速查 ====================
+      tabItem(tabName = "help",
+        box(title = "DIA-NN 命令行参数速查", status = "primary", solidHeader = TRUE, width = 12,
+            verbatimTextOutput("doc_path_display"),
+            tags$div(class = "scrollbox", uiOutput("param_ref"))
+        )
+      ),
+
+      # ==================== 更新说明 ====================
+      tabItem(tabName = "changelog",
+        fluidRow(
+          box(title = "DIA-NN 版本说明 (含实测结论)", status = "info", solidHeader = TRUE, width = 12,
+              uiOutput("version_notes"),
+              tags$strong("本机已扫描到的 sif 镜像:"),
+              tableOutput("sif_table")
+          )
+        ),
+        fluidRow(
+          box(title = "DIA-NN 2.0 系列官方更新日志 (Release Notes 原文, 新的在前)", status = "info",
+              solidHeader = TRUE, width = 12, collapsible = TRUE, collapsed = TRUE,
+              uiOutput("diann_release_notes")
+          )
+        ),
+        fluidRow(
+          box(title = sprintf("GUI 更新日志 (当前 %s)", GUI_VERSION), status = "primary",
+              solidHeader = TRUE, width = 12,
+              uiOutput("gui_changelog")
+          )
+        )
+      )
+    )
+  )
+)
+
+# ============================================================
+# Server
+# ============================================================
+}

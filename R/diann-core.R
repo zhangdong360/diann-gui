@@ -2,8 +2,8 @@
 # diann_core.R — GUI 纯函数核心
 #
 # 不依赖 shiny 与集群环境 (仅 base R + 运行期引用的站点配置常量:
-# BASE_VOLUMES / CON_FASTA / APPTAINER_PATHS / APPTAINER_MODULE_FALLBACK /
-# BIND_PATHS, 由 source 方提供, 在 config.R 或 app.R 内置默认中定义)。
+# 站点常量 (BASE_VOLUMES / CON_FASTA / APPTAINER_* / BIND_PATHS) 经
+# cfg_get() 从包配置环境读取 (R/config.R 的 diann_load_config 装入)。
 # 被 app.R source; tests/testthat/helper.R 直接 source 本文件做离线测试。
 # ============================================================
 
@@ -24,7 +24,7 @@ path_in_scope <- function(p) {
   keep <- nzchar(p)
   if (!any(keep)) return(out)
   np <- normalizePath(collapse_dots(p[keep]), mustWork = FALSE)
-  roots <- normalizePath(unname(BASE_VOLUMES), mustWork = FALSE)
+  roots <- normalizePath(unname(cfg_get("BASE_VOLUMES")), mustWork = FALSE)
   out[keep] <- vapply(np, function(x) any(x == roots | startsWith(x, paste0(roots, "/"))), logical(1))
   out
 }
@@ -58,7 +58,7 @@ build_diann_chunks <- function(p) {
   }
   add(str_arg(p$lib, "--lib"))
   for (f in p$fastas) ch <- c(ch, paste0("--fasta ", shQuote(f)))
-  if (isTRUE(p$cont_exclude) && nz_str(CON_FASTA)) ch <- c(ch, paste0("--fasta ", shQuote(CON_FASTA)))
+  if (isTRUE(p$cont_exclude) && nz_str(cfg_get("CON_FASTA"))) ch <- c(ch, paste0("--fasta ", shQuote(cfg_get("CON_FASTA"))))
   add(flag_arg(p$cont_exclude, paste0("--cont-quant-exclude ", shQuote(p$cont_tag %||% "cRAP-"))))
   add(str_arg(p$ref, "--ref"))
   add(str_arg(p$temp, "--temp"))
@@ -148,17 +148,17 @@ make_slurm_script <- function(p) {
   # apptainer 初始化: 依次尝试配置的 PATH, 配置了模块名则回退 module load
   apptainer_init <- c(
     "# apptainer invocation: try configured PATH entries, then optional module fallback",
-    vapply(APPTAINER_PATHS, function(d) {
+    vapply(cfg_get("APPTAINER_PATHS"), function(d) {
       sprintf('if [ -x "%s/apptainer" ]; then export PATH="%s:$PATH"; fi', d, d)
     }, character(1)),
-    if (nzchar(APPTAINER_MODULE_FALLBACK)) {
-      sprintf('command -v apptainer >/dev/null 2>&1 || { source /usr/share/Modules/init/bash 2>/dev/null; module load %s 2>/dev/null; }', APPTAINER_MODULE_FALLBACK)
+    if (nzchar(cfg_get("APPTAINER_MODULE_FALLBACK"))) {
+      sprintf('command -v apptainer >/dev/null 2>&1 || { source /usr/share/Modules/init/bash 2>/dev/null; module load %s 2>/dev/null; }', cfg_get("APPTAINER_MODULE_FALLBACK"))
     } else NULL,
     'command -v apptainer >/dev/null 2>&1 || echo "WARNING: apptainer not found in PATH"',
     'echo "apptainer: $(command -v apptainer 2>/dev/null || echo NOT-FOUND)"'
   )
   apptainer_init_str <- paste(apptainer_init, collapse = "\n")
-  bind_args <- if (length(BIND_PATHS)) paste0("--bind ", shQuote(BIND_PATHS), collapse = " ") else ""
+  bind_args <- if (length(cfg_get("BIND_PATHS"))) paste0("--bind ", shQuote(cfg_get("BIND_PATHS")), collapse = " ") else ""
   # 程序层退出码落盘 (四层状态判定的第二层来源): apptainer exec 的返回码;
   # 容器卸载阶段偶发 SIGILL 会把 rc 污染为 132, 由 GUI 状态合成判为"待核实"而非失败
   rc_file <- sub("\\.sh$", ".rc", sc1(p$script_path %||% "diann_gui_preview.sh"))
@@ -338,7 +338,7 @@ parse_diann_command <- function(text) {
   if (!nzchar(res$files$out_dir) && nzchar(slurm_out_dir)) res$files$out_dir <- slurm_out_dir
   # 粘贴命令中若含内置污染物库, 转为污染物开关而非普通 FASTA
   if (length(res$files$fastas)) {
-    hit <- res$files$fastas == CON_FASTA
+    hit <- res$files$fastas == cfg_get("CON_FASTA")
     if (any(hit)) {
       res$files$fastas <- res$files$fastas[!hit]
       res$cont_fasta <- TRUE

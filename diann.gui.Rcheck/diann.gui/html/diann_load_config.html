@@ -1,0 +1,51 @@
+<!DOCTYPE html><html><head><title>R: 加载配置到包内环境</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css">
+<script type="text/javascript">
+const macros = { "\\R": "\\textsf{R}", "\\mbox": "\\text", "\\code": "\\texttt"};
+function processMathHTML() {
+    var l = document.getElementsByClassName('reqn');
+    for (let e of l) { katex.render(e.textContent, e, { throwOnError: false, macros }); }
+    return;
+}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js"
+    onload="processMathHTML();"></script>
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body><div class="container"><main>
+
+<table style="width: 100%;"><tr><td>diann_load_config {diann.gui}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>加载配置到包内环境</h2>
+
+<h3>Description</h3>
+
+<p>source 配置文件并把已知键 (DATA_HOME/BASE_VOLUMES/SIF_DIRS/CON_FASTA/
+SLURM_*/APPTAINER_*/BIND_PATHS/MAIL_*/NOTIFY_STATE 等) 合并默认值后
+装入包配置环境 .cfg; 幂等, reset = TRUE 可强制重新装载。
+</p>
+
+
+<h3>Usage</h3>
+
+<pre><code class='language-R'>diann_load_config(file = NULL, reset = FALSE)
+</code></pre>
+
+
+<h3>Arguments</h3>
+
+<table role = "presentation">
+<tr><td><code id="file">file</code></td>
+<td>
+<p>配置文件路径; NULL = 自动发现 (resolve_user_config)</p>
+</td></tr>
+<tr><td><code id="reset">reset</code></td>
+<td>
+<p>TRUE = 先清空包内已有配置再加载</p>
+</td></tr>
+</table>
+
+<hr /><div style="text-align: center;">[Package <em>diann.gui</em> version 1.9.0 <a href="00Index.html">Index</a>]</div></main>
+
+</div>
+</body></html>

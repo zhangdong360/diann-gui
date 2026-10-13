@@ -1,0 +1,7 @@
+cfg_get                 读取配置值
+diann_load_config       加载配置到包内环境
+resolve_user_config     解析配置文件路径
+run_app                 启动 DIA-NN GUI
+set_core_const          写入配置值 (注入接口)
+usage_report            生成平台使用统计 (月度报告)
+watch_daemon            邮件通知守护进程

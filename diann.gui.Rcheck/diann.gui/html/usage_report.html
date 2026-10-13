@@ -1,0 +1,58 @@
+<!DOCTYPE html><html><head><title>R: 生成平台使用统计 (月度报告)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css">
+<script type="text/javascript">
+const macros = { "\\R": "\\textsf{R}", "\\mbox": "\\text", "\\code": "\\texttt"};
+function processMathHTML() {
+    var l = document.getElementsByClassName('reqn');
+    for (let e of l) { katex.render(e.textContent, e, { throwOnError: false, macros }); }
+    return;
+}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js"
+    onload="processMathHTML();"></script>
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body><div class="container"><main>
+
+<table style="width: 100%;"><tr><td>usage_report {diann.gui}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>生成平台使用统计 (月度报告)</h2>
+
+<h3>Description</h3>
+
+<p>汇总 GUI 提交注册表, 按四层状态模型合成逐作业状态,
+输出 markdown 使用统计报告。</p>
+
+
+<h3>Usage</h3>
+
+<pre><code class='language-R'>usage_report(month = format(Sys.Date(), "%Y-%m"), out_dir = ".",
+             registry = NULL, state = NULL)
+</code></pre>
+
+
+<h3>Arguments</h3>
+
+<table role = "presentation">
+<tr><td><code id="month">month</code></td>
+<td>
+<p>统计月份, &quot;YYYY-MM&quot; (默认当月)</p>
+</td></tr>
+<tr><td><code id="out_dir">out_dir</code></td>
+<td>
+<p>报告输出目录</p>
+</td></tr>
+<tr><td><code id="registry">registry</code></td>
+<td>
+<p>注册表 RDS 路径 (默认 HOME 下与 GUI 一致)</p>
+</td></tr>
+<tr><td><code id="state">state</code></td>
+<td>
+<p>通知状态 RDS 路径 (仅补邮箱)</p>
+</td></tr>
+</table>
+
+<hr /><div style="text-align: center;">[Package <em>diann.gui</em> version 1.9.0 <a href="00Index.html">Index</a>]</div></main>
+
+</div>
+</body></html>

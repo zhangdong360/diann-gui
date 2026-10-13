@@ -26,35 +26,44 @@ test_that("空向量安全返回", {
   expect_identical(path_in_scope(character(0)), logical(0))
 })
 
-test_that("diann_core 以 local=<app环境> source 后, 函数闭包能看到同环境的站点常量 (回归: app.R source 的环境契约, 违反时导入真实路径即断连)", {
-  e <- new.env(parent = globalenv())
-  e$CON_FASTA <- ""
-  e$BASE_VOLUMES <- c(Data = tempdir())
-  e$APPTAINER_PATHS <- character(0)
-  e$APPTAINER_MODULE_FALLBACK <- ""
-  e$BIND_PATHS <- character(0)
-  source(file.path(PROJECT_ROOT, "diann_core.R"), local = e)
-  expect_true(e$path_in_scope(file.path(tempdir(), "x.tsv")))
-  expect_error(e$path_in_scope("/etc/passwd"), NA)
+# ---- 包化后的配置内核契约 ----
+test_that("diann_load_config 默认 = 用户家目录模式", {
+  home <- file.path(tempdir(), sprintf("cfg_home_%d", Sys.getpid()))
+  dir.create(home, recursive = TRUE, showWarnings = FALSE)
+  old_home <- Sys.getenv("HOME"); Sys.setenv(HOME = home)
+  old_cfg <- Sys.getenv("DIANN_GUI_CONFIG"); Sys.unsetenv("DIANN_GUI_CONFIG")
+  old_xv <- Sys.getenv("DIANN_GUI_EXTRA_VOLUMES"); Sys.unsetenv("DIANN_GUI_EXTRA_VOLUMES")
+  on.exit({ Sys.setenv(HOME = old_home, DIANN_GUI_CONFIG = old_cfg,
+                       DIANN_GUI_EXTRA_VOLUMES = old_xv); diann_load_config(reset = TRUE) }, add = TRUE)
+  diann_load_config(reset = TRUE)
+  expect_equal(cfg_get("DATA_HOME"), home)
+  expect_equal(names(cfg_get("BASE_VOLUMES")), "Data")
+  expect_equal(cfg_get("SIF_DIRS"), character(0))
+  expect_false(isTRUE(cfg_get("MAIL_ENABLED")))  # 无 mail_config → 邮件停用
 })
 
-test_that("拆分模块 (changelog_data.R / ui_params.R) 同样遵守 local=<app环境> 契约, 且不泄漏到 globalenv", {
-  skip_if_not_installed("shiny")
-  suppressMessages(library(shiny))
-  e <- new.env(parent = globalenv())
-  e$CON_FASTA <- ""
-  e$BASE_VOLUMES <- c(Data = tempdir())
-  e$APPTAINER_PATHS <- character(0)
-  e$APPTAINER_MODULE_FALLBACK <- ""
-  e$BIND_PATHS <- character(0)
-  source(file.path(PROJECT_ROOT, "diann_core.R"), local = e)
-  source(file.path(PROJECT_ROOT, "changelog_data.R"), local = e)
-  source(file.path(PROJECT_ROOT, "ui_params.R"), local = e)
-  expect_true(exists("CHANGELOG", envir = e, inherits = FALSE))
-  expect_true(exists("DIANN_RELEASE_NOTES", envir = e, inherits = FALSE))
-  expect_true(exists("param_tabs_ui", envir = e, inherits = FALSE))
-  expect_s3_class(e$param_tabs_ui(), "shiny.tag")
-  expect_true(inherits(e$PARAM_CSS_TAG, "shiny.tag"))
-  expect_false(exists("CHANGELOG", envir = globalenv(), inherits = FALSE))
-  expect_false(exists("param_tabs_ui", envir = globalenv(), inherits = FALSE))
+test_that("配置文件可覆写默认值, DIANN_GUI_CONFIG 优先级最高", {
+  dir <- tempdir()
+  usr <- file.path(dir, ".diann_gui"); dir.create(usr, recursive = TRUE, showWarnings = FALSE)
+  cfg_user <- file.path(usr, "config.R"); writeLines('DATA_HOME <- "/from/user-home"', cfg_user)
+  cfg_env  <- file.path(dir, "cfg_env.R");  writeLines('DATA_HOME <- "/from/env"', cfg_env)
+  old_home <- Sys.getenv("HOME"); Sys.setenv(HOME = dir)
+  old_cfg <- Sys.getenv("DIANN_GUI_CONFIG"); Sys.unsetenv("DIANN_GUI_CONFIG")
+  on.exit({ Sys.setenv(HOME = old_home, DIANN_GUI_CONFIG = old_cfg); diann_load_config(reset = TRUE) }, add = TRUE)
+  diann_load_config(reset = TRUE)
+  expect_equal(cfg_get("DATA_HOME"), "/from/user-home")
+  Sys.setenv(DIANN_GUI_CONFIG = cfg_env)
+  diann_load_config(reset = TRUE)
+  expect_equal(cfg_get("DATA_HOME"), "/from/env")
+})
+
+test_that("DIANN_GUI_EXTRA_VOLUMES 追加路径守卫根 (e2e/CI 钩子)", {
+  old_xv <- Sys.getenv("DIANN_GUI_EXTRA_VOLUMES")
+  Sys.setenv(DIANN_GUI_EXTRA_VOLUMES = "/share/home/demo")
+  on.exit({ Sys.setenv(DIANN_GUI_EXTRA_VOLUMES = old_xv); diann_load_config(reset = TRUE) }, add = TRUE)
+  diann_load_config(reset = TRUE)
+  bv <- cfg_get("BASE_VOLUMES")
+  expect_true("/share/home/demo" %in% bv)
+  set_core_const("BASE_VOLUMES", bv)
+  expect_true(path_in_scope("/share/home/demo/lib/demo.speclib"))
 })

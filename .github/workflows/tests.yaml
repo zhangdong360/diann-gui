@@ -17,9 +17,10 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: |
-            any::testthat
-            any::shiny
+          needs: check
+
+      - name: Install package
+        run: R CMD INSTALL --no-multiarch .
 
       - name: Run R test suite
         run: |
@@ -46,7 +47,7 @@ jobs:
         run: bash -n bin/diann-gui
 
       - name: Python syntax check
-        run: python3 -m py_compile mail_notify.py
+        run: python3 -m py_compile inst/python/mail_notify.py
 
   app-e2e:
     runs-on: ubuntu-latest
@@ -59,11 +60,10 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: |
-            any::shiny
-            any::shinydashboard
-            any::shinyFiles
-            any::httpuv
+          needs: check
+
+      - name: Install package
+        run: R CMD INSTALL --no-multiarch .
 
       - name: Install browser stack
         run: |
@@ -75,10 +75,11 @@ jobs:
         run: |
           Rscript - <<'RS'
           r <- tryCatch({
-            invisible(shiny::shinyAppFile("app.R"))
+            invisible(library(diann.gui))
+            invisible(run_app())
             cat("smoke OK\n")
           }, error = function(e) {
-            cat(sprintf("::error::app.R 装载失败: %s\n", conditionMessage(e)))
+            cat(sprintf("::error::包装载失败: %s\n", conditionMessage(e)))
             quit(status = 1)
           })
           RS

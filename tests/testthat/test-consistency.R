@@ -55,7 +55,7 @@ test_that("build -> parse 往返: 全部映射旗标语义等价, 无未知/裸�
 })
 
 test_that("三方交叉核对: 映射里的每个 inputId 都在应用源码中出现", {
-  sources <- list.files(PROJECT_ROOT, pattern = "\\.R$", full.names = TRUE)
+  sources <- list.files(file.path(PROJECT_ROOT, "R"), pattern = "\\.R$", full.names = TRUE)
   src <- paste(vapply(sources, function(f) paste(readLines(f, warn = FALSE), collapse = "\n"), ""), collapse = "\n")
   ids <- unname(c(BOOL_FLAG_MAP, NUM_FLAG_MAP, TEXT_FLAG_MAP))
   for (id in ids) {
@@ -65,7 +65,7 @@ test_that("三方交叉核对: 映射里的每个 inputId 都在应用源码中�
 })
 
 test_that("reset_import_state 的数值重置清单 = 数值映射 - 约定例外", {
-  src <- paste(readLines(file.path(PROJECT_ROOT, "app.R"), warn = FALSE), collapse = "\n")
+  src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
   m <- regmatches(src, regexpr(
     'for \\(ctrl in c\\([^)]*\\)\\)\\s*\\{?\\s*updateNumericInput\\(session, ctrl, value = NA\\)',
     src))[[1]]

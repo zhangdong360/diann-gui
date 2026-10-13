@@ -1,0 +1,7 @@
+cfg_get	cfg_get
+diann_load_config	diann_load_config
+resolve_user_config	resolve_user_config
+run_app	run_app
+set_core_const	set_core_const
+usage_report	usage_report
+watch_daemon	watch_daemon

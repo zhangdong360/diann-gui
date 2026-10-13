@@ -30,38 +30,37 @@ test_that("夹具: 大命令 (796 RAW, 98KB) 完整解析", {
   expect_equal(r$num[["--threads"]], 40)
 })
 
-test_that("夹具全部路径落在数据范围内 (path_in_scope, app 环境契约)", {
-  # 模拟 app 环境: 常量定义在本环境, diann_core.R 以 local 本环境 source —— 与 app.R 的
-  # source(..., local = TRUE) 契约一致 (违反此契约即 2026-10-09 断连事故)
-  e <- new.env(parent = globalenv())
-  e$CON_FASTA <- ""
-  e$BASE_VOLUMES <- c(Data = "/share")
-  e$APPTAINER_PATHS <- character(0)
-  e$APPTAINER_MODULE_FALLBACK <- ""
-  e$BIND_PATHS <- character(0)
-  source(file.path(PROJECT_ROOT, "diann_core.R"), local = e)
+test_that("夹具全部路径落在数据范围内 (path_in_scope)", {
+  set_core_const("BASE_VOLUMES", c(Data = "/share"))
+  on.exit(set_core_const("BASE_VOLUMES", c(Data = tempdir())), add = TRUE)
   for (fx in c("import_small_userpaste.txt", "import_large_userpaste.txt")) {
-    r <- e$parse_diann_command(read_fixture(fx))
-    expect_true(all(e$path_in_scope(r$files$raws)),
+    r <- parse_diann_command(read_fixture(fx))
+    expect_true(all(path_in_scope(r$files$raws)),
                 info = sprintf("%s: 存在范围外路径", fx))
-    expect_true(e$path_in_scope(r$files$lib), info = fx)
+    expect_true(path_in_scope(r$files$lib), info = fx)
   }
 })
 
 test_that("夹具端到端构建: 解析->参数映射->sbatch 脚本含全部 RAW 与 rcfile", {
   e <- new.env(parent = globalenv())
-  e$CON_FASTA <- "/share/home/demo/data/fasta/cRAP_contaminants.fasta"
-  e$BASE_VOLUMES <- c(Data = "/share")
-  e$APPTAINER_PATHS <- "/opt/apptainer/bin"
-  e$APPTAINER_MODULE_FALLBACK <- ""
-  e$BIND_PATHS <- "/share"
-  source(file.path(PROJECT_ROOT, "diann_core.R"), local = e)
+  set_core_const("CON_FASTA", "/share/home/demo/data/fasta/cRAP_contaminants.fasta")
+  set_core_const("BASE_VOLUMES", c(Data = "/share"))
+  set_core_const("APPTAINER_PATHS", "/opt/apptainer/bin")
+  set_core_const("APPTAINER_MODULE_FALLBACK", "")
+  set_core_const("BIND_PATHS", "/share")
+  on.exit({
+    set_core_const("CON_FASTA", "")
+    set_core_const("BASE_VOLUMES", c(Data = tempdir()))
+    set_core_const("APPTAINER_PATHS", character(0))
+    set_core_const("APPTAINER_MODULE_FALLBACK", "")
+    set_core_const("BIND_PATHS", character(0))
+  }, add = TRUE)
 
   mk_params <- function(fx, script_path) {
-    r <- e$parse_diann_command(read_fixture(fx))
-    b <- setNames(as.list(rep(TRUE, length(r$bool))), unname(e$BOOL_FLAG_MAP[r$bool]))
+    r <- parse_diann_command(read_fixture(fx))
+    b <- setNames(as.list(rep(TRUE, length(r$bool))), unname(BOOL_FLAG_MAP[r$bool]))
     nums <- as.list(r$num)
-    names(nums) <- unname(e$NUM_FLAG_MAP[names(r$num)])
+    names(nums) <- unname(NUM_FLAG_MAP[names(r$num)])
     p <- list(
       job_name = "T", partition = "compute", threads = r$num[["--threads"]], mem_gb = 64,
       time_h = NA_real_, sif = "/x/diann.sif", ver = "x",
@@ -88,14 +87,14 @@ test_that("夹具端到端构建: 解析->参数映射->sbatch 脚本含全部 R
                   "matrices","indiv_reports","unimod4","met_excision","reannotate")
     for (nm in defaults) if (is.null(p[[nm]])) p[[nm]] <- NA
     for (nm in names(nums)) p[[nm]] <- nums[[nm]]
-    for (fl in r$bool) p[[unname(e$BOOL_FLAG_MAP[[fl]])]] <- TRUE
+    for (fl in r$bool) p[[unname(BOOL_FLAG_MAP[[fl]])]] <- TRUE
     p
   }
   for (fx in c("import_small_userpaste.txt", "import_large_userpaste.txt")) {
     p <- mk_params(fx, "/o/diann_gui_scripts/diann_fixture.sh")
-    s <- e$make_slurm_script(p)
+    s <- make_slurm_script(p)
     n_raw_in_script <- sum(gregexpr("--f '/share/home/demo/project/labuser", s, fixed = TRUE)[[1]] != -1L)
-    expected <- length(e$parse_diann_command(read_fixture(fx))$files$raws)
+    expected <- length(parse_diann_command(read_fixture(fx))$files$raws)
     expect_identical(n_raw_in_script, expected,
                      info = sprintf("%s: 脚本中 RAW 数量", fx))
     expect_match(s, "printf '%s' \"$rc\"", fixed = TRUE)

@@ -15,8 +15,16 @@ DIA-NN 容器镜像 Apptainer/Singularity `.sif`），并集中监控作业队�
 ```bash
 git clone https://github.com/zhangdong360/diann-gui.git
 cd diann_gui
+R CMD INSTALL .        # 安装 diann.gui 包及其 R 依赖
 bin/diann-gui --init   # 可选: 按模板生成 ~/.diann_gui/config.R 设置文件
 bin/diann-gui          # 启动, 随机端口; 终端会打印访问地址
+```
+
+或者不克隆仓库, 直接在 R 控制台里装 (如 RStudio Server; 应用会自动弹出浏览器窗口):
+
+```r
+remotes::install_github("zhangdong360/diann-gui")
+diann.gui::run_app()
 ```
 
 - **远程集群？** 先建 SSH 隧道：`ssh -L <端口>:localhost:<端口> 用户@集群`，
@@ -25,13 +33,11 @@ bin/diann-gui          # 启动, 随机端口; 终端会打印访问地址
   会自动代理端口并弹出浏览器窗口。同样以本人身份运行，零管理操作。
 - **配置**位于 `~/.diann_gui/config.R`（模板 `config.example.R`；环境变量
   `DIANN_GUI_CONFIG` 指定的文件同样有效）。常用项：`SIF_DIRS` 指向共享只读的
-  DIA-NN 镜像目录（如 `/share/app/tools/diann`）、R 包在站点库时设 `EXTRA_LIB`、
-  可选的邮件凭据（`~/.diann_gui/mail_config.txt`，也支持 `DIANN_GUI_MAIL_CONF`
-  环境变量）。
+  DIA-NN 镜像目录（如 `/share/app/tools/diann`），可选的邮件凭据
+  （`~/.diann_gui/mail_config.txt`，也支持 `DIANN_GUI_MAIL_CONF` 环境变量）。
 - **管理员一次性操作**：把 `diann*.sif` 镜像放到全员可读的共享目录（如
-  `/share/app/tools/diann`），并把三个 R 包（`shiny`、`shinydashboard`、
-  `shinyFiles`）装进系统库或站点库（或让大家 `EXTRA_LIB` 指过去）。仅此而已；
-  数据各自放自己的家目录。
+  `/share/app/tools/diann`）。仅此而已——R 包与依赖随各用户安装，数据各自放
+  自己的家目录。
 
 中央 shiny-server 部署（固定 URL 的共享实例，所有作业以服务器的运行用户执行）
 仍作为部署变体受支持——见[中央部署（shiny-server）](#中央部署shiny-server)。
@@ -72,7 +78,7 @@ flowchart LR
 | 组件 | 说明 |
 |---|---|
 | 安装 **Slurm** 的 Linux | 应用通过 `sbatch`/`squeue`/`sacct`/`scancel`/`scontrol` 与集群交互 |
-| **R** ≥ 4.0 | 需安装 `shiny`、`shinydashboard`、`shinyFiles` 三个包 |
+| **R** ≥ 4.1 | `diann.gui` 包安装时自动引入 `shiny`/`shinydashboard`/`shinyFiles` |
 | **Apptainer 或 Singularity** | 以及一个 DIA-NN 的 `.sif` 容器镜像 |
 | **python3** | 可选，仅邮件通知需要（纯标准库） |
 | **shiny-server** | 可选——仅"中央部署"变体需要；自行部署用 `bin/diann-gui` 启动 |
@@ -83,20 +89,16 @@ flowchart LR
 shiny-server 的 `run_as` 用户运行（而不是点击的人），跨用户文件访问需要显式的
 组/ACL 配置，且全部 GUI 作业共享一个队列身份。自行部署模式没有这些问题。
 
-1. 在运行 shiny-server 的服务器（通常是 Slurm 登录/管理节点）上**克隆**：
+1. **克隆并安装**到运行 shiny-server 的服务器（通常是 Slurm 登录/管理节点）：
 
    ```bash
    git clone https://github.com/zhangdong360/diann-gui.git
    cd diann_gui
+   R CMD INSTALL --no-multiarch .   # 依赖缺失时先装:
+                                    # install.packages(c("shiny","shinydashboard","shinyFiles"))
    ```
 
-2. **安装 R 包**（系统级或共享库均可）：
-
-   ```r
-   install.packages(c("shiny", "shinydashboard", "shinyFiles"))
-   ```
-
-3. **配置** —— 复制模板并按集群实际情况编辑：
+2. **配置** —— 复制模板并按集群实际情况编辑：
 
    ```bash
    cp config.example.R config.R
@@ -106,7 +108,7 @@ shiny-server 的 `run_as` 用户运行（而不是点击的人），跨用户文
    `diann*.sif` 的目录）；若数据不在 `$HOME` 下，还需设置 `BIND_PATHS`
    （要绑定进容器的宿主路径）。详见下表。
 
-4. **部署到 shiny-server**，例如软链到站点目录：
+3. **部署到 shiny-server**，例如软链到站点目录：
 
    ```bash
    sudo ln -s "$(pwd)" /srv/shiny-server/diann_gui
@@ -114,7 +116,7 @@ shiny-server 的 `run_as` 用户运行（而不是点击的人），跨用户文
 
    应用目录（及其上级）需对 shiny-server 的 `run_as` 用户可读。
 
-5. 浏览器打开 `http://<服务器>:3838/diann_gui/`。
+4. 浏览器打开 `http://<服务器>:3838/diann_gui/`。
 
 ## 配置项（`config.R`）
 
@@ -177,7 +179,7 @@ chmod 600 ~/.diann_gui/mail_config.txt
   新手图文教程，11 张界面截图，单文件完全离线可用。
 - [`docs/DIANN_GUI_技术手册.md`](docs/DIANN_GUI_技术手册.md) ——
   完整技术手册：架构、控件详解、标准工作流、通知机制、故障排查。
-- [`docs/DIANN参数说明.md`](docs/DIANN参数说明.md) —— 应用内参数速查页的数据源。
+- [DIANN_param_reference.md`](docs/DIANN_param_reference.md) —— 应用内参数速查页的数据源。
 
 ## 测试
 
@@ -219,7 +221,7 @@ tests/e2e/run_e2e.sh --url http://localhost:3838/diann_gui/   # 部署后对生�
 
 ```bash
 # 以与 GUI 相同的运行用户执行（需能读注册表）
-Rscript usage_report.R --month 2026-10 --out /path/to/reports
+Rscript -e 'diann.gui::usage_report(month = "2026-10", out = "/path/to/reports")'
 ```
 
 crontab 示例（每月 1 日统计上月）：

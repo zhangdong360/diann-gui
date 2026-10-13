@@ -1,0 +1,20 @@
+# 手写 NAMESPACE (未用 roxygen2): 导出公共 API, 其余为包内部函数。
+# 新增导出时在此追加 export()。
+
+import(shiny)
+import(shinydashboard)
+import(shinyFiles)
+importFrom(htmltools, css)
+importFrom(htmltools, validateCssUnit)
+importFrom(tools, file_path_sans_ext)
+importFrom(utils, head)
+importFrom(utils, tail)
+
+export(run_app)
+export(watch_daemon)
+export(usage_report)
+export(resolve_user_config)
+export(diann_load_config)
+export(cfg_get)
+export(set_core_const)
+export(usage_report)

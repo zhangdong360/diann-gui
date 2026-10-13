@@ -1,0 +1,53 @@
+#!/bin/bash
+#SBATCH -J 'DIANN_fasta_predictor'
+#SBATCH -p compute
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=150G
+#SBATCH -o '/share/home/demo/data/library/mouse/slurm-%j.out'
+#SBATCH -e '/share/home/demo/data/library/mouse/slurm-%j.err'
+
+# apptainer invocation: try configured PATH entries, then optional module fallback
+if [ -x "/share/home/demo/.conda/envs/singularity/bin/apptainer" ]; then export PATH="/share/home/demo/.conda/envs/singularity/bin:$PATH"; fi
+if [ -x "/opt/conda/bin/apptainer" ]; then export PATH="/opt/conda/bin:$PATH"; fi
+command -v apptainer >/dev/null 2>&1 || { source /usr/share/Modules/init/bash 2>/dev/null; module load apptainer/1.4.5 2>/dev/null; }
+command -v apptainer >/dev/null 2>&1 || echo "WARNING: apptainer not found in PATH"
+echo "apptainer: $(command -v apptainer 2>/dev/null || echo NOT-FOUND)"
+
+echo "DIA-NN analysis start: $(date)"
+echo "DIANN_GUI_START_EPOCH $(date +%s)"
+
+apptainer exec --bind '/share' '/share/home/demo/tools/diann-2.7.0.sif' diann-linux --fasta '/share/home/demo/data/fasta/mouse_proteome_reviewed.fasta' \
+    --threads 32 \
+    --verbose 1 \
+    --qvalue 0.05 \
+    --reanalyse \
+    --rt-profiling \
+    --peptidoforms \
+    --matrices \
+    --unimod4 \
+    --var-mods 2 \
+    --var-mod 'UniMod:35,15.994915,M' \
+    --var-mod 'UniMod:1,42.010565,*n' \
+    --met-excision \
+    --fasta-search \
+    --cut 'K*,R*' \
+    --missed-cleavages 2 \
+    --min-pep-len 7 \
+    --max-pep-len 30 \
+    --min-pr-mz 300 \
+    --max-pr-mz 1000 \
+    --min-pr-charge 2 \
+    --max-pr-charge 5 \
+    --min-fr-mz 150 \
+    --max-fr-mz 2000 \
+    --predictor \
+    --gen-spec-lib \
+    --out-lib '/share/home/demo/data/library/mouse/library.speclib'
+rc=$?
+printf '%s' "$rc" > 'diann_gui_preview.rc'
+echo "DIA-NN analysis done: $(date), exit code: $rc"
+echo "DIANN_GUI_END_EPOCH $(date +%s)"
+
+# 如实退出, 成败由 GUI 的四层状态合成判定 (Slurm 终态 + 程序退出码 + 产物验证)
+exit $rc

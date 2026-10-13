@@ -1,0 +1,62 @@
+<!DOCTYPE html><html><head><title>R: 邮件通知守护进程</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css">
+<script type="text/javascript">
+const macros = { "\\R": "\\textsf{R}", "\\mbox": "\\text", "\\code": "\\texttt"};
+function processMathHTML() {
+    var l = document.getElementsByClassName('reqn');
+    for (let e of l) { katex.render(e.textContent, e, { throwOnError: false, macros }); }
+    return;
+}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js"
+    onload="processMathHTML();"></script>
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body><div class="container"><main>
+
+<table style="width: 100%;"><tr><td>watch_daemon {diann.gui}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>邮件通知守护进程</h2>
+
+<h3>Description</h3>
+
+<p>轮询状态文件中的待通知作业, 作业离队后发送完成邮件。
+通常由应用自动以 nohup 派生, 无需手动调用。</p>
+
+
+<h3>Usage</h3>
+
+<pre><code class='language-R'>watch_daemon(state = NULL, pidfile = NULL, interval = 60,
+             idle_exit_sec = 86400, once = FALSE)
+</code></pre>
+
+
+<h3>Arguments</h3>
+
+<table role = "presentation">
+<tr><td><code id="state">state</code></td>
+<td>
+<p>通知状态文件路径 (默认取包配置)</p>
+</td></tr>
+<tr><td><code id="pidfile">pidfile</code></td>
+<td>
+<p>pid 文件路径 (默认取包配置)</p>
+</td></tr>
+<tr><td><code id="interval">interval</code></td>
+<td>
+<p>轮询间隔秒 (下限 5)</p>
+</td></tr>
+<tr><td><code id="idle_exit_sec">idle_exit_sec</code></td>
+<td>
+<p>空闲自退秒数</p>
+</td></tr>
+<tr><td><code id="once">once</code></td>
+<td>
+<p>TRUE = 只执行一轮检查即返回</p>
+</td></tr>
+</table>
+
+<hr /><div style="text-align: center;">[Package <em>diann.gui</em> version 1.9.0 <a href="00Index.html">Index</a>]</div></main>
+
+</div>
+</body></html>

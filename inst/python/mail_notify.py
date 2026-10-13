@@ -33,7 +33,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mail_config.txt")
+DEFAULT_CONFIG = os.path.join(os.path.expanduser("~"), ".diann_gui", "mail_config.txt")
 
 
 def load_config(path):

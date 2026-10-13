@@ -20,8 +20,17 @@ third-party run user, no shared queue identity, no admin ACL work.
 ```bash
 git clone https://github.com/zhangdong360/diann-gui.git
 cd diann_gui
+R CMD INSTALL .          # installs the package and its R dependencies
 bin/diann-gui --init     # optional: create ~/.diann_gui/config.R from the template
 bin/diann-gui            # start on a random port; prints the URL
+```
+
+Or, without cloning — straight from an R console (e.g. RStudio Server; the
+app pops up in a browser window automatically):
+
+```r
+remotes::install_github("zhangdong360/diann-gui")
+diann.gui::run_app()
 ```
 
 - **Remote cluster?** open an SSH tunnel first:
@@ -33,14 +42,13 @@ bin/diann-gui            # start on a random port; prints the URL
 - **Configuration** lives in `~/.diann_gui/config.R` (template:
   `config.example.R`; a file pointed to by the `DIANN_GUI_CONFIG` env var is
   also honored). Typical settings: `SIF_DIRS` pointing at a shared read-only
-  DIA-NN image directory (e.g. `/share/app/tools/diann`), `EXTRA_LIB` when the
-  R packages live in a site library, and optional email credentials
-  (`~/.diann_gui/mail_config.txt`; the `DIANN_GUI_MAIL_CONF` env var is also
-  supported).
+  DIA-NN image directory (e.g. `/share/app/tools/diann`), and optional email
+  credentials (`~/.diann_gui/mail_config.txt`; the `DIANN_GUI_MAIL_CONF` env
+  var is also supported).
 - **One-time admin setup**: place the `diann*.sif` images in a world-readable
-  shared directory (e.g. `/share/app/tools/diann`) and install the three R
-  packages (`shiny`, `shinydashboard`, `shinyFiles`) into a site library — or
-  point `EXTRA_LIB` at one. That is all; your data lives in your own home.
+  shared directory (e.g. `/share/app/tools/diann`). That is all — the R
+  package and its dependencies install per user, and data lives in each
+  user's own home.
 
 A central shiny-server deployment (one shared instance at a fixed URL, all
 jobs running as the server's run user) is still supported as a deployment
@@ -90,7 +98,7 @@ flowchart LR
 | Component | Notes |
 |---|---|
 | Linux with **Slurm** | the app submits via `sbatch`/`squeue`/`sacct`/`scancel`/`scontrol` |
-| **R** ≥ 4.0 | with packages `shiny`, `shinydashboard`, `shinyFiles` |
+| **R** ≥ 4.1 | the `diann.gui` package pulls in `shiny`/`shinydashboard`/`shinyFiles` on install |
 | **Apptainer or Singularity** | plus a DIA-NN `.sif` container image |
 | **python3** | optional, only for email notifications (standard library only) |
 | **shiny-server** | optional — only for the central deployment variant below; self-hosted runs via `bin/diann-gui` |
@@ -103,21 +111,17 @@ the person clicking), so cross-user file access needs explicit group/ACL
 setup and all GUI jobs share one queue identity. Self-hosted mode avoids all
 of that.
 
-1. **Clone** the repository on the server that hosts shiny-server
+1. **Clone and install** on the server that hosts shiny-server
    (typically the Slurm login/management node):
 
    ```bash
    git clone https://github.com/zhangdong360/diann-gui.git
    cd diann_gui
+   R CMD INSTALL --no-multiarch .   # 依赖缺失时先装:
+                                    # install.packages(c("shiny","shinydashboard","shinyFiles"))
    ```
 
-2. **Install R packages** (system-wide, or into a shared library):
-
-   ```r
-   install.packages(c("shiny", "shinydashboard", "shinyFiles"))
-   ```
-
-3. **Configure** — copy the template and edit it:
+2. **Configure** — copy the template and edit it:
 
    ```bash
    cp config.example.R config.R
@@ -128,7 +132,7 @@ of that.
    not under `$HOME` — `BIND_PATHS` (host paths to bind-mount into the
    container). See the table below.
 
-4. **Deploy** to shiny-server, e.g. by symlinking into the site directory:
+3. **Deploy** to shiny-server, e.g. by symlinking into the site directory:
 
    ```bash
    sudo ln -s "$(pwd)" /srv/shiny-server/diann_gui
@@ -137,7 +141,7 @@ of that.
    The app directory (or its parent) must be readable by the shiny-server
    `run_as` user.
 
-5. Open `http://<server>:3838/diann_gui/`.
+4. Open `http://<server>:3838/diann_gui/`.
 
 ## Configuration (`config.R`)
 
