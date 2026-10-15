@@ -35,6 +35,35 @@ num_arg <- function(v, f) if (!is.null(v) && length(v) == 1 && !is.na(v)) c(f, f
 pos_arg <- function(v, f) if (!is.null(v) && length(v) == 1 && !is.na(v) && v > 0) c(f, format(v, trim = TRUE, scientific = FALSE)) else NULL
 str_arg <- function(v, f) if (nz_str(v)) c(f, shQuote(trimws(v))) else NULL
 
+# ---- sif 镜像静态校验 (纯本地检查, 不调 apptainer; GUI 提交前校验与「验证镜像」按钮共用) ----
+# SIF 格式: 前 32 字节是 "#!/usr/bin/env run-singularity" 引导头, 偏移 32 处为 9 字节魔数 "SIF_MAGIC"
+sif_magic_ok <- function(path) {
+  ok <- tryCatch({
+    con <- file(path, "rb"); on.exit(close(con))
+    seek(con, 32)
+    identical(readBin(con, "raw", n = 9), charToRaw("SIF_MAGIC"))
+  }, error = function(e) FALSE)
+  isTRUE(ok)
+}
+# 返回 list(exists, size_bytes, readable, sif_magic, ver_from_name):
+# readable/sif_magic 为 NA 表示因前置条件缺失而未检查; ver_from_name 从文件名提取 DIA-NN 版本 (空=提取失败)
+sif_check_local <- function(path) {
+  p <- trimws(as.character(path %||% ""))
+  if (length(p) != 1 || !nzchar(p)) {
+    return(list(exists = FALSE, size_bytes = NA_real_, readable = FALSE, sif_magic = FALSE, ver_from_name = ""))
+  }
+  ex <- file.exists(p)
+  res <- list(exists = ex, size_bytes = NA_real_, readable = NA, sif_magic = NA, ver_from_name = "")
+  if (!ex) return(res)
+  fi <- file.info(p)
+  res$size_bytes <- if (is.finite(fi$size)) fi$size else NA_real_
+  res$readable <- unname(file.access(p, 4)[1]) == 0
+  if (isTRUE(res$readable)) res$sif_magic <- sif_magic_ok(p)
+  v <- sub("(?i).*diann[-._ ]?([0-9]+(?:\\.[0-9]+)*).*", "\\1", basename(p), perl = TRUE)
+  res$ver_from_name <- if (nzchar(v) && v != basename(p)) v else ""
+  res
+}
+
 build_diann_chunks <- function(p) {
   ch <- character(0)
   add <- function(x) if (!is.null(x)) ch <<- c(ch, paste(x, collapse = " "))
@@ -152,7 +181,11 @@ make_slurm_script <- function(p) {
       sprintf('if [ -x "%s/apptainer" ]; then export PATH="%s:$PATH"; fi', d, d)
     }, character(1)),
     if (nzchar(cfg_get("APPTAINER_MODULE_FALLBACK"))) {
-      sprintf('command -v apptainer >/dev/null 2>&1 || { source /usr/share/Modules/init/bash 2>/dev/null; module load %s 2>/dev/null; }', cfg_get("APPTAINER_MODULE_FALLBACK"))
+      # 先 source /etc/profile.d/modules.sh: 它导出站点真实 MODULEPATH (login shell 才加载,
+      # sbatch 的非 login bash 里缺它, 仅 init/bash 的默认 MODULEPATH 找不到站点模块)
+      sprintf(paste0('command -v apptainer >/dev/null 2>&1 || { ',
+                     'source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null; ',
+                     'module load %s 2>/dev/null; }'), cfg_get("APPTAINER_MODULE_FALLBACK"))
     } else NULL,
     'command -v apptainer >/dev/null 2>&1 || echo "WARNING: apptainer not found in PATH"',
     'echo "apptainer: $(command -v apptainer 2>/dev/null || echo NOT-FOUND)"'

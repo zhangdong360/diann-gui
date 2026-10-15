@@ -38,10 +38,25 @@ server <- function(input, output, session) {
   shinyFileChoose(input, "lib_file", roots = volumes, filetypes = c("speclib", "parquet", "tsv", "msp", "sptxt"))
   shinyFileChoose(input, "ref_file", roots = volumes, filetypes = c("speclib", "parquet", "tsv", "msp", "sptxt"))
   shinyFileChoose(input, "fasta_file", roots = volumes, filetypes = c("fasta", "fa"))
+  shinyFileChoose(input, "sif_pick", roots = volumes, filetypes = c("sif"))
   shinyDirChoose(input, "out_dir", roots = volumes)
   shinyDirChoose(input, "temp_dir", roots = volumes)
   shinyDirChoose(input, "raw_dir_btn", roots = volumes)
   shinyDirChoose(input, "log_dir_btn", roots = volumes)
+
+  # sif 浏览选择 → 回填自定义路径输入框 (单一事实来源仍是 custom_sif, 手动修改不受影响)
+  observeEvent(input$sif_pick, {
+    fp <- tryCatch(parseFilePaths(volumes, input$sif_pick)$datapath, error = function(e) NULL)
+    if (is.character(fp) && length(fp) == 1 && nzchar(fp)) {
+      updateTextInput(session, "custom_sif", value = as.character(fp))
+    }
+  })
+
+  # 当前生效镜像: 自定义路径 (勾选且非空) 优先, 否则下拉选择 —— 回显/验证/参数收集共用
+  effective_sif <- reactive({
+    if (isTRUE(input$use_custom_sif)) trimws(input$custom_sif %||% "")
+    else as.character(input$sif_version %||% "")
+  })
 
   selected_raws <- reactive({
     if (isTRUE(input$use_imported_raws) && length(ov$raws)) ov$raws
@@ -72,14 +87,120 @@ server <- function(input, output, session) {
 
   # ---------- 路径回显 ----------
   output$sif_display <- renderText({
-    if (isTRUE(input$use_custom_sif)) {
-      p <- trimws(input$custom_sif)
-      if (nzchar(p)) paste0("(自定义) ", p) else "(未填写自定义路径)"
-    } else if (!is.null(cfg_get("sif_selected")) && !is.null(input$sif_version)) {
-      sprintf("(v%s) %s",
-              cfg_get("sif_df")$ver[match(input$sif_version, cfg_get("sif_df")$path)], input$sif_version)
-    } else "未找到可用镜像"
+    p <- effective_sif()
+    if (!nz_str(p)) {
+      if (isTRUE(input$use_custom_sif)) "(未填写自定义路径)" else "未找到可用镜像"
+    } else {
+      v <- sif_check_local(p)$ver_from_name
+      prefix <- if (isTRUE(input$use_custom_sif)) "(自定义" else "("
+      sprintf("%sv%s) %s", prefix, if (nzchar(v)) v else "?", p)
+    }
   })
+  # ---------- 运行环境自检 (apptainer, 结果为启动时探测所得) ----------
+  output$apt_check_display <- renderUI({
+    pr <- cfg_get("APPTAINER_PROBE") %||% list(ok = FALSE, bins = character(0),
+                                               src = character(0), vers = character(0), module = NULL)
+    apt_paths <- cfg_get("APPTAINER_PATHS") %||% character(0)
+    fmt_line <- function(ok, txt) tags$div(
+      style = "margin-bottom:2px;",
+      tags$span(style = sprintf("color:%s;font-weight:bold;", if (ok) "#00a65a" else "#dd4b39"),
+                if (ok) "✓ " else "✗ "),
+      txt
+    )
+    tagList(
+      if (length(pr$bins)) {
+        tagList(lapply(seq_along(pr$bins), function(i) fmt_line(TRUE, HTML(sprintf(
+          "apptainer <b>%s</b> <small>(来源: %s)</small><br><code style='word-break:break-all'>%s</code>",
+          if (nzchar(pr$vers[i])) pr$vers[i] else "?", pr$src[i], pr$bins[i])))))
+      } else {
+        fmt_line(FALSE, HTML(sprintf(
+          "未找到 apptainer 可执行文件%s<br><small>请在 config.R 的 APPTAINER_PATHS 配置其所在目录</small>",
+          if (!is.null(pr$error)) sprintf(" (探测出错: %s)", pr$error) else "")))
+      },
+      if (length(apt_paths)) tags$div(
+        style = "color:#777;font-size:12px;margin-top:4px;",
+        "脚本 PATH 候选:",
+        tags$ul(style = "margin:2px 0 0 18px;padding:0;",
+          lapply(apt_paths, function(d) tags$li(
+            style = "word-break:break-all;",
+            sprintf("%s — %s", d, if (file.exists(file.path(d, "apptainer"))) "存在" else "不存在"))))),
+      if (!is.null(pr$module)) fmt_line(pr$module$ok, HTML(sprintf(
+        "module 回退 <code>%s</code> %s<small>%s</small>", cfg_get("APPTAINER_MODULE_FALLBACK"),
+        if (pr$module$ok) "可用 " else "不可用 ",
+        if (pr$module$ok && nzchar(pr$module$path)) sprintf("(%s)", pr$module$path) else "")))
+    )
+  })
+
+  # ---------- 镜像可用性验证 (按钮触发; 本地静态检查 → apptainer inspect → 容器内启动) ----------
+  sif_verify <- reactiveVal(NULL)
+  observeEvent(input$verify_sif, {
+    sif <- effective_sif()
+    rows <- list()
+    add_row <- function(kind, ...) {
+      col <- switch(kind, ok = "#00a65a", bad = "#dd4b39", warn = "#f39c12", info = "#3c8dbc")
+      icon <- switch(kind, ok = "✓", bad = "✗", warn = "⚠", info = "ℹ")
+      rows[[length(rows) + 1]] <<- tags$div(
+        style = sprintf("color:%s;margin:1px 0;", col), HTML(sprintf("<b>%s</b> %s", icon, paste0(...))))
+    }
+    finish <- function() sif_verify(tags$div(style = "margin-top:4px;font-size:13px;", rows))
+    if (!nz_str(sif)) { add_row("bad", "未选择镜像"); return(finish()) }
+    lc <- sif_check_local(sif)
+    if (!lc$exists) { add_row("bad", sprintf("镜像不存在: %s", sif)); return(finish()) }
+    size_mb <- lc$size_bytes / 1024^2
+    if (is.na(size_mb)) add_row("warn", sprintf("文件存在但无法读取大小: %s", sif))
+    else if (size_mb < 1) add_row("warn", sprintf("文件仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)", size_mb))
+    else add_row("ok", sprintf("文件存在, %.0f MB", size_mb))
+    if (!isTRUE(lc$readable)) {
+      add_row("bad", sprintf("GUI 运行身份 (%s) 无权读取该镜像, 作业将无法启动容器",
+                             Sys.info()[["user"]]))
+      return(finish())
+    }
+    add_row("ok", "GUI 运行身份可读取")
+    if (!isTRUE(lc$sif_magic)) {
+      add_row("bad", "SIF 魔数校验失败 — 文件不是有效的 SIF 镜像 (可能损坏或下载截断)")
+      return(finish())
+    }
+    add_row("ok", "SIF 镜像格式有效")
+    pr <- cfg_get("APPTAINER_PROBE") %||% list(ok = FALSE, bins = character(0))
+    if (!isTRUE(pr$ok) || !length(pr$bins)) {
+      add_row("info", "GUI 节点未找到 apptainer, 跳过容器级检查 (作业脚本内自行回退查找)")
+      return(finish())
+    }
+    withProgress(message = "正在验证镜像…", value = 0.5, {
+      bin <- pr$bins[1]
+      ins <- tryCatch(suppressWarnings(apptainer_run(bin, c("inspect", shQuote(sif)), timeout = 20)),
+                      error = function(e) paste("探测出错:", conditionMessage(e)))
+      ins_txt <- if (is.character(ins)) paste(ins, collapse = "\n") else ""
+      if (grepl("org.label-schema", ins_txt)) {
+        from <- sub(".*org.label-schema.usage.singularity.deffile.from:[[:space:]]*([^\n]+).*", "\\1", ins_txt)
+        lbl <- if (from != ins_txt && nzchar(from)) sprintf(" (镜像来源: %s)", trimws(from)) else ""
+        add_row("ok", sprintf("apptainer inspect 通过%s", lbl))
+      } else {
+        tl <- tail(ins_txt[nzchar(ins_txt)], 1)
+        if (!length(tl)) tl <- "(无输出)"
+        add_row("bad", sprintf("apptainer inspect 失败: %s", substr(tl, 1, 200)))
+        return(finish())
+      }
+      incProgress(0.4, detail = "容器内启动 diann-linux…")
+      # --version 非 DIA-NN 已知旗标, 但二进制仍会先打印版本横幅; 正则从合并输出提取, 不依赖具体流
+      exe <- tryCatch(suppressWarnings(apptainer_run(bin, c("exec", shQuote(sif), "diann-linux", "--version"), timeout = 60)),
+                      error = function(e) paste("探测出错:", conditionMessage(e)))
+      exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
+      m <- regmatches(exe_txt, regexpr("DIA-NN [0-9][^,(\n]*", exe_txt))
+      if (length(m)) {
+        ver_real <- trimws(sub("^DIA-NN ", "", m))
+        ver_num <- sub("^([0-9]+(?:\\.[0-9]+)*).*", "\\1", ver_real, perl = TRUE)
+        cmp <- if (nzchar(lc$ver_from_name)) {
+          if (identical(ver_num, lc$ver_from_name)) ", 与文件名版本一致" else sprintf(", 注意: 文件名版本为 %s", lc$ver_from_name)
+        } else ""
+        add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s%s", ver_real, cmp))
+      } else {
+        add_row("warn", "容器内启动 diann-linux 未成功 — 若为 GUI 节点限制 (FUSE/命名空间) 可忽略, 以作业实际运行为准")
+      }
+    })
+    finish()
+  })
+  output$sif_verify_result <- renderUI(sif_verify())
   output$raw_path_display <- renderText({
     mk <- if (isTRUE(input$use_imported_raws) && length(ov$raws)) "(导入) " else ""
     if (length(selected_raws())) paste0(mk, paste(selected_raws(), collapse = "\n")) else "未选 RAW 文件"
@@ -115,7 +236,7 @@ server <- function(input, output, session) {
   params_ready <- reactive({
     out_dir <- if (length(selected_out_dir())) selected_out_dir() else ""
     rep_name <- trimws(input$report_name)
-    sif <- if (isTRUE(input$use_custom_sif)) trimws(input$custom_sif) else input$sif_version
+    sif <- effective_sif()
     time_h <- input$time_h
     if (!is.null(time_h) && length(time_h) == 1 && !is.na(time_h) && time_h < 1) time_h <- NA_real_
     list(
@@ -123,7 +244,7 @@ server <- function(input, output, session) {
       threads = input$threads %||% 16, mem_gb = input$mem_gb %||% 64, time_h = time_h,
       sif = sif,
       ver = if (nz_str(sif)) {
-        v <- sub("(?i).*diann[-._ ]?([0-9]+(?:\\.[0-9]+)*).*", "\\1", basename(sif), perl = TRUE)
+        v <- sif_check_local(sif)$ver_from_name
         if (nzchar(v)) v else "自定义"
       } else "",
       raw_mode = input$raw_mode,
@@ -188,6 +309,18 @@ server <- function(input, output, session) {
     info <- character(0)
     if (!nz_str(p$sif)) msgs <- c(msgs, "✗ 未选择 sif 镜像")
     else if (!file.exists(p$sif)) msgs <- c(msgs, sprintf("✗ sif 镜像不存在: %s", p$sif))
+    else {
+      # 本地静态校验 (瞬时, 无 system2); 深度验证 (apptainer inspect/容器内启动) 用版本页「验证镜像可用性」按钮
+      lc <- sif_check_local(p$sif)
+      if (!isTRUE(lc$readable)) {
+        msgs <- c(msgs, sprintf("✗ GUI 运行身份 (%s) 无权读取该镜像, 作业将无法启动容器: %s",
+                                Sys.info()[["user"]], p$sif))
+      } else if (!isTRUE(lc$sif_magic)) {
+        msgs <- c(msgs, "✗ 该文件不是有效的 SIF 镜像 (魔数校验失败, 可能损坏或下载截断); 可用版本页「验证镜像可用性」按钮逐项排查")
+      } else if (!is.na(lc$size_bytes) && lc$size_bytes < 1024^2) {
+        warn <- c(warn, sprintf("⚠ 镜像仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)", lc$size_bytes / 1024^2))
+      }
+    }
     th <- suppressWarnings(as.integer(p$threads))
     if (length(p$threads) != 1 || is.na(th) || th < 1 || th > 1024) {
       msgs <- c(msgs, "✗ 线程数无效 (需 1–1024 的整数): Slurm --cpus-per-task 与 DIA-NN --threads 均使用该值")
@@ -205,7 +338,8 @@ server <- function(input, output, session) {
                               Sys.info()[["user"]], p$out_dir, Sys.info()[["user"]]))
     }
     if (nz_str(p$notify_email)) {
-      if (grepl("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+(\\s*,\\s*[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+)*$", p$notify_email)) {
+      # perl=TRUE 必需: POSIX TRE 引擎不识别字符类内的 \s, 会把 [^@,\s] 当作排除字母 s, 含 s 的邮箱被误判
+      if (grepl("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+(\\s*,\\s*[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+)*$", p$notify_email, perl = TRUE)) {
         if (!file.exists(cfg_get("MAIL_CONF"))) {
           warn <- c(warn, sprintf("ℹ 已填写邮箱, 但未找到邮件配置 %s, 将不会发送通知邮件 (参考 mail_config.example.txt)", cfg_get("MAIL_CONF")))
         }

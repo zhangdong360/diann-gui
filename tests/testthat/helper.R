@@ -29,6 +29,7 @@ collapse_dots <- diann.gui:::collapse_dots
 imported_var_mods_max <- diann.gui:::imported_var_mods_max
 vm_default <- diann.gui:::vm_default
 scan_sif_images <- diann.gui:::scan_sif_images
+sif_check_local <- diann.gui:::sif_check_local
 diann_notify_elapsed <- diann.gui:::diann_notify_elapsed
 diann_job_status <- diann.gui:::diann_job_status
 slurm_state_normalize <- diann.gui:::slurm_state_normalize

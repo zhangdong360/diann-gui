@@ -18,6 +18,19 @@ run_app <- function(port = NULL, host = "127.0.0.1",
                     config_file = NULL) {
   diann_load_config(config_file)
 
+  # apptainer 探测 (启动时一次): 进程 PATH + 配置目录逐个核验, 结果写入配置环境供
+  # 版本选项卡的「运行环境自检」展示与提交前提示使用; 计算节点侧仍由 sbatch 脚本
+  # 自行回退 (PATH 候选 → module load), 探测失败不阻断提交。
+  # PATH 上命中的 apptainer 所在目录自动并入 APPTAINER_PATHS (make_slurm_script 经
+  # cfg_get 调用时读取), 作为站点漏配的兜底 —— 脚本运行时依旧逐条 -x 核验, 合并无副作用。
+  .cfg$APPTAINER_PROBE <- tryCatch(apptainer_probe(),
+    error = function(e) list(ok = FALSE, bins = character(0), src = character(0),
+                             vers = character(0), module = NULL,
+                             error = conditionMessage(e)))
+  if (length(.cfg$APPTAINER_PROBE$bins)) {
+    .cfg$APPTAINER_PATHS <- unique(c(dirname(.cfg$APPTAINER_PROBE$bins[1]), cfg_get("APPTAINER_PATHS")))
+  }
+
   # 启动期状态: 镜像扫描 / 参数速查 (ui 与 server 经 cfg_get 读取)
   .cfg$sif_df <- scan_sif_images(cfg_get("SIF_DIRS"))
   .cfg$sif_choices <- if (nrow(.cfg$sif_df)) {

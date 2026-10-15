@@ -21,18 +21,28 @@ ui <- dashboardPage(
         fluidRow(
           box(title = "1. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(4,
-                selectInput("sif_version", "版本 (自动扫描 diann*.sif):", choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected"))
-              ),
-              column(4,
-                checkboxInput("use_custom_sif", "使用自定义镜像路径", FALSE),
+                selectInput("sif_version",
+                            sprintf("版本 (自动扫描 diann*.sif, 共 %d 个):", length(cfg_get("sif_choices"))),
+                            choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected")),
+                helpText("不同版本通过不同 sif 镜像实现；若下拉为空请检查 config.R 中的 SIF_DIRS。"),
+                checkboxInput("use_custom_sif", "浏览/手动指定其他镜像", FALSE),
                 conditionalPanel("input.use_custom_sif == 1",
-                  textInput("custom_sif", "sif 文件完整路径:", placeholder = "/path/to/diann-x.y.z.sif")
+                  shinyFilesButton("sif_pick", "选择 SIF 镜像文件", "在数据卷内选择 .sif 镜像 (单个)", multiple = FALSE),
+                  textInput("custom_sif", "sif 文件完整路径 (选择或手动输入):", placeholder = "/path/to/diann-x.y.z.sif"),
+                  helpText("镜像须位于计算节点可见的共享存储; 浏览范围限于数据卷, 之外的路径请手动输入。")
                 )
               ),
               column(4,
                 tags$label("当前生效镜像:"), br(),
                 verbatimTextOutput("sif_display"),
-                helpText("不同版本通过不同 sif 镜像实现；若版本下拉为空请检查 config.R 中的 SIF_DIRS。")
+                actionButton("verify_sif", "验证镜像可用性", icon = icon("check-circle"), width = "100%",
+                             style = "color:#fff; background-color:#00a65a; border-color:#008d4d"),
+                uiOutput("sif_verify_result")
+              ),
+              column(4,
+                tags$label("运行环境自检 (GUI 节点):"), br(),
+                uiOutput("apt_check_display"),
+                helpText("计算节点由作业脚本自行回退 (PATH 候选 → module load), GUI 节点探测失败不阻断提交。")
               )
           )
         ),
