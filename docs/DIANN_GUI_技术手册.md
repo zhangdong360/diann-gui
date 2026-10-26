@@ -160,11 +160,16 @@ legacy 中央部署删除后彻底移除），避免项目目录里的同名文�
 
 **镜像来源/命名/识别（v1.13）**：GUI 不分发 DIA-NN 二进制或镜像——每人用官方
 release 自行构建 `.sif`（流程与许可说明见 README「构建 DIA-NN 容器镜像」章节）。
-文件名**任意**：版本不来自文件名，而是选中镜像后在容器内实测（`apptainer/singularity
+文件名**任意**：版本不来自文件名，而是在切换选择或点「识别所有未识别镜像」后在容器内实测（页面加载不跑容器）（`apptainer/singularity
 exec <sif> diann-linux --version`），结果按 size+mtime 缓存到
 `~/.diann_gui/sif_probe.rds`（文件变化自动失效；「识别版本并深度验证」成功后同样
 写缓存）。启动不跑容器（HPC 登录节点常无 apptainer）；「版本未识别」不阻断提交。
 默认选中：`DEFAULT_SIF` 命中优先 → 已识别的最高数值版本 → 首个路径。
+
+本地单机模式的界面实例（含本面板的识别回显）见 `docs/img/local_mode_submit.png`
+（提交页）与 `docs/img/local_mode_monitor.png`（任务队列页），新版手指南同图内嵌
+（图 3-2/3-3）。页面加载不识别（不跑容器）；切换镜像或点「识别所有未识别镜像」
+时才在容器内实测。
 
 ### 3.3 「3. 文件与数据库」
 
@@ -288,9 +293,15 @@ CPU 核数不在本盒设置：Slurm 的 `--cpus-per-task` 与 DIA-NN 的 `--thr
 
 本地模式没有分区、没有调度器记账；没有排队机制（`LOCAL_MAX_JOBS` 可做简单并发
 上限，达到后直接阻断提交），同时跑多个 DIA-NN 会争抢本机 CPU/内存（线程数超过
-本机核数时 GUI 会警告）。
+本机核数时 GUI 会警告）。v1.13 起：达到并发上限的阻断消息会给出**预计可提交时间**
+（按运行中作业的时限取最早；全部未设时限时明示"结束时间未知"），未达上限的提示
+也显示预计释放时间。
 
 ### 3.8 「7. 命令预览与提交」
+
+盒标题带模式后缀（「(本地执行)」/「(Slurm 提交)」）；提交页与任务队列页顶部各有一条
+**常驻模式提示条**（v1.13：`backend_banner` / `backend_banner_monitor`），标题栏有彩色
+徽标（本地单机 = 绿 / Slurm 集群 = 蓝），日志命名、排队语义与并发上限一目了然。
 
 | 控件 | 说明 |
 |---|---|
@@ -787,7 +798,7 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 ### 10.10 每用户自托管：装包 / 运行 / 端口
 
 1. 装包：`install.packages("diann.gui", repos = c(SITE = "<站点仓库>", getOption("repos")))`，
-   无外网时 `install.packages("/path/diann.gui_1.12.0.tar.gz", repos = NULL, type = "source")`。
+   无外网时 `install.packages("/path/diann.gui_1.13.0.tar.gz", repos = NULL, type = "source")`。
 2. 自检：`diann.gui::doctor()` 一次列出缺依赖/执行后端与当前模式要求的命令（Slurm 命令或本地原语 setsid/nohup/timeout/bash 与 /proc）/找不到 apptainer/SIF_DIRS 未配/状态目录不可写；不适用项标记为 `na`。
 3. 启动：`diann.gui::run_app()`（自动选空闲端口并打印 URL/隧道命令）；固定端口 `run_app(port = 3838)`。
 4. 端口被占用：`run_app()` 会自动换端口；也可显式指定。
@@ -917,4 +928,4 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 
 ---
 
-*手册基于 GUI v1.12 源码（R 包 diann.gui）、DIA-NN 官方文档与集群实测记录整理；2026-10-26。*
+*手册基于 GUI v1.13 源码（R 包 diann.gui）、DIA-NN 官方文档与集群实测记录整理；2026-10-27。*
