@@ -6,8 +6,10 @@ Authors@R: person("Zhang Dong", email = "zhangdong_0121@foxmail.com", role = c("
 Description: A Shiny dashboard that puts DIA-NN behind a browser: build commands,
     submit them as Slurm batch jobs or run them locally on the GUI host, always
     through the official DIA-NN container image (Apptainer .sif), and monitor
-    queues, logs and results. Supports per-user self-hosted runs and command
-    import from pasted DIA-NN command lines.
+    queues, logs and results. A downstream analysis module turns the exported
+    protein-level matrix (pg_matrix) into QC visualisation, limma differential
+    analysis, GO/KEGG enrichment and a self-contained HTML report. Supports
+    per-user self-hosted runs and command import from pasted DIA-NN command lines.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:
@@ -22,7 +24,18 @@ Imports:
     tools,
     utils
 Suggests:
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    DT,
+    ggplot2,
+    ggrepel,
+    gridExtra,
+    pheatmap,
+    scales,
+    svglite,
+    jsonlite,
+    zip,
+    openxlsx,
+    limma
 Config/testthat/edition: 3
 URL: https://github.com/zhangdong360/diann-gui
 BugReports: https://github.com/zhangdong360/diann-gui/issues

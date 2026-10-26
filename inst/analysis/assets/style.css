@@ -1,0 +1,223 @@
+/* =========================================================================
+   style.css —— 分析报告模板资产 (inst/analysis/assets/)
+   重建自 mass_analysis 报告模板 (template_2grp/assets 缺失, v1.14 按报告
+   HTML 中的 class 契约重写)。主色 #0b5f9e 与 GUI 一致。
+   版面基类 (topbar/layout/toc/tabs/foot/backToTop 等) 在此定义;
+   正文组件 (stat-card/figure/kv 表等) 由 report_build.R 的 REPORT_CSS_EXTRA 注入。
+   ========================================================================= */
+
+:root {
+  --brand: #0b5f9e;
+  --brand-dark: #094c7f;
+  --brand-light: #e8f2fa;
+  --ink: #263238;
+  --ink-soft: #546e7a;
+  --line: #e3ebf2;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: var(--ink);
+  background: #f4f7fa;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ---- 顶栏 ---- */
+.topbar {
+  background: linear-gradient(90deg, var(--brand-dark), var(--brand));
+  color: #fff;
+  padding: 12px 28px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.topbar .brand img { height: 30px; width: auto; display: block; }
+
+/* ---- 布局: 左 TOC + 右正文 ---- */
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 1480px;
+  margin: 18px auto;
+  padding: 0 20px;
+}
+.toc {
+  flex: 0 0 250px;
+  position: sticky;
+  top: 72px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 10px;
+  max-height: calc(100vh - 100px);
+  overflow: auto;
+  font-size: 13px;
+}
+.toc:empty { display: none; }
+.toc .toc-title {
+  font-weight: 700;
+  color: var(--brand);
+  margin: 2px 6px 8px;
+  font-size: 13.5px;
+}
+.toc a {
+  display: block;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-left: 2px solid transparent;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.45;
+}
+.toc a.toc-h2 { font-weight: 600; color: var(--ink); margin-top: 3px; }
+.toc a.toc-h3 { padding-left: 22px; font-size: 12.5px; }
+.toc a:hover { background: var(--brand-light); color: var(--brand); }
+.toc a.active { border-left-color: var(--brand); background: var(--brand-light); color: var(--brand); }
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 26px 30px 40px;
+}
+
+/* ---- 元信息卡 ---- */
+.meta-card {
+  background: linear-gradient(180deg, #fff 0%, var(--brand-light) 130%);
+  border: 1px solid #d6e6f2;
+  border-radius: 10px;
+  padding: 4px 22px 14px;
+  margin-bottom: 22px;
+}
+.meta-card h1 {
+  font-size: 21px;
+  color: var(--brand);
+  margin: 14px 0 10px;
+}
+
+/* ---- 章节标题 ---- */
+h2.section {
+  font-size: 19px;
+  color: var(--brand);
+  border-bottom: 2px solid var(--brand);
+  padding-bottom: 6px;
+  margin: 38px 0 14px;
+}
+h2.section:first-of-type { margin-top: 8px; }
+h3.subsection {
+  font-size: 15.5px;
+  color: #37474f;
+  margin: 26px 0 10px;
+  padding-left: 9px;
+  border-left: 4px solid var(--brand);
+}
+h4 { color: #455a64; margin: 14px 0 8px; }
+
+/* ---- 表格基类 (正文 kv 表的边框在 EXTRA 中, 这里兜底) ---- */
+table { border-collapse: collapse; }
+th, td { text-align: left; }
+
+/* ---- 页内 tab (多组对比 / GO ontology) ---- */
+.tabs { margin: 12px 0; }
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 2px solid var(--line);
+  padding-bottom: 0;
+  margin-bottom: 12px;
+}
+.tab-btn {
+  border: 1px solid var(--line);
+  border-bottom: none;
+  background: #f7fafc;
+  color: var(--ink-soft);
+  padding: 7px 14px;
+  font-size: 13px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+.tab-btn:hover { color: var(--brand); }
+.tab-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ---- 页脚 / 返回顶部 ---- */
+.foot {
+  margin-top: 40px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: #90a4ae;
+  font-size: 12.5px;
+  text-align: center;
+}
+#backToTop {
+  position: fixed;
+  right: 22px;
+  bottom: 26px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 17px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+  box-shadow: 0 2px 8px rgba(11, 95, 158, .35);
+  z-index: 30;
+}
+#backToTop.show { opacity: .92; pointer-events: auto; }
+#backToTop:hover { background: var(--brand-dark); }
+
+/* ---- 图片点击放大 ---- */
+.zoomable { cursor: zoom-in; }
+body.img-zoomed .zoomable.zoomed {
+  position: fixed;
+  inset: 4vh 4vw;
+  width: 92vw;
+  height: auto;
+  max-height: 92vh;
+  max-width: none;
+  z-index: 100;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .35);
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+@media (max-width: 1080px) {
+  .layout { flex-direction: column; }
+  .toc { position: static; flex: none; max-height: none; width: 100%; }
+}
+
+@media print {
+  .topbar, .toc, #backToTop { display: none; }
+  body { background: #fff; }
+  .layout { display: block; margin: 0; padding: 0; max-width: none; }
+  main { border: none; padding: 0; }
+  .tab-pane { display: block !important; }
+}
