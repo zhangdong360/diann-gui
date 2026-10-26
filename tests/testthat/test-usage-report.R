@@ -88,3 +88,82 @@ test_that("失败作业进入失败明细", {
 test_that("月份格式非法时报错", {
   expect_error(diann.gui::usage_report(month = "2026-1"), "YYYY-MM")
 })
+
+# ---------- v1.12: 混合 slurm/local 记录 + 「后端」列 ----------
+
+test_that("usage_report 混合记录: 按记录后端分派状态来源, 明细含「后端」列", {
+  # 本地作业状态文件与通知状态同目录: 隔离到临时 NOTIFY_STATE, 不污染测试 HOME
+  old_state <- diann.gui::cfg_get("NOTIFY_STATE")
+  st_dir <- usage_dir("usage_local_state")
+  diann.gui::set_core_const("NOTIFY_STATE", file.path(st_dir, "notify.rds"))
+  on.exit(diann.gui::set_core_const("NOTIFY_STATE", old_state), add = TRUE)
+
+  now <- as.integer(Sys.time())
+  # --- local 作业: rc=0 + 新主报告 -> 成功 ---
+  ld <- usage_dir("usage_local_out")
+  sd <- file.path(ld, "diann_gui_scripts"); dir.create(sd, showWarnings = FALSE)
+  lsh <- file.path(sd, "diann_local.sh"); writeLines("#!/bin/bash", lsh)
+  writeLines("0", sub("\\.sh$", ".rc", lsh))
+  lrep <- file.path(ld, "report.tsv"); writeLines(c("h", "r"), lrep)
+  llog <- file.path(ld, "local-1000001.out")
+  writeLines(c(sprintf("DIANN_GUI_START_EPOCH %d", now - 20), "exit code: 0",
+               sprintf("DIANN_GUI_END_EPOCH %d", now)), llog)
+  diann.gui:::local_jobs_add(list(
+    jobid = 1000001L, task = "L", out_dir = ld, script_path = lsh,
+    log_out = llog, log_err = sub("\\.out$", ".err", llog),
+    rc_path = sub("\\.sh$", ".rc", lsh), pid = NA_integer_, pid_start = NA_real_,
+    runner = "", submitted = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+    submitted_epoch = now - 30, time_sec = 0L, backend = "local"))
+
+  # --- slurm 作业: 同样经 rc + 产物合成成功 (登录节点无该作业: sacct 不可用分支) ---
+  sdd <- usage_dir("usage_slurm_out")
+  ssd <- file.path(sdd, "diann_gui_scripts"); dir.create(ssd, showWarnings = FALSE)
+  ssh <- file.path(ssd, "diann_slurm.sh"); writeLines("#!/bin/bash", ssh)
+  writeLines("0", sub("\\.sh$", ".rc", ssh))
+  srep <- file.path(sdd, "report.tsv"); writeLines(c("h", "r"), srep)
+  slog <- file.path(sdd, "slurm-888001.out")
+  writeLines(c(sprintf("DIANN_GUI_START_EPOCH %d", now - 20), "exit code: 0",
+               sprintf("DIANN_GUI_END_EPOCH %d", now)), slog)
+
+  reg <- data.frame(
+    jobid = c("888001", "1000001"), 任务名 = c("S", "L"),
+    输出目录 = c(sdd, ld), 日志 = c(slog, llog),
+    提交时间 = rep(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), 2),
+    script_path = c(ssh, lsh), out_file = c(srep, lrep), sif = NA, apptainer = NA,
+    版本 = "2.7.0", backend = c("slurm", "local"), pid = c(NA, NA),
+    stringsAsFactors = FALSE)
+  registry <- write_registry(reg)
+  outdir <- usage_dir("usage_out_mixed")
+  f <- diann.gui::usage_report(month = format(Sys.Date(), "%Y-%m"), out_dir = outdir,
+                               registry = registry, state = tempfile("nostate"))
+  lines <- readLines(f, warn = FALSE)
+  txt <- paste(lines, collapse = "\n")
+  expect_match(txt, "执行后端: Slurm \\*\\*1\\*\\* 条 / 本地 \\*\\*1\\*\\* 条")
+  row_l <- grep("\\| 1000001 \\|", lines, value = TRUE)[1]
+  row_s <- grep("\\| 888001 \\|", lines, value = TRUE)[1]
+  expect_match(row_l, "本地")
+  expect_match(row_s, "Slurm")
+  expect_match(row_l, "成功")
+  expect_match(row_s, "成功")
+  expect_true(grepl("本地", txt, fixed = TRUE) && grepl("Slurm", txt, fixed = TRUE))
+})
+
+test_that("usage_report: v2 旧记录 (无 backend 列) 按 Slurm 解释并出现在「后端」列", {
+  d <- usage_dir("usage_v2_nobackend")
+  report <- file.path(d, "report.tsv")
+  usage_job(d, rc = "0", report = report)
+  reg <- data.frame(jobid = "999003", 任务名 = "S", 输出目录 = d,
+                    日志 = file.path(d, "slurm-999003.out"),
+                    提交时间 = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                    script_path = file.path(d, "diann_gui_scripts", "diann_job.sh"),
+                    out_file = report, sif = NA, apptainer = NA, 版本 = "2.7.0",
+                    stringsAsFactors = FALSE)
+  registry <- write_registry(reg)
+  outdir <- usage_dir("usage_out_v2_nobackend")
+  f <- diann.gui::usage_report(month = format(Sys.Date(), "%Y-%m"), out_dir = outdir,
+                               registry = registry, state = tempfile("nostate"))
+  lines <- readLines(f, warn = FALSE)
+  row <- grep("\\| 999003 \\|", lines, value = TRUE)[1]
+  expect_match(row, "Slurm")
+  expect_match(paste(lines, collapse = "\n"), "Slurm \\*\\*1\\*\\* 条 / 本地 \\*\\*0\\*\\* 条")
+})

@@ -1,12 +1,13 @@
 Package: diann.gui
 Type: Package
-Title: Web GUI for Submitting and Monitoring DIA-NN Jobs on Slurm Clusters
-Version: 1.11.0
+Title: Web GUI for Submitting and Monitoring DIA-NN Jobs on Slurm Clusters or Linux Workstations
+Version: 1.12.0
 Authors@R: person("Zhang Dong", email = "zhangdong_0121@foxmail.com", role = c("aut", "cre"))
 Description: A Shiny dashboard that puts DIA-NN behind a browser: build commands,
-    submit them as Slurm batch jobs running the official DIA-NN container image
-    (Apptainer .sif), and monitor queues, logs and results. Supports per-user
-    self-hosted runs and command import from pasted DIA-NN command lines.
+    submit them as Slurm batch jobs or run them locally on the GUI host, always
+    through the official DIA-NN container image (Apptainer .sif), and monitor
+    queues, logs and results. Supports per-user self-hosted runs and command
+    import from pasted DIA-NN command lines.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:

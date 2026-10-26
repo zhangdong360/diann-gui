@@ -6,6 +6,12 @@ server <- function(input, output, session) {
   volumes <- cfg_get("BASE_VOLUMES")[file.exists(unname(cfg_get("BASE_VOLUMES")))]
   user <- Sys.getenv("USER"); if (!nzchar(user)) user <- Sys.info()[["user"]]
 
+  # ---- 执行后端 (v1.12: Slurm 可选 / 本地单机) ----
+  # UI 在启动时按同一解析结果条件渲染; 会话期间不切换后端。
+  backend <- exec_backend()
+  is_local <- identical(backend, "local")
+  binfo <- backend_info()
+
   # 运行用户无权访问数据根目录时, 文件浏览器会静默显示为空 — 在此明确提示。
   # 不存在的卷 (如 e2e/演示用的合成根 /share/home/demo) 静默跳过:
   # 选择器本就按 file.exists 过滤, 这类卷是配置里的既定测试设施而非故障
@@ -25,7 +31,8 @@ server <- function(input, output, session) {
   # 本会话提交记录
   jobs <- reactiveValues(jobs = data.frame(
     jobid = character(), 任务名 = character(), 版本 = character(),
-    输出目录 = character(), 提交时间 = character(), 邮箱 = character(), stringsAsFactors = FALSE
+    输出目录 = character(), 提交时间 = character(), 邮箱 = character(),
+    后端 = character(), stringsAsFactors = FALSE
   ))
 
   # 命令导入的文件路径覆盖层 (shinyFiles 选择器无法编程填充, 导入后按类勾选覆盖)
@@ -402,7 +409,8 @@ server <- function(input, output, session) {
     time_h <- input$time_h
     # 不再把 <1 h 转 NA: 0.5 h 会变成"不限时"(共享集群资源安全问题)。时限在脚本里按分钟取整。
     list(
-      job_name = trimws(input$job_name %||% ""), partition = input$partition %||% "compute",
+      job_name = trimws(input$job_name %||% ""),
+      partition = if (identical(backend, "slurm")) (input$partition %||% "compute") else NA_character_,
       threads = input$threads %||% 16, mem_gb = input$mem_gb %||% 64, time_h = time_h,
       sif = sif,
       apptainer_bin = effective_apptainer(),
@@ -419,8 +427,9 @@ server <- function(input, output, session) {
       out_dir = out_dir,
       report_name = rep_name,
       out_file = if (nz_str(out_dir) && nz_str(rep_name)) file.path(out_dir, paste0(rep_name, ".tsv")) else "",
-      slurm_out = if (nz_str(out_dir)) file.path(out_dir, "slurm-%j.out") else "",
-      slurm_err = if (nz_str(out_dir)) file.path(out_dir, "slurm-%j.err") else "",
+      # Slurm 脚本头专用占位符 (%j 由 sbatch 展开); 本地模式脚本不使用这两个字段
+      slurm_out = if (identical(backend, "slurm") && nz_str(out_dir)) file.path(out_dir, "slurm-%j.out") else "",
+      slurm_err = if (identical(backend, "slurm") && nz_str(out_dir)) file.path(out_dir, "slurm-%j.err") else "",
       verbose = as.integer(input$verbose %||% 1), qvalue = input$qvalue %||% 0.01,
       reanalyse = input$mbr, rt_prof = input$rt_prof, peptidoforms = input$peptidoforms,
       proteoforms = input$proteoforms, matrices = input$matrices,
@@ -538,7 +547,11 @@ server <- function(input, output, session) {
     if (!is.null(input$time_h) && length(input$time_h) == 1 && !is.na(input$time_h)) {
       mins <- ceiling(60 * input$time_h)
       if (mins < 1) msgs <- c(msgs, "✗ 时限至少 1 分钟")
-      else info <- c(info, sprintf("ℹ 时限按 %d 分钟提交 (Slurm -t %d)", mins, mins))
+      else info <- c(info, if (is_local) {
+        sprintf("ℹ 时限按 %d 分钟执行 (本地模式到点由运行器终止)", mins)
+      } else {
+        sprintf("ℹ 时限按 %d 分钟提交 (Slurm -t %d)", mins, mins)
+      })
     }
     has_raws <- length(p$raws) > 0 || nz_str(p$raw_dir)
     # 预测库独立生成模式 (--gen-spec-lib) 不需要 RAW 文件
@@ -638,6 +651,31 @@ server <- function(input, output, session) {
     if (length(bare)) msgs <- c(msgs, sprintf(
       "✗ 额外参数中 %s 缺少取值 (通常是命令导入时 Windows 路径被丢弃残留), 请清理「额外参数」",
       paste(unique(bare), collapse = " ")))
+    # ---- 本地模式专属校验 (v1.12) ----
+    # 单机没有调度器: 运行时必须在本机可用; 资源限制只能建议——内存不可强制,
+    # 时限由 local_runner.sh 的 timeout 强制。这里统一给出清晰的阻断/警告。
+    if (is_local) {
+      nrun <- tryCatch(local_running_count(), error = function(e) 0L)
+      mx <- suppressWarnings(as.integer(cfg_get("LOCAL_MAX_JOBS") %||% 0L))
+      if (!is.na(mx) && mx > 0 && nrun >= mx) {
+        msgs <- c(msgs, sprintf("✗ 本地并发已达上限 LOCAL_MAX_JOBS=%d; 请等当前本地作业结束后再提交", mx))
+      } else if (nrun > 0) {
+        info <- c(info, sprintf("ℹ 当前已有 %d 个本地作业在运行; 单机同时跑多个 DIA-NN 会争抢 CPU/内存", nrun))
+      }
+      th <- suppressWarnings(as.integer(p$threads))
+      ncpu <- tryCatch(local_cpu_count(), error = function(e) NA_integer_)
+      if (!is.na(th) && !is.na(ncpu) && th > ncpu) {
+        warn <- c(warn, sprintf("⚠ 线程数 %d 超过本机 CPU 核数 %d; 本地模式没有排队机制, 可能拖慢整机", th, ncpu))
+      }
+      if (isTRUE(cfg_get("LOCAL_MEM_ADVISORY")) && !is.null(p$mem_gb) &&
+          length(p$mem_gb) == 1 && !is.na(p$mem_gb)) {
+        mem_free <- tryCatch(local_mem_available_gb(), error = function(e) NA_real_)
+        if (!is.na(mem_free) && p$mem_gb > mem_free) {
+          warn <- c(warn, sprintf("⚠ 申请内存 %.0f GB 超过本机当前可用 %.1f GB; 本地模式只做建议检查, 不会强制限制",
+                                  p$mem_gb, mem_free))
+        }
+      }
+    }
     list(block = msgs, warn = warn, info = info)
   })
 
@@ -653,7 +691,8 @@ server <- function(input, output, session) {
 
   # ---------- 预览 ----------
   output$preview <- renderText({
-    make_slurm_script(params_ready())
+    # v1.12: 预览与提交共用同一脚本生成逻辑 (Slurm 头 / 本地脚本)
+    backend_script(params_ready(), backend)
   })
 
   # ---------- 预设模板 ----------
@@ -830,9 +869,12 @@ server <- function(input, output, session) {
 
   # ---------- 集群节点资源 ----------
   sinfo_df <- reactive({
+    if (!identical(backend, "slurm")) return(NULL)  # 本地模式无集群节点表 (UI 也不渲染)
     if (isTRUE(input$auto_refresh)) invalidateLater(10000)
     input$refresh_q
-    out <- suppressWarnings(system("sinfo -N -h --states=all -o '%N|%P|%C|%t|%m|%e|%O'", intern = TRUE))
+    out <- tryCatch(
+      suppressWarnings(system("sinfo -N -h --states=all -o '%N|%P|%C|%t|%m|%e|%O'", intern = TRUE)),
+      error = function(e) character(0))
     if (!length(out)) return(NULL)
     rows <- lapply(out, function(l) {
       f <- strsplit(l, "|", fixed = TRUE)[[1]]
@@ -850,84 +892,100 @@ server <- function(input, output, session) {
   })
   output$sinfo_table <- renderTable({
     d <- sinfo_df()
-    if (is.null(d)) data.frame(信息 = "(sinfo 无输出——无法获取集群节点信息)", stringsAsFactors = FALSE) else d
+    if (is.null(d)) {
+      data.frame(信息 = if (is_local) "本地模式: 无 Slurm 集群节点资源表"
+                        else "(sinfo 无输出——无法获取集群节点信息)", stringsAsFactors = FALSE)
+    } else d
   }, striped = TRUE, bordered = TRUE, na = "-")
 
   # ---------- 提交 ----------
   observeEvent(input$submit_job, {
-    v <- validation_msgs()
-    if (length(v$block)) {
-      showNotification(HTML(paste(v$block, collapse = "<br>")), type = "error", duration = NULL)
-      return()
-    }
-    p <- params_ready()
-    # 手动路径可能没点过「识别并验证」: 提交前做一次真实校验 (约 1–2 s)。
-    # 失败时 strict 模式阻断, 否则只提示 —— "apptainer 只在计算节点"很常见。
-    if (isTRUE(input$use_custom_apptainer)) {
-      info <- apptainer_check(p$apptainer_bin)
-      apptainer_info(info)
-      # 版本下限: 2.x 读不了 SIF, 提交后必然在容器启动阶段失败 -> 直接阻断 (不受 strict 影响)
-      if (isTRUE(info$ok) && identical(info$sif_ok, FALSE)) {
-        msg <- sprintf("%s %s 不支持 SIF 镜像 (需要 %s): %s",
-                       info$kind, info$version, sif_min_version_text(), sif_2x_symptom())
-        showNotification(HTML(paste0("✗ 已阻止提交: ", htmltools::htmlEscape(msg))),
+    # v1.12: 整体 tryCatch —— 任何后端提交错误都转成通知, 绝不让 Shiny 会话断连。
+    # (v1.11 实测: 无 Slurm 时 system2("sbatch") 抛错 -> 浏览器永久断连且无失败提示)
+    tryCatch({
+      v <- validation_msgs()
+      if (length(v$block)) {
+        showNotification(HTML(paste(v$block, collapse = "<br>")), type = "error", duration = NULL)
+        return()
+      }
+      p <- params_ready()
+      # 提交前 apptainer 校验: Slurm 模式保留原有"手动路径才验证/strict 才阻断"策略;
+      # 本地模式在本机执行, 运行时必须真正可用 -> 一律真实校验并阻断。
+      need_verify <- isTRUE(input$use_custom_apptainer) || is_local
+      if (need_verify) {
+        info <- apptainer_check(p$apptainer_bin)
+        apptainer_info(info)
+        # 版本下限: 2.x 读不了 SIF, 提交后必然在容器启动阶段失败 -> 直接阻断 (不受 strict 影响)
+        if (isTRUE(info$ok) && identical(info$sif_ok, FALSE)) {
+          msg <- sprintf("%s %s 不支持 SIF 镜像 (需要 %s): %s",
+                         info$kind, info$version, sif_min_version_text(), sif_2x_symptom())
+          showNotification(HTML(paste0("✗ 已阻止提交: ", htmltools::htmlEscape(msg))),
+                           type = "error", duration = NULL)
+          return()
+        }
+        if (!isTRUE(info$ok)) {
+          msg <- sprintf("apptainer 未能验证: %s", info$message)
+          if (is_local || isTRUE(cfg_get("APPTAINER_STRICT_CHECK"))) {
+            showNotification(HTML(paste0("✗ 本地模式在本机执行, ", htmltools::htmlEscape(msg),
+                                         " — 请先在「1. apptainer 运行环境」识别并验证一个可用的运行时")),
+                             type = "error", duration = NULL)
+            return()
+          }
+          showNotification(paste("提示:", msg, "— 作业将按回退链查找 apptainer"),
+                           type = "warning", duration = 8)
+        }
+      }
+      script_dir <- file.path(p$out_dir, "diann_gui_scripts")
+      if (!dir.create(script_dir, recursive = TRUE, showWarnings = FALSE) && !dir.exists(script_dir)) {
+        showNotification(paste("无法创建脚本目录:", script_dir,
+                               "(GUI 运行身份对输出目录无写权限 — 请改用输出工作区目录, 或请目录属主为该身份授权)"),
                          type = "error", duration = NULL)
         return()
       }
-      if (!isTRUE(info$ok)) {
-        msg <- sprintf("apptainer 未能验证: %s", info$message)
-        if (isTRUE(cfg_get("APPTAINER_STRICT_CHECK"))) {
-          showNotification(HTML(paste0("✗ ", htmltools::htmlEscape(msg))), type = "error", duration = NULL)
-          return()
-        }
-        showNotification(paste("提示:", msg, "— 作业将按回退链查找 apptainer"),
-                         type = "warning", duration = 8)
+      # dir.create 陷阱的补救: out_dir 祖先链每一层(含新建的中间父目录)恢复
+      # 组diann + 组可写 + setgid, 否则 mass 在中间层就被挡住, 作业也无法写结果
+      fix_shared_dirs(unique(c(p$out_dir, script_dir)))
+      # 遗留产物归档: 旧 report/矩阵改名为 *.pre_<时间戳>.tsv, 防止其掩盖本次运行的状态判定
+      archived <- archive_stale_artifacts(p$out_dir, p$out_file)
+      # 保留策略: 清理过期脚本/rc/项目简介/旧归档 (默认 90 天), 防止输出目录无限增长
+      cleaned <- try(cleanup_old_artifacts(p$out_dir, cfg_get("RETENTION_DAYS")), silent = TRUE)
+      if (!is.numeric(cleaned)) cleaned <- 0L
+      job_name <- safe_job_name(p$job_name)
+      sh_path <- file.path(script_dir, sprintf("diann_%s_%s.sh", format(Sys.time(), "%Y%m%d_%H%M%S"), job_name))
+      desc_path <- if (nz_str(p$project_desc)) sub("\\.sh$", "_desc.txt", sh_path) else ""
+      if (nz_str(desc_path)) writeLines(p$project_desc, desc_path)
+      pp <- p; pp$script_path <- sh_path; pp$desc_file <- desc_path; pp$job_name <- job_name
+      # 预览/提交共用同一份脚本生成逻辑: Slurm 头 + 共享 body, 或本地脚本 (无 #SBATCH)
+      writeLines(backend_script(pp, backend), sh_path)
+      res <- backend_submit(pp, sh_path, backend = backend)
+      if (!isTRUE(res$ok)) {
+        msg <- if (length(res$message) && nzchar(res$message)) res$message else "未知错误"
+        showNotification(HTML(paste0("✗ 提交失败:<br>", htmltools::htmlEscape(msg))),
+                         type = "error", duration = NULL)
+        return()
       }
-    }
-    script_dir <- file.path(p$out_dir, "diann_gui_scripts")
-    if (!dir.create(script_dir, recursive = TRUE, showWarnings = FALSE) && !dir.exists(script_dir)) {
-      showNotification(paste("无法创建脚本目录:", script_dir,
-                             "(GUI 运行身份对输出目录无写权限 — 请改用输出工作区目录, 或请目录属主为该身份授权)"),
-                       type = "error", duration = NULL)
-      return()
-    }
-    # dir.create 陷阱的补救: out_dir 祖先链每一层(含新建的中间父目录)恢复
-    # 组diann + 组可写 + setgid, 否则 mass 在中间层就被挡住, 作业也无法写结果
-    fix_shared_dirs(unique(c(p$out_dir, script_dir)))
-    # 遗留产物归档: 旧 report/矩阵改名为 *.pre_<时间戳>.tsv, 防止其掩盖本次运行的状态判定
-    # (纯函数在 R/artifacts.R; 用户报告名不拼进正则, 避免 [ ( 等元字符让提交报错/误改名)
-    archived <- archive_stale_artifacts(p$out_dir, p$out_file)
-    # 保留策略: 清理过期脚本/rc/项目简介/旧归档 (默认 90 天), 防止输出目录无限增长
-    cleaned <- try(cleanup_old_artifacts(p$out_dir, cfg_get("RETENTION_DAYS")), silent = TRUE)
-    if (!is.numeric(cleaned)) cleaned <- 0L
-    job_name <- safe_job_name(p$job_name)
-    sh_path <- file.path(script_dir, sprintf("diann_%s_%s.sh", format(Sys.time(), "%Y%m%d_%H%M%S"), job_name))
-    desc_path <- if (nz_str(p$project_desc)) sub("\\.sh$", "_desc.txt", sh_path) else ""
-    if (nz_str(desc_path)) writeLines(p$project_desc, desc_path)
-    pp <- p; pp$script_path <- sh_path; pp$desc_file <- desc_path; pp$job_name <- job_name
-    writeLines(make_slurm_script(pp), sh_path)
-    res <- suppressWarnings(system2("sbatch", shQuote(sh_path), stdout = TRUE, stderr = TRUE))
-    res_txt <- paste(res, collapse = " ")
-    if (grepl("Submitted batch job [0-9]+", res_txt)) {
-      jid <- sub(".*Submitted batch job ([0-9]+).*", "\\1", res_txt)
+      jid <- as.character(res$job_id)
+      backend_cn <- if (is_local) "本地" else "Slurm"
       jobs$jobs <- rbind(jobs$jobs, data.frame(
         jobid = jid, 任务名 = job_name, 版本 = p$ver,
         输出目录 = p$out_dir, 提交时间 = format(Sys.time(), "%H:%M:%S"),
         邮箱 = if (nz_str(p$notify_email)) p$notify_email else "",
-        stringsAsFactors = FALSE
+        后端 = backend_cn, stringsAsFactors = FALSE
       ))
       updateNumericInput(session, "log_id", value = suppressWarnings(as.integer(jid)))
       try(jobs_registry_add(jid, job_name, p$out_dir, script_path = sh_path,
                             out_file = p$out_file, sif = p$sif,
                             apptainer = p$apptainer_bin %||% NA_character_,
-                            ver = p$ver), silent = TRUE)
+                            ver = p$ver, backend = backend, pid = res$pid,
+                            log = res$log_out), silent = TRUE)
       if (nz_str(p$notify_email)) {
         try(diann_notify_add(list(jobid = jid, to = p$notify_email, task = job_name,
-                                   out_dir = p$out_dir, out_file = p$out_file, sif = p$sif,
-                                   script_path = sh_path, desc_file = desc_path)), silent = TRUE)
+                                  out_dir = p$out_dir, out_file = p$out_file, sif = p$sif,
+                                  script_path = sh_path, desc_file = desc_path,
+                                  backend = backend, log_out = res$log_out)), silent = TRUE)
         try(ensure_diann_watcher(), silent = TRUE)
       }
-      showNotification(sprintf("✔ 提交成功, JobID: %s\n脚本: %s", jid, sh_path),
+      showNotification(sprintf("✔ 提交成功, %s JobID: %s\n脚本: %s", backend_cn, jid, sh_path),
                        type = "message", duration = 10)
       if (nrow(archived)) {
         showNotification(HTML(paste0("已归档上次运行的遗留产物 (防掩盖本次状态):<br>",
@@ -940,20 +998,23 @@ server <- function(input, output, session) {
                                  cleaned, cfg_get("RETENTION_DAYS")),
                          type = "message", duration = 8)
       }
-    } else {
-      showNotification(HTML(paste0("✗ 提交失败:<br>", html_unescape(paste(res, collapse = "<br>")))),
+    }, error = function(e) {
+      showNotification(HTML(paste0("✗ 提交异常: ", htmltools::htmlEscape(conditionMessage(e)))),
                        type = "error", duration = NULL)
-    }
+    })
   })
 
   # ---------- 任务队列 ----------
-  # squeue/sacct 合并为一次快照 (slurm_snapshot): 两个表 + 通知面板共用, 20 s 内缓存。
+  # 快照按当前执行后端生成 (Slurm: squeue/sacct 20s 缓存; 本地: 本地作业状态文件),
+  # 供队列表/历史表/通知面板共用。
   output$squeue_output <- renderText({
     if (isTRUE(input$auto_refresh)) invalidateLater(10000)
     input$refresh_q
-    snap <- tryCatch(slurm_snapshot(refresh = TRUE), error = function(e) NULL)
+    snap <- tryCatch(backend_snapshot(backend, refresh = TRUE), error = function(e) NULL)
     out <- if (is.null(snap)) character(0) else snap$lines
-    if (!length(out)) "(squeue 无输出)" else paste(out, collapse = "\n")
+    if (!length(out)) {
+      if (is_local) "(本地队列空闲)" else "(squeue 无输出)"
+    } else paste(out, collapse = "\n")
   })
   # sacct 状态码 → 中文 (20.11 的 CANCELLED 可能带 "by <uid>" 尾巴, 用前缀匹配)
   sacct_state_cn <- function(s) {
@@ -977,25 +1038,17 @@ server <- function(input, output, session) {
   output$sacct_table <- renderTable({
     if (isTRUE(input$auto_refresh)) invalidateLater(10000)
     input$refresh_q
-    snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
-    out <- if (is.null(snap)) character(0) else snap$sacct_lines
-    if (!length(out)) {
-      return(data.frame(信息 = "(sacct 无输出——本集群未开启作业记账 (accounting), 无法显示历史)",
-                        stringsAsFactors = FALSE))
+    # v1.12: 历史表来源由后端决定 (Slurm: sacct; 本地: 本地作业状态文件)
+    d <- tryCatch(backend_history(backend), error = function(e) NULL)
+    if (is.null(d) || !nrow(d)) {
+      msg <- if (is_local) {
+        "(暂无已完成的本地作业)"
+      } else {
+        "(sacct 无输出——本集群未开启作业记账 (accounting), 无法显示历史)"
+      }
+      return(data.frame(信息 = msg, stringsAsFactors = FALSE))
     }
-    rows <- strsplit(out, "|", fixed = TRUE)
-    rows <- rows[vapply(rows, function(x) length(x) >= 5, logical(1))]
-    if (!length(rows)) {
-      return(data.frame(信息 = "(sacct 输出为空: 最近一天没有作业记录)", stringsAsFactors = FALSE))
-    }
-    d <- data.frame(
-      作业ID = vapply(rows, function(x) trimws(x[1]), ""),
-      作业名 = vapply(rows, function(x) trimws(x[2]), ""),
-      状态 = sacct_state_cn(vapply(rows, function(x) trimws(x[3]), "")),
-      运行时长 = vapply(rows, function(x) trimws(x[4]), ""),
-      结束时间 = vapply(rows, function(x) trimws(x[5]), ""),
-      stringsAsFactors = FALSE
-    )
+    d$状态 <- sacct_state_cn(d$状态)
     d$运行时长[!nzchar(d$运行时长) | grepl("^Unknown$", d$运行时长, ignore.case = TRUE)] <- "-"
     d$结束时间[!nzchar(d$结束时间) | grepl("^Unknown$", d$结束时间, ignore.case = TRUE)] <- "-"
     d
@@ -1008,19 +1061,34 @@ server <- function(input, output, session) {
     recs <- state$recs
     if (!length(recs)) return("")
     lines <- c("—— 提交记录与邮件通知 (最近 100 条) ——")
-    live_budget <- 5L  # 未处理记录的实时状态合成上限 (共用一次 Slurm 快照)
-    snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
-    fns <- if (is.null(snap)) list(squeue_fn = NULL, sacct_fn = NULL) else slurm_snapshot_fns(snap)
+    live_budget <- 5L  # 未处理记录的实时状态合成上限 (共用快照/本地状态文件)
+    # 记录可能混合旧 slurm 与 v1.12 local, 状态函数/日志路径按记录后端懒加载
+    fns_cache <- list()
+    get_fns <- function(bk) {
+      bk <- as.character(bk)[1]
+      if (is.null(fns_cache[[bk]])) {
+        fns_cache[[bk]] <<- tryCatch(backend_status_fns(bk),
+                                     error = function(e) list(squeue_fn = NULL, sacct_fn = NULL))
+      }
+      fns_cache[[bk]]
+    }
     for (r in recs) {
       lr <- if (length(r$last_result) && nzchar(r$last_result)) r$last_result else ""
       lab <- ""
       if (!isTRUE(r$done)) {
         if (live_budget > 0) {
           live_budget <- live_budget - 1L
+          rbk <- as.character(r$backend %||% "slurm")[1]
+          if (is.na(rbk) || !nzchar(rbk)) rbk <- "slurm"
+          fns <- get_fns(rbk)
+          lp <- tryCatch(backend_log_paths(r$jobid, r$out_dir, rbk, r$script_path),
+                         error = function(e) list(out = ""))
+          logf <- if (length(r$log_out) == 1 && !is.na(r$log_out) && nzchar(r$log_out)) r$log_out else lp$out
           st <- tryCatch(
             diann_job_status(r$jobid, r$out_dir, r$out_file,
                              script_path = r$script_path, submitted = r$submitted,
-                             squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn),
+                             squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn,
+                             log_path = logf),
             error = function(e) NULL)
           if (!is.null(st)) lab <- sprintf("[%s] %s ", st$label, st$reason)
         }
@@ -1036,14 +1104,14 @@ server <- function(input, output, session) {
 
   # 取消作业 (弹窗确认)
   observeEvent(input$cancel_btn, {
-    jid <- input$cancel_id
-    if (is.null(jid) || is.na(jid)) {
+    jid <- suppressWarnings(as.integer(input$cancel_id))
+    if (is.na(jid)) {
       showNotification("请先输入要取消的作业 ID", type = "error")
       return()
     }
     showModal(modalDialog(
       title = "确认取消作业",
-      sprintf("确认取消作业 %d 吗? 该操作不可撤销。", as.integer(jid)),
+      sprintf("确认取消%s作业 %d 吗? 该操作不可撤销。", if (is_local) "本地" else " Slurm ", jid),
       footer = tagList(
         modalButton("返回"),
         actionButton("cancel_confirm", "确认取消", class = "btn-danger")
@@ -1052,41 +1120,69 @@ server <- function(input, output, session) {
   })
   observeEvent(input$cancel_confirm, {
     removeModal()
-    jid <- as.integer(input$cancel_id)
-    res <- suppressWarnings(system2("scancel", as.character(jid), stdout = TRUE, stderr = TRUE))
-    if (is.null(res) || !length(res)) {
-      showNotification(sprintf("已发送 scancel %d", jid), type = "message")
+    jid <- suppressWarnings(as.integer(input$cancel_id))
+    if (is.na(jid)) {
+      showNotification("作业 ID 无效", type = "error")
+      return()
+    }
+    # backend_cancel 内部已 tryCatch (slurm: scancel; local: 标记 + 进程组 kill)
+    res <- backend_cancel(jid, backend = backend)
+    if (isTRUE(res$ok)) {
+      showNotification(sprintf("✔ %s", res$message), type = "message")
     } else {
-      showNotification(paste("scancel 返回:", paste(res, collapse = " ")), type = "warning")
+      showNotification(paste("✗", res$message), type = "warning")
     }
   })
 
-  # 日志查看: 按 JobID 自动定位 (手动目录 → 本会话提交记录 → GUI 持久注册表 → scontrol → sacct 工作目录)
-  # 注: 本集群 Slurm 20.11 的 sacct 不支持 stdout 字段, 早已结束且非本 GUI 提交的作业 Slurm 侧无路径可查
+  # 日志查看: 按 JobID 自动定位。v1.12 起日志文件名由 backend_log_paths() 唯一决定
+  # (slurm-<id>.out / local-<id>.out); 旧 slurm 记录仍可经注册表/手动目录定位。
   locate_job_log <- function(jid_int) {
-    fname <- sprintf("slurm-%d.out", jid_int)
+    jid_num <- suppressWarnings(as.integer(jid_int))
+    fnames <- character(0)
+    if (!is.na(jid_num)) {
+      fnames <- c(basename(backend_log_paths(jid_num, "/x", "slurm")$out),
+                  basename(backend_log_paths(jid_num, "/x", "local")$out))
+    }
+    fnames <- unique(fnames[nzchar(fnames)])
     dirs <- unique(c(if (length(selected_log_dir())) selected_log_dir() else character(0),
                      jobs$jobs[["输出目录"]]))
     for (d in dirs) {
-      cand <- file.path(d, fname)
-      if (file.exists(cand)) return(list(path = cand, src = if (identical(d, selected_log_dir()[1])) "手动指定目录" else "本会话提交记录"))
+      for (fn in fnames) {
+        cand <- file.path(d, fn)
+        if (file.exists(cand)) {
+          return(list(path = cand, src = if (identical(d, selected_log_dir()[1])) "手动指定目录" else "本会话提交记录"))
+        }
+      }
     }
     reg <- jobs_registry_load()
     hit <- reg[reg$jobid == as.character(jid_int), , drop = FALSE]
     if (nrow(hit) && file.exists(hit$日志[nrow(hit)])) {
       return(list(path = hit$日志[nrow(hit)], src = "GUI 提交注册表"))
     }
-    sc <- suppressWarnings(system2("scontrol", c("show", "job", as.character(jid_int)),
-                                   stdout = TRUE, stderr = TRUE))
-    mo <- regmatches(paste(sc, collapse = " "), regexpr("StdOut=\\S+", paste(sc, collapse = " ")))
-    if (length(mo)) {
-      cand <- sub("^StdOut=", "", mo)
-      if (file.exists(cand)) return(list(path = cand, src = "scontrol (Slurm 实时信息)"))
+    # 本地作业记录里也存了日志完整路径 (注册表缺失/滚动淘汰时兜底)
+    rec <- tryCatch(local_jobs_find(jid_int), error = function(e) NULL)
+    if (!is.null(rec) && length(rec$log_out) == 1 && nzchar(rec$log_out %||% "") && file.exists(rec$log_out)) {
+      return(list(path = rec$log_out, src = "本地作业记录"))
     }
-    sw <- suppressWarnings(system(sprintf("sacct -j %d -X -n -o workdir%%250 2>/dev/null", jid_int), intern = TRUE))
-    if (length(sw) && nzchar(trimws(sw[1]))) {
-      cand <- file.path(trimws(sw[1]), fname)
-      if (file.exists(cand)) return(list(path = cand, src = "sacct 工作目录"))
+    if (identical(backend, "slurm")) {
+      # Slurm 侧兜底: scontrol 实时信息 → sacct 工作目录 (全部 tryCatch;
+      # no-Slurm 环境下不再因捕获输出的 system()/system2() 抛错而中断)
+      sc <- tryCatch(
+        suppressWarnings(system2("scontrol", c("show", "job", as.character(jid_int)),
+                                 stdout = TRUE, stderr = TRUE)),
+        error = function(e) character(0))
+      mo <- regmatches(paste(sc, collapse = " "), regexpr("StdOut=\\S+", paste(sc, collapse = " ")))
+      if (length(mo)) {
+        cand <- sub("^StdOut=", "", mo)
+        if (file.exists(cand)) return(list(path = cand, src = "scontrol (Slurm 实时信息)"))
+      }
+      sw <- tryCatch(
+        suppressWarnings(system(sprintf("sacct -j %d -X -n -o workdir%%250 2>/dev/null", jid_int), intern = TRUE)),
+        error = function(e) character(0))
+      if (length(sw) && nzchar(trimws(sw[1]))) {
+        cand <- file.path(trimws(sw[1]), fnames[1])
+        if (file.exists(cand)) return(list(path = cand, src = "sacct 工作目录"))
+      }
     }
     NULL
   }
@@ -1097,19 +1193,30 @@ server <- function(input, output, session) {
     hit <- locate_job_log(jid_int)
     if (is.null(hit)) {
       dmsg <- if (length(selected_log_dir())) sprintf("手动目录: %s", selected_log_dir()) else "未手动指定日志目录"
-      return(paste0(
-        sprintf("未能自动定位 slurm-%d.out。\n", jid_int),
-        "已依次尝试: 手动目录 → 本会话提交记录 → GUI 提交注册表 → scontrol (Slurm) → sacct 工作目录。\n",
-        dmsg, "\n",
-        "说明: 运行中/排队中/刚结束的作业可经 scontrol 定位; 本 GUI 提交的作业永久记录在注册表;\n",
-        "早已结束且非本 GUI 提交的作业, Slurm 记账库不保存日志路径 (20.11), 请手动指定日志目录。"))
+      tried <- if (is_local) {
+        "手动目录 → 本会话提交记录 → GUI 提交注册表 → 本地作业记录"
+      } else {
+        "手动目录 → 本会话提交记录 → GUI 提交注册表 → scontrol (Slurm) → sacct 工作目录"
+      }
+      hint <- if (is_local) {
+        "说明: 本地模式日志为 local-<ID>.out/.err, 位于作业的输出目录。"
+      } else {
+        paste0("说明: 运行中/排队中/刚结束的作业可经 scontrol 定位; 本 GUI 提交的作业永久记录在注册表;\n",
+               "早已结束且非本 GUI 提交的作业, Slurm 记账库不保存日志路径 (20.11), 请手动指定日志目录。")
+      }
+      return(paste0(sprintf("未能自动定位作业 %d 的日志。\n", jid_int),
+                    "已依次尝试: ", tried, "。\n", dmsg, "\n", hint))
     }
-    txt <- suppressWarnings(system2("tail", c("-n", "120", shQuote(hit$path)), stdout = TRUE, stderr = TRUE))
+    txt <- tryCatch(
+      suppressWarnings(system2("tail", c("-n", "120", shQuote(hit$path)), stdout = TRUE, stderr = TRUE)),
+      error = function(e) character(0))
     header <- sprintf("=== %s (尾部 %d 行, 来源: %s) ===\n", hit$path, length(txt), hit$src)
     err_part <- ""
     errf <- sub("\\.out$", ".err", hit$path)
     if (file.exists(errf)) {
-      etxt <- suppressWarnings(system2("tail", c("-n", "30", shQuote(errf)), stdout = TRUE, stderr = TRUE))
+      etxt <- tryCatch(
+        suppressWarnings(system2("tail", c("-n", "30", shQuote(errf)), stdout = TRUE, stderr = TRUE)),
+        error = function(e) character(0))
       etxt <- etxt[nzchar(trimws(etxt))]
       if (length(etxt)) err_part <- sprintf("\n\n=== %s (尾部 %d 行, 程序报错通常在这里) ===\n%s",
                                             errf, length(etxt), paste(etxt, collapse = "\n"))

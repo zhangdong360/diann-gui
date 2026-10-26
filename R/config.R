@@ -61,7 +61,9 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     for (k in c("SIF_DIRS", "DEFAULT_SIF", "DATA_HOME", "BASE_VOLUMES", "CON_FASTA",
                 "SHARED_GROUP", "SLURM_PARTITIONS", "SLURM_EXTRA_ARGS", "APPTAINER_PATHS",
                 "APPTAINER_MODULE_FALLBACK", "BIND_PATHS", "MAIL_PYTHON",
-                "DEFAULT_APPTAINER", "APPTAINER_STRICT_CHECK", "RETENTION_DAYS")) {
+                "DEFAULT_APPTAINER", "APPTAINER_STRICT_CHECK", "RETENTION_DAYS",
+                "EXEC_BACKEND", "LOCAL_REQUIRE_EXCLUSIVE_HOST", "LOCAL_ALLOW_SHARED",
+                "LOCAL_NICE", "LOCAL_TIMEOUT_GRACE", "LOCAL_MAX_JOBS", "LOCAL_MEM_ADVISORY")) {
       if (exists(k, envir = scratch, inherits = FALSE)) {
         assign(k, get(k, envir = scratch, inherits = FALSE), envir = .cfg)
       }
@@ -90,6 +92,17 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   if (is.null(.cfg$SLURM_EXTRA_ARGS)) .cfg$SLURM_EXTRA_ARGS <- character(0)
   if (is.null(.cfg$RETENTION_DAYS) || !is.finite(.cfg$RETENTION_DAYS)) .cfg$RETENTION_DAYS <- 90
 
+  # ---- 执行后端 (v1.12: Slurm 可选 / 本地单机) ----
+  # 默认 auto: 有 sbatch 用 Slurm (与 v1.11 行为一致), 无 Slurm 自动本地执行。
+  # 安全阀见 R/backend.R 的 detect_exec_backend() 与 run_app() 的启动检查。
+  if (is.null(.cfg$EXEC_BACKEND)) .cfg$EXEC_BACKEND <- "auto"
+  if (is.null(.cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST)) .cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST <- TRUE
+  if (is.null(.cfg$LOCAL_ALLOW_SHARED)) .cfg$LOCAL_ALLOW_SHARED <- FALSE
+  if (is.null(.cfg$LOCAL_NICE) || !is.finite(.cfg$LOCAL_NICE)) .cfg$LOCAL_NICE <- 10L
+  if (is.null(.cfg$LOCAL_TIMEOUT_GRACE) || !is.finite(.cfg$LOCAL_TIMEOUT_GRACE)) .cfg$LOCAL_TIMEOUT_GRACE <- 30L
+  if (is.null(.cfg$LOCAL_MAX_JOBS) || !is.finite(.cfg$LOCAL_MAX_JOBS)) .cfg$LOCAL_MAX_JOBS <- 0L
+  if (is.null(.cfg$LOCAL_MEM_ADVISORY)) .cfg$LOCAL_MEM_ADVISORY <- TRUE
+
   # ---- 邮件 ----
   if (is.null(.cfg$MAIL_PYTHON)) .cfg$MAIL_PYTHON <- Sys.which("python3")
   .cfg$MAIL_PY <- system.file("python", "mail_notify.py", package = "diann.gui")
@@ -113,6 +126,18 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   .cfg$NOTIFY_LOCK_DIR <- paste0(.cfg$NOTIFY_STATE, ".lock")
   .cfg$NOTIFY_PIDFILE <- file.path(dirname(.cfg$NOTIFY_STATE), "diann_gui_notify_watch.pid")
   .cfg$NOTIFY_WATCH_LOG <- file.path(dirname(.cfg$NOTIFY_STATE), "diann_gui_notify_watch.log")
+
+  # ---- 执行后端解析缓存 (最佳努力探测, 不做 fail-fast) ----
+  # 真正的安全拦截在 run_app() 里的 backend_startup_check(): 普通函数/测试调用
+  # diann_load_config() 时不应直接报错 (否则单测与 doctor 无法离线运行)。
+  .cfg$EXEC_BACKEND_INFO <- tryCatch(
+    detect_exec_backend(
+      require_exclusive = isTRUE(.cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST),
+      allow_shared = isTRUE(.cfg$LOCAL_ALLOW_SHARED)),
+    error = function(e) list(request = "auto", backend = "local", auto = TRUE,
+                             slurm_available = FALSE, traces = FALSE, legacy_central = FALSE,
+                             warn = conditionMessage(e), error = character(0)))
+  .cfg$EXEC_BACKEND_RESOLVED <- .cfg$EXEC_BACKEND_INFO$backend
 
   invisible(.cfg)
 }

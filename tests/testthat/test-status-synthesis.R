@@ -85,3 +85,99 @@ test_that("slurm_state_normalize 剥离 uid 尾巴且大小写不敏感", {
   expect_equal(slurm_state_normalize("COMPLETED"), "COMPLETED")
   expect_equal(slurm_state_normalize("  timeout  "), "TIMEOUT")
 })
+
+# ---------- v1.12: 本地后端状态注入 (local provider) 与 log_path 契约 ----------
+
+local_state_guard <- function() {
+  old <- diann.gui::cfg_get("NOTIFY_STATE")
+  td <- file.path(tempdir(), sprintf("locstate_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(td, showWarnings = FALSE, recursive = TRUE)
+  diann.gui::set_core_const("NOTIFY_STATE", file.path(td, "notify.rds"))
+  list(old = old, dir = td)
+}
+
+local_rec <- function(td, jobid, pid = 2147483000L, pid_start = NA_real_, rc = NULL,
+                      cancelled = FALSE, timeout = FALSE) {
+  sd <- file.path(td, "diann_gui_scripts")
+  dir.create(sd, showWarnings = FALSE, recursive = TRUE)
+  sp <- file.path(sd, sprintf("diann_%s.sh", jobid))
+  writeLines("#!/bin/bash", sp)
+  if (!is.null(rc)) writeLines(as.character(rc), sub("\\.sh$", ".rc", sp))
+  if (isTRUE(cancelled)) file.create(paste0(sp, ".cancelled"))
+  if (isTRUE(timeout)) file.create(paste0(sp, ".timeout"))
+  log_out <- file.path(td, sprintf("local-%s.out", jobid))
+  now <- as.numeric(Sys.time())
+  writeLines(c(sprintf("DIANN_GUI_START_EPOCH %d", as.integer(now) - 30),
+               sprintf("DIANN_GUI_END_EPOCH %d", as.integer(now))), log_out)
+  list(jobid = as.character(jobid), task = "T", out_dir = td, script_path = sp,
+       log_out = log_out, log_err = sub("\\.out$", ".err", log_out),
+       rc_path = sub("\\.sh$", ".rc", sp), pid = pid, pid_start = pid_start,
+       runner = "", submitted = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+       submitted_epoch = now - 60, time_sec = 0L, backend = "local")
+}
+
+local_status <- function(rec, td, out_file) {
+  fns <- diann.gui:::local_status_fns()
+  diann_job_status(rec$jobid, td, out_file, script_path = rec$script_path,
+                   squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn,
+                   log_path = rec$log_out)
+}
+
+test_that("local provider: 六个展示标签 (成功/失败/超时/已取消/待核实/未知)", {
+  g <- local_state_guard()
+  on.exit(diann.gui::set_core_const("NOTIFY_STATE", g$old), add = TRUE)
+  td <- g$dir
+  rep_ok <- file.path(td, "report.tsv"); writeLines(c("h", "r"), rep_ok)
+
+  rec <- local_rec(td, "1000101", rc = "0"); diann.gui:::local_jobs_add(rec)
+  st <- local_status(rec, td, rep_ok)
+  expect_equal(st$label, "成功")
+  expect_equal(st$rc, 0L)
+  expect_true(isTRUE(st$artifact_new))
+
+  rec2 <- local_rec(td, "1000102", rc = "2"); diann.gui:::local_jobs_add(rec2)
+  st2 <- local_status(rec2, td, file.path(td, "missing_102.tsv"))
+  expect_equal(st2$label, "失败")
+  expect_match(st2$reason, "退出码 2")
+
+  rec3 <- local_rec(td, "1000103", rc = "124", timeout = TRUE)
+  diann.gui:::local_jobs_add(rec3)
+  expect_equal(local_status(rec3, td, file.path(td, "missing_103.tsv"))$label, "超时")
+
+  rec4 <- local_rec(td, "1000104", cancelled = TRUE)
+  diann.gui:::local_jobs_add(rec4)
+  expect_equal(local_status(rec4, td, file.path(td, "missing_104.tsv"))$label, "已取消")
+
+  rec5 <- local_rec(td, "1000105", rc = "0")  # 调度完成但无本次产物
+  diann.gui:::local_jobs_add(rec5)
+  expect_equal(local_status(rec5, td, file.path(td, "missing_105.tsv"))$label, "待核实")
+
+  # 未知: 本地状态文件里没有该作业, 也不提供主报告路径
+  unknown <- list(jobid = "1999999", script_path = "")
+  expect_equal(local_status(unknown, td, "")$label, "未知")
+})
+
+test_that("log_path: local-<ID>.out 被用于退出码/epoch (不再默认找 slurm-<ID>.out)", {
+  g <- local_state_guard()
+  on.exit(diann.gui::set_core_const("NOTIFY_STATE", g$old), add = TRUE)
+  td <- g$dir
+  jid <- "1000201"
+  sd <- file.path(td, "diann_gui_scripts"); dir.create(sd, showWarnings = FALSE)
+  sp <- file.path(sd, "diann_x.sh"); writeLines("#!/bin/bash", sp)
+  now <- as.integer(Sys.time())
+  lp <- file.path(td, sprintf("local-%s.out", jid))
+  writeLines(c(sprintf("DIANN_GUI_START_EPOCH %d", now - 10), "exit code: 0",
+               sprintf("DIANN_GUI_END_EPOCH %d", now)), lp)
+  rep_ok <- file.path(td, "report.tsv"); writeLines(c("h", "r"), rep_ok)
+
+  st <- diann_job_status(jid, td, rep_ok, script_path = sp, log_path = lp,
+                         sacct_fn = sa_none, squeue_fn = sq_empty)
+  expect_equal(st$label, "成功")
+  expect_equal(st$rc, 0L)
+  expect_true(isTRUE(st$artifact_new))
+
+  # 不传 log_path 时维持 v1.11 默认 (slurm-<ID>.out): 读不到退出码 -> rc 未知
+  st2 <- diann_job_status(jid, td, rep_ok, script_path = sp,
+                          sacct_fn = sa_none, squeue_fn = sq_empty)
+  expect_true(is.na(st2$rc))
+})

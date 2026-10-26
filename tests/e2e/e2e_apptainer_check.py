@@ -54,13 +54,19 @@ def main():
             "return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? true : false;")
         check("apptainer 区域在 DIA-NN 版本之前", before)
 
-        # (2) 候选下拉: 自动识别到假二进制并解析出版本
+        # (2) 候选下拉/自检面板: 自动识别到假二进制并解析出版本
+        # 注意 selectize 包装后 <option> 可能被移出/清空 (新版 Shiny), 以环境自检面板为准并保留下拉兜底
         if args.apptainer:
+            WebDriverWait(drv, 30).until(
+                lambda d: len(d.find_element(By.ID, "apt_check_display").text) > 5)
             opts_txt = [o.text for o in drv.find_elements(By.CSS_SELECTOR,
                                                           "#apptainer_version option")]
             joined = " | ".join(opts_txt)
-            check("自动识别候选含版本", any("apptainer" in t and "1.4.5" in t for t in opts_txt),
-                  joined[:160])
+            panel = drv.find_element(By.ID, "apt_check_display").text
+            ok = any("apptainer" in t and "1.4.5" in t for t in opts_txt) or (
+                "1.4.5" in panel and args.apptainer in panel)
+            check("自动识别候选含版本", ok,
+                  ("%s | 面板: %s" % (joined, panel.replace("\n", " ")))[:240])
 
         # (3) 手动路径验证成功
         cb = drv.find_element(By.ID, "use_custom_apptainer")

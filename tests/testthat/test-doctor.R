@@ -22,7 +22,7 @@ test_that("doctor 汇总检查项并正确分级", {
                       version = "1.4.5", ok = TRUE, checked_at = 1, stringsAsFactors = FALSE)
   df <- run_doctor(apptainer_cands = cands, partitions = "compute", slurm_cmds = slurm,
                    sif_dirs = d, mail_conf = "/nonexistent/mail.txt", state_dir = tempdir(),
-                   deps = character(0))
+                   backend = "slurm", deps = character(0))
 
   expect_s3_class(df, "data.frame")
   expect_true(all(c("check", "status", "detail") %in% names(df)))
@@ -39,7 +39,7 @@ test_that("doctor 报告缺失的 Slurm 命令与不可写状态目录为 fail",
   df <- run_doctor(apptainer_cands = empty_cands(), partitions = character(0),
                    slurm_cmds = c(sbatch = "", squeue = "/usr/bin/squeue"),
                    sif_dirs = character(0), mail_conf = "/nonexistent/mail.txt",
-                   state_dir = "/nonexistent/state/dir", deps = character(0))
+                   state_dir = "/nonexistent/state/dir", backend = "slurm", deps = character(0))
   expect_equal(df$status[df$check == "Slurm 命令 sbatch"], "fail")
   expect_equal(df$status[df$check == "Slurm 命令 squeue"], "ok")
   expect_equal(df$status[df$check == "Slurm 分区"], "warn")
@@ -55,13 +55,72 @@ test_that("doctor 对过宽的邮件配置权限给出警告, 600 时为 ok", {
   Sys.chmod(mc, "0644")
   df <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
                    slurm_cmds = c(sbatch = "/usr/bin/sbatch"), sif_dirs = character(0),
-                   mail_conf = mc, state_dir = tempdir(), deps = character(0))
+                   mail_conf = mc, state_dir = tempdir(), backend = "slurm", deps = character(0))
   expect_equal(df$status[df$check == "邮件配置"], "warn")
   expect_match(df$detail[df$check == "邮件配置"], "600")
 
   Sys.chmod(mc, "0600")
   df2 <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
                     slurm_cmds = c(sbatch = "/usr/bin/sbatch"), sif_dirs = character(0),
-                    mail_conf = mc, state_dir = tempdir(), deps = character(0))
+                    mail_conf = mc, state_dir = tempdir(), backend = "slurm", deps = character(0))
   expect_equal(df2$status[df2$check == "邮件配置"], "ok")
+})
+
+# ---------- v1.12: 执行后端分级 (slurm / local) ----------
+
+loc_cmds <- function(setsid = "/usr/bin/setsid") {
+  c(setsid = setsid, nohup = "/usr/bin/nohup", timeout = "/usr/bin/timeout", bash = "/bin/bash")
+}
+
+test_that("doctor(backend='local'): Slurm 项降级为 na, 本地原语与 /proc 为 ok", {
+  df <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
+                   slurm_cmds = c(sbatch = "/usr/bin/sbatch", squeue = "/usr/bin/squeue"),
+                   sif_dirs = character(0), mail_conf = "/nonexistent/mail.txt",
+                   state_dir = tempdir(), backend = "local",
+                   local_cmds = loc_cmds(), deps = character(0))
+  expect_equal(df$status[df$check == "执行后端"], "ok")
+  expect_match(df$detail[df$check == "执行后端"], "local")
+  expect_equal(df$status[df$check == "Slurm 命令 sbatch"], "na")
+  expect_equal(df$status[df$check == "Slurm 命令 squeue"], "na")
+  expect_equal(df$status[df$check == "Slurm 分区"], "na")
+  for (nm in c("setsid", "nohup", "timeout", "bash")) {
+    expect_equal(df$status[df$check == sprintf("本地原语 %s", nm)], "ok")
+  }
+  expect_equal(df$status[df$check == "本地 /proc"], "ok")
+  expect_false(any(df$status == "fail"))
+})
+
+test_that("doctor(backend='slurm'): 本地原语项为 na; local 下缺 setsid 只 warn (可退化)", {
+  dfs <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
+                    slurm_cmds = c(sbatch = "/usr/bin/sbatch"), sif_dirs = character(0),
+                    mail_conf = "/nonexistent/mail.txt", state_dir = tempdir(),
+                    backend = "slurm", local_cmds = loc_cmds(), deps = character(0))
+  expect_match(dfs$detail[dfs$check == "执行后端"], "slurm")
+  for (nm in c("setsid", "nohup", "timeout", "bash")) {
+    expect_equal(dfs$status[dfs$check == sprintf("本地原语 %s", nm)], "na")
+  }
+  expect_equal(dfs$status[dfs$check == "本地 /proc"], "na")
+
+  dfl <- run_doctor(apptainer_cands = empty_cands(), partitions = character(0),
+                    slurm_cmds = character(0), sif_dirs = character(0),
+                    mail_conf = "/nonexistent/mail.txt", state_dir = tempdir(),
+                    backend = "local", local_cmds = loc_cmds(setsid = ""),
+                    deps = character(0))
+  expect_equal(dfl$status[dfl$check == "本地原语 setsid"], "warn")
+  expect_match(dfl$detail[dfl$check == "本地原语 setsid"], "退化")
+  expect_equal(dfl$status[dfl$check == "本地原语 nohup"], "ok")
+})
+
+test_that("doctor 默认按配置解析结果标注执行后端来源 (自动检测/配置指定)", {
+  old <- diann.gui::cfg_get("EXEC_BACKEND_INFO")
+  on.exit(diann.gui::set_core_const("EXEC_BACKEND_INFO", old), add = TRUE)
+  diann.gui::set_core_const("EXEC_BACKEND_INFO",
+                            list(request = "local", backend = "local", auto = FALSE))
+  df <- run_doctor(apptainer_cands = empty_cands(), partitions = character(0),
+                   slurm_cmds = c(sbatch = "/usr/bin/sbatch"), sif_dirs = character(0),
+                   mail_conf = "/nonexistent/mail.txt", state_dir = tempdir(),
+                   local_cmds = loc_cmds(), deps = character(0))
+  expect_equal(df$status[df$check == "执行后端"], "ok")
+  expect_match(df$detail[df$check == "执行后端"], "local")
+  expect_match(df$detail[df$check == "执行后端"], "配置指定")
 })

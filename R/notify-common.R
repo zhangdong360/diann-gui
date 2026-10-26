@@ -83,6 +83,11 @@ diann_notify_save <- function(state) {
 
 diann_notify_add <- function(rec) {
   if (!isTRUE(cfg_get("MAIL_ENABLED"))) return(invisible(FALSE))
+  # v1.12: 记录后端与日志路径, watcher 据此选择状态/耗时来源 (旧记录默认 slurm)
+  rbk <- rec$backend
+  if (is.null(rbk) || length(rbk) != 1 || is.na(rbk) || !nzchar(as.character(rbk))) rbk <- exec_backend()
+  rec$backend <- as.character(rbk)[1]
+  if (is.null(rec$log_out) || length(rec$log_out) != 1 || is.na(rec$log_out)) rec$log_out <- ""
   rec$done <- FALSE; rec$attempts <- 0L; rec$last_result <- ""; rec$last_try <- 0
   rec$submitted <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   if (!notify_lock_acquire()) {
@@ -97,10 +102,12 @@ diann_notify_add <- function(rec) {
   invisible(TRUE)
 }
 
-# 耗时: 优先用作业日志里的 epoch 时间戳 (v1.4 起模板自带), 兜底用记账库 Elapsed (2026-09-21 起记账开启)
-diann_notify_elapsed <- function(logf, jobid) {
+# 耗时: 优先用作业日志里的 epoch 时间戳 (v1.4 起模板自带), 兜底用记账库 Elapsed
+# v1.12: backend 参数化——local / 无 accounting 场景不再调用 sacct (命令缺失时
+# R 的 capture-output system() 会抛错, 而不是返回空)。
+diann_notify_elapsed <- function(logf, jobid = NULL, backend = "slurm") {
   ep <- NA_integer_
-  if (file.exists(logf)) {
+  if (length(logf) == 1 && !is.na(logf) && nzchar(logf) && file.exists(logf)) {
     txt <- tryCatch(readLines(logf, warn = FALSE), error = function(e) character(0))
     se <- grep("^DIANN_GUI_START_EPOCH ", txt, value = TRUE)
     ee <- grep("^DIANN_GUI_END_EPOCH ", txt, value = TRUE)
@@ -111,7 +118,13 @@ diann_notify_elapsed <- function(logf, jobid) {
     }
   }
   if (!is.na(ep)) return(ep)
-  out <- suppressWarnings(system(sprintf("sacct -j %d -X -n -o Elapsed 2>/dev/null", as.integer(jobid)), intern = TRUE))
+  if (!identical(backend, "slurm")) return(NA_integer_)  # local: 不查 sacct
+  id <- suppressWarnings(as.integer(jobid))
+  if (is.na(id)) return(NA_integer_)
+  out <- tryCatch(
+    suppressWarnings(system(sprintf("sacct -j %d -X -n -o Elapsed 2>/dev/null", id), intern = TRUE)),
+    error = function(e) character(0))
+  if (!length(out)) return(NA_integer_)
   s <- trimws(out[1])
   if (length(s) && nzchar(s) && !grepl("unknown", s, ignore.case = TRUE)) {
     d <- 0L
@@ -146,7 +159,8 @@ slurm_state_normalize <- function(s) {
 }
 
 diann_job_status <- function(jobid, out_dir, out_file, script_path = "",
-                             submitted = "", sacct_fn = NULL, squeue_fn = NULL, now = NA_real_) {
+                             submitted = "", sacct_fn = NULL, squeue_fn = NULL, now = NA_real_,
+                             log_path = NULL) {
   jobid_i <- suppressWarnings(as.integer(jobid))
   if (is.na(now)) now <- as.numeric(Sys.time())
   if (is.null(squeue_fn)) {
@@ -177,7 +191,11 @@ diann_job_status <- function(jobid, out_dir, out_file, script_path = "",
     v <- suppressWarnings(as.integer(trimws(readLines(rcf, warn = FALSE)[1])))
     if (!is.na(v)) rc <- v
   }
-  logf <- if (length(out_dir) == 1 && nzchar(out_dir) && !is.na(jobid_i)) {
+  # 日志路径: v1.12 起由调用方经 backend_log_paths() 传入 (slurm-<id>.out /
+  # local-<id>.out); 未传时保持 v1.11 的 slurm 默认 (旧记录/离线测试兼容)。
+  logf <- if (length(log_path) == 1 && !is.na(log_path) && nzchar(log_path)) {
+    log_path
+  } else if (length(out_dir) == 1 && nzchar(out_dir) && !is.na(jobid_i)) {
     file.path(out_dir, sprintf("slurm-%d.out", jobid_i))
   } else ""
   if (is.na(rc) && nzchar(logf) && file.exists(logf)) {
@@ -264,10 +282,11 @@ diann_job_status <- function(jobid, out_dir, out_file, script_path = "",
 
 # 一轮发送检查。三段式: ① 持锁扫描并认领 (置 last_try, 防多实例重复发送)
 # ② 无锁发送 (慢操作, 中途被杀则记录仍待发, 下轮重试) ③ 持锁按 jobid+submitted 合并结果
-diann_notify_tick <- function() {
+diann_notify_tick <- function(snapshot = NULL) {
   if (!isTRUE(cfg_get("MAIL_ENABLED"))) return(invisible(FALSE))
-  # 锁外先取一次队列快照 (一次 squeue -u), 避免持锁期间为每条记录起子进程
-  snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
+  # 锁外先取一次队列快照 (slurm: 一次 squeue -u; local: 只读本地状态文件),
+  # 避免持锁期间为每条记录起子进程
+  snap <- if (!is.null(snapshot)) snapshot else tryCatch(backend_snapshot(), error = function(e) NULL)
   qmap <- if (is.null(snap)) list() else snap$squeue_map
   # ---- 阶段 1: 认领 ----
   if (!notify_lock_acquire()) return(invisible(FALSE))
@@ -291,14 +310,29 @@ diann_notify_tick <- function() {
   notify_lock_release()
   if (!length(cand)) return(invisible(FALSE))
   # ---- 阶段 2: 发送 ----
-  fns <- if (is.null(snap)) list(squeue_fn = NULL, sacct_fn = NULL) else slurm_snapshot_fns(snap)
+  # 后端相关输入按记录分组懒加载: 同一状态文件里可能同时有旧 slurm 记录与
+  # v1.12 的 local 记录 (换机器后共用 HOME 等), 两者分别使用各自的后端函数。
+  fns_cache <- list()
+  get_fns <- function(bk) {
+    bk <- as.character(bk)[1]
+    if (is.null(fns_cache[[bk]])) {
+      fns_cache[[bk]] <<- tryCatch(backend_status_fns(bk),
+                                   error = function(e) list(squeue_fn = NULL, sacct_fn = NULL))
+    }
+    fns_cache[[bk]]
+  }
   for (k in seq_along(cand)) {
     r <- cand[[k]]$rec
-    logf <- file.path(r$out_dir, sprintf("slurm-%d.out", as.integer(r$jobid)))
+    rbk <- as.character(r$backend %||% "slurm")[1]
+    if (is.na(rbk) || !nzchar(rbk)) rbk <- "slurm"
+    fns <- get_fns(rbk)
+    lp <- tryCatch(backend_log_paths(r$jobid, r$out_dir, rbk, r$script_path),
+                   error = function(e) list(out = ""))
+    logf <- if (length(r$log_out) == 1 && !is.na(r$log_out) && nzchar(r$log_out)) r$log_out else lp$out
     st <- tryCatch(
       diann_job_status(r$jobid, r$out_dir, r$out_file,
                        script_path = r$script_path, submitted = r$submitted,
-                       squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn),
+                       squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn, log_path = logf),
       error = function(e) NULL)
     rc <- if (is.null(st)) NA_integer_ else st$rc
     # 状态"未知"通常是 sacct 记账滞后 (刚出队) 或产物尚未落盘: 此时发信会把
@@ -312,7 +346,7 @@ diann_notify_tick <- function() {
       cand[[k]]$status <- 0L
       next
     }
-    elapsed <- diann_notify_elapsed(logf, r$jobid)
+    elapsed <- backend_elapsed(r$jobid, logf, backend = rbk, script_path = r$script_path)
     args <- c(cfg_get("MAIL_PY"), "--to", shQuote(r$to), "--job-id", as.character(r$jobid),
               "--task", shQuote(r$task), "--out-dir", shQuote(r$out_dir),
               "--out-file", shQuote(r$out_file), "--sif", shQuote(r$sif),

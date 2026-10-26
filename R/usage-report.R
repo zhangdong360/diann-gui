@@ -1,8 +1,9 @@
 # ============================================================
 # usage-report.R — 平台使用统计 (月度), 导出为 usage_report()
 # 数据源 = GUI 提交注册表 (HOME 下 diann_gui_jobs_registry.rds), 按提交时间过滤;
-# 每作业用 diann_job_status 四层模型合成状态, 输出 markdown 报告:
-# 提交数 / 状态分布 / 耗时统计 / 失败与待核实明细。
+# 每作业按记录的执行后端 (slurm/local, 旧记录缺省 slurm) 选日志与状态来源,
+# 用 diann_job_status 四层模型合成状态, 输出 markdown 报告:
+# 提交数 / 状态分布 / 耗时统计 / 失败与待核实明细, 逐作业明细含"后端"列。
 # 注意: 注册表滚动保留最近 300 条, 更早月份不在统计内; 运行身份需能读注册表
 # 与各作业输出目录 (自托管模式即用户本人, 天然满足)。
 # ============================================================
@@ -53,6 +54,21 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   }
   out_files <- col_or_na(gui, "out_file")
   scripts <- col_or_na(gui, "script_path")
+  # v1.12: 按记录的后端分派; 旧 v2 注册表没有 backend 列 -> 缺省按 slurm 解释。
+  backs <- col_or_na(gui, "backend")
+  backs[is.na(backs) | !nzchar(backs)] <- "slurm"
+  backs <- ifelse(backs %in% c("slurm", "local"), backs, "slurm")
+  logs <- col_or_na(gui, "日志")
+  # 状态函数按后端分组懒构建 (slurm: 一次快照注入; local: 本地作业状态文件),
+  # 避免同一个月报里每条记录各起 squeue/sacct 子进程。
+  fns_cache <- list()
+  status_fns <- function(bk) {
+    if (!is.null(fns_cache[[bk]])) return(fns_cache[[bk]])
+    fns <- tryCatch(backend_status_fns(bk),
+                    error = function(e) list(squeue_fn = NULL, sacct_fn = NULL))
+    fns_cache[[bk]] <<- fns
+    fns
+  }
   report_of <- function(out_d, out_file = NA_character_) {
     if (length(out_file) == 1 && !is.na(out_file) && nzchar(out_file)) {
       if (file.exists(out_file)) return(out_file)
@@ -83,11 +99,21 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     r <- rec_by_id[[as.character(jid)]]
     if (is.null(r)) "" else paste(as.character(r$to), collapse = ",")
   }
+  gui$backend <- backs
   gui$report <- vapply(seq_len(nrow(gui)), function(i) {
     report_of(as.character(gui$输出目录[i]), out_files[i])
   }, "")
   gui$script <- vapply(seq_len(nrow(gui)), function(i) {
     script_of(as.character(gui$输出目录[i]), as.integer(gui$jobid[i]), scripts[i])[1]
+  }, "")
+  # 日志路径: 注册表"日志"列优先 (旧 v2 记录只有 slurm-<id>.out, 仍然正确);
+  # 缺列/NA 时按后端契约生成 (local-<id>.out / slurm-<id>.out)。
+  gui$log <- vapply(seq_len(nrow(gui)), function(i) {
+    lv <- logs[i]
+    if (!is.na(lv) && nzchar(lv)) return(lv)
+    lp <- tryCatch(backend_log_paths(gui$jobid[i], as.character(gui$输出目录[i]),
+                                     gui$backend[i], gui$script[i]), error = function(e) NULL)
+    if (is.null(lp) || !length(lp$out)) "" else as.character(lp$out)[1]
   }, "")
   gui$email <- vapply(as.character(gui$jobid), email_of, "")
   gui$label <- ""
@@ -96,11 +122,18 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   for (i in seq_len(nrow(gui))) {
     wd <- as.character(gui$输出目录[i])
     jid <- as.integer(gui$jobid[i])
-    logf <- file.path(wd, sprintf("slurm-%d.out", jid))
-    es_i <- if (file.exists(logf)) suppressWarnings(diann_notify_elapsed(logf, jid)) else NA_integer_
-    gui$elapsed_s[i] <- if (length(es_i) == 1L && !is.null(es_i)) es_i else NA_integer_
+    bk <- as.character(gui$backend[i])
+    logf <- gui$log[i]
+    es_i <- tryCatch(backend_elapsed(jid, logf, bk, gui$script[i]),
+                     error = function(e) NA_integer_)
+    gui$elapsed_s[i] <- if (length(es_i) == 1L && !is.null(es_i) && !is.na(es_i)) {
+      as.integer(es_i)
+    } else NA_integer_
+    fns <- status_fns(bk)
     st <- tryCatch(
-      diann_job_status(jid, wd, gui$report[i], script_path = gui$script[i]),
+      diann_job_status(jid, wd, gui$report[i], script_path = gui$script[i],
+                       squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn,
+                       log_path = logf),
       error = function(e) NULL)
     gui$label[i] <- if (is.null(st)) "未知" else st$label
     gui$reason[i] <- if (is.null(st)) "状态合成异常" else st$reason
@@ -118,9 +151,12 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   }
   tab <- data.frame(
     JobID = as.character(gui$jobid), 任务名 = as.character(gui$任务名), 状态 = gui$label,
+    后端 = ifelse(gui$backend == "local", "本地", "Slurm"),
     耗时 = fmt_elapsed(gui$elapsed_s), 提交时间 = as.character(gui$提交时间),
     邮箱 = ifelse(nzchar(gui$email), gui$email, "-"), stringsAsFactors = FALSE)
   cnt <- table(factor(gui$label, levels = c("成功", "失败", "待核实", "超时", "已取消", "未知")))
+  n_slurm <- sum(gui$backend == "slurm")
+  n_local <- sum(gui$backend == "local")
   es <- gui$elapsed_s[!is.na(gui$elapsed_s)]
   prob <- gui[!gui$label %in% c("成功", "已取消"), ]
 
@@ -128,6 +164,7 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   wl <- function(...) writeLines(as.character(unlist(list(...), use.names = FALSE)), con = con)
   wl(sprintf("# DIA-NN GUI 使用统计 — %s", month), "",
      sprintf("- GUI 提交作业数: **%d**", nrow(gui)),
+     sprintf("- 执行后端: Slurm **%d** 条 / 本地 **%d** 条", n_slurm, n_local),
      sprintf("- 数据源: 提交注册表 (%s ~ %s)",
              min(as.character(registry$提交时间)), max(as.character(registry$提交时间))), "",
      "## 状态分布", "",
@@ -138,18 +175,21 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
        mean(es) / 60, median(es) / 60,
        fmt_elapsed(max(es))[1], as.character(gui$jobid)[which.max(gui$elapsed_s)]) else "耗时: 无数据", "",
      if (nrow(prob)) c("## 失败 / 待核实明细", "",
-                       "| JobID | 任务名 | 状态 | 原因 |", "|---|---|---|---|",
-                       sprintf("| %s | %s | %s | %s |",
-                               prob$jobid, prob$任务名, prob$label, prob$reason)) else
+                       "| JobID | 任务名 | 后端 | 状态 | 原因 |", "|---|---|---|---|---|",
+                       sprintf("| %s | %s | %s | %s | %s |",
+                               prob$jobid, prob$任务名,
+                               ifelse(prob$backend == "local", "本地", "Slurm"),
+                               prob$label, prob$reason)) else
        c("## 失败 / 待核实明细", "", "本月无失败或待核实作业。"), "",
      "## 逐作业明细", "",
      paste0("| ", paste(names(tab), collapse = " | "), " |"),
      paste0("|", paste(rep("---", ncol(tab)), collapse = "|"), "|"),
      apply(tab, 1, function(r) paste0("| ", paste(r, collapse = " | "), " |")), "",
-     sprintf("> 生成时间: %s; 状态由四层模型合成 (Slurm 终态 → 程序退出码 → 产物验证 → 展示合成)",
+     sprintf("> 生成时间: %s; 状态由四层模型合成 (调度终态/本地进程态 → 程序退出码 → 产物验证 → 展示合成)",
              format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   close(con)
-  cat(sprintf("报告已写入: %s (GUI 作业 %d, 成功 %d, 失败 %d, 待核实 %d)\n",
-              rep_path, nrow(gui), cnt[["成功"]], cnt[["失败"]], cnt[["待核实"]]))
+  cat(sprintf("报告已写入: %s (GUI 作业 %d [Slurm %d / 本地 %d], 成功 %d, 失败 %d, 待核实 %d)\n",
+              rep_path, nrow(gui), n_slurm, n_local,
+              cnt[["成功"]], cnt[["失败"]], cnt[["待核实"]]))
   invisible(rep_path)
 }

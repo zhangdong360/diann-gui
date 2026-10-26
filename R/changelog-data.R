@@ -7,6 +7,20 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.12", date = "2026-10-26", items = c(
+    "新增: 执行后端可选——EXEC_BACKEND = auto|slurm|local (默认 auto); 环境变量 DIANN_GUI_EXEC_BACKEND 覆盖。auto 在 PATH 上有 sbatch 时用 Slurm 集群 (与 v1.11 行为一致), 没有则自动在本机执行。",
+    "新增: 本地执行模式——在 GUI 所在 Linux 主机直接运行 DIA-NN, 仍用 apptainer/singularity + 同一个 diann*.sif 镜像与同一套命令构建 (与 Slurm 模式共享 job_body); setsid+nohup 派生进程脱离浏览器会话, 关闭页面不影响作业; 本地 JobID 从 1000001 起递增; 日志固定 local-<作业ID>.out/.err; 脚本仍保存到 输出目录/diann_gui_scripts/。",
+    "新增: 安全阀——auto 模式检测到 Slurm 痕迹 (squeue/sacct/scontrol/sinfo 或 /etc/slurm) 但 PATH 上没有 sbatch 时, 拒绝静默回退本地执行并给出可操作报错 (LOCAL_REQUIRE_EXCLUSIVE_HOST, 防 HPC 登录节点误跑); legacy 中央 shiny-server 部署 (站点 app.R+config.R 或配置了 SHARED_GROUP) 默认拒绝本地执行, 需显式 LOCAL_ALLOW_SHARED=TRUE。",
+    "新增: 本地模式配置 LOCAL_NICE(10) / LOCAL_TIMEOUT_GRACE(30) / LOCAL_MAX_JOBS(0=不限, >0 达上限阻断提交) / LOCAL_MEM_ADVISORY(TRUE, 提交前按 /proc/meminfo 比对仅警告); 原有 SLURM_* 键保留且仅在 Slurm 模式使用。",
+    "新增: 本地作业状态/取消/时限——/proc starttime + cmdline 防 PID 复用; 取消 = 落 .cancelled 标记 + 进程组 TERM→(约 5s)→KILL, 仅允许同 UID 取消; 时限由 timeout 强制 (rc=124 映射超时), 内存不可强制、只做建议检查; 无排队 (LOCAL_MAX_JOBS 提供简单并发上限)。",
+    "改进: 四层状态合成 / 完成邮件 / 月度统计对两种后端共用同一语义——本地事实合成 RUNNING/PENDING/COMPLETED/FAILED/CANCELLED/TIMEOUT 同名调度终态, 面板与邮件标签一致; watcher 按每条记录的 backend 惰性取状态与日志。",
+    "改进: 提交注册表 schema v3 追加 backend/pid 列, 日志列改由唯一日志契约 backend_log_paths() 生成 (slurm-<id>.out / local-<id>.out); 旧 v1/v2 记录按列名补 NA 自动兼容, 缺 backend 按 slurm 解释; 月度统计逐作业新增「后端」列。",
+    "改进: UI 按解析到的后端条件渲染——本地模式标题栏显示「执行后端: 本地单机」, 资源盒改「6. 运行资源 (本地)」并隐藏分区, 提交按钮改「提交本地任务」, 监控页隐藏 sinfo 盒、标题改「本地运行任务 / 近期历史 (本地作业)」、日志标题改「运行日志查看 (local-<ID>.out 尾部)」; Slurm 模式界面与 v1.11 基本一致 (现有截图仍有效)。",
+    "改进: doctor() / init_config() 分后端——本地模式下 Slurm 命令与分区检查降级为不适用 (na), 改为检查 setsid/nohup/timeout/bash 与 /proc; init_config(auto) 把探测到的后端写回 EXEC_BACKEND, 生成后提示当前执行后端。",
+    "修复: 无 Slurm 主机点提交导致 Shiny 会话永久断连且无失败提示 (v1.11 实测: system2('sbatch') 未捕获错误); v1.12 提交路径整体后端化并 tryCatch, 失败转为错误通知, 不再断连。",
+    "测试: 新增离线后端测试 (假 apptainer + 假 DIA-NN 负载, 不依赖真实 Slurm/容器/RAW 数据): 后端解析矩阵、日志命名契约、两后端共用脚本程序体、本地提交→成功/失败/超时/取消、PID 复用防护、sbatch 缺失不抛错; CI 在无 Slurm runner 上执行本地提交路径。",
+    "文档: README 双语 / 技术手册 / 新手指南同步「Slurm 可选 + 本地单机模式」——架构、配置键、模式差异、日志命名、无 Slurm 排错; 明确本版不做原生二进制/云/Windows/PBS。"
+  )),
   list(ver = "v1.11", date = "2026-10-20", items = c(
     "新增: 明确运行时版本要求——SIF 镜像需 apptainer ≥ 1.0 或 singularity ≥ 3.0 (SIF 自 Singularity 3.0 起; 2.x 只能读 squashfs/ext3 的 .simg)。候选下拉/自检面板/当前生效回显/「识别并验证」/快速与深度验证/提交前校验/doctor 统一标注「⚠ 不支持 SIF」; 选中 2.x 时直接给出结论与升级路径, 不再只显示 \"Unknown image format/type\" 裸报错 (同时剥掉 2.x stderr 的 ANSI 颜色码与 \\r 拼接)",
     "改进: 默认 apptainer 优先选「可执行且支持 SIF」的候选——避免下拉默认值是个能跑 --version 却读不了 .sif 的 singularity 2.x",

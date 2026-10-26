@@ -3,12 +3,26 @@
 proj_root <- function() {
   d <- getwd()
   for (i in 1:6) {
-    if (file.exists(file.path(d, "DESCRIPTION"))) return(normalizePath(d))
+    if (file.exists(file.path(d, "DESCRIPTION")) && dir.exists(file.path(d, "R"))) {
+      return(normalizePath(d))
+    }
     d <- dirname(d)
   }
-  stop("DESCRIPTION not found upward from ", getwd())
+  # R CMD check 在 <pkg>.Rcheck/tests 下运行: 源码树不可得, 返回 "" 让依赖源码
+  # 文本的交叉核对用例显式 skip (安装态测试不应依赖源码路径)。
+  ""
 }
 PROJECT_ROOT <- proj_root()
+# 夹具目录: 源码树用 <root>/tests/fixtures; R CMD check 时 tests/ 整体复制,
+# 夹具可能在 tests/ 或 tests/testthat/ 的上一级 (兼容两种 testthat 工作目录)。
+FIXTURES_DIR <- local({
+  cands <- c(getwd(), file.path(getwd(), ".."), file.path(getwd(), "..", ".."))
+  for (d in cands) {
+    fx <- file.path(d, "fixtures")
+    if (dir.exists(fx)) return(normalizePath(fx))
+  }
+  if (nzchar(PROJECT_ROOT)) file.path(PROJECT_ROOT, "tests", "fixtures") else ""
+})
 
 library(diann.gui)
 
@@ -63,6 +77,76 @@ cleanup_old_artifacts <- diann.gui:::cleanup_old_artifacts
 slurm_snapshot <- diann.gui:::slurm_snapshot
 slurm_snapshot_fns <- diann.gui:::slurm_snapshot_fns
 slurm_queue_states <- diann.gui:::slurm_queue_states
+
+# v1.12 执行后端 (slurm / local)
+exec_backend <- diann.gui:::exec_backend
+detect_exec_backend <- diann.gui:::detect_exec_backend
+backend_info <- diann.gui:::backend_info
+backend_label <- diann.gui:::backend_label
+backend_script <- diann.gui:::backend_script
+backend_submit <- diann.gui:::backend_submit
+backend_snapshot <- diann.gui:::backend_snapshot
+backend_status_fns <- diann.gui:::backend_status_fns
+backend_log_paths <- diann.gui:::backend_log_paths
+backend_cancel <- diann.gui:::backend_cancel
+backend_elapsed <- diann.gui:::backend_elapsed
+backend_history <- diann.gui:::backend_history
+slurm_available <- diann.gui:::slurm_available
+job_body <- diann.gui:::job_body
+slurm_script_header <- diann.gui:::slurm_script_header
+make_local_script <- diann.gui:::make_local_script
+make_job_script <- diann.gui:::make_job_script
+local_jobs_find <- diann.gui:::local_jobs_find
+local_jobs_load <- diann.gui:::local_jobs_load
+local_job_alive <- diann.gui:::local_job_alive
+local_job_state <- diann.gui:::local_job_state
+local_seq_next <- diann.gui:::local_seq_next
+local_runner_path <- diann.gui:::local_runner_path
+local_cancel <- diann.gui:::local_cancel
+
+# v1.12 本地后端测试设施: 假 apptainer (--version 正常; exec 按 --out 写报告,
+# 行为由环境变量 FAKE_DIANN_SLEEP / FAKE_DIANN_RC 控制; 也可用 control 文件)。
+fake_apptainer <- function(dir = tempfile("fakeapt")) {
+  dir.create(file.path(dir, "bin"), recursive = TRUE, showWarnings = FALSE)
+  p <- file.path(dir, "bin", "apptainer")
+  writeLines(c(
+    "#!/bin/bash",
+    "if [ \"${1:-}\" = \"--version\" ]; then echo 'apptainer version 1.4.5'; exit 0; fi",
+    "out=''; prev=''",
+    "for a in \"$@\"; do if [ \"$prev\" = \"--out\" ]; then out=\"$a\"; fi; prev=\"$a\"; done",
+    "ctl=\"${FAKE_DIANN_CTL:-}\"",
+    "if [ -n \"$ctl\" ] && [ -f \"$ctl\" ]; then sleep \"$(cat \"$ctl\")\" 2>/dev/null || true; else sleep \"${FAKE_DIANN_SLEEP:-1}\"; fi",
+    "if [ -n \"$out\" ]; then mkdir -p \"$(dirname \"$out\")\"; printf 'Protein.Names\\nP123\\n' > \"$out\"; fi",
+    "exit \"${FAKE_DIANN_RC:-0}\""), p)
+  Sys.chmod(p, "0755")
+  p
+}
+
+# 本地模式测试参数 (与 server params_ready() 同构的最小集合)
+make_local_params <- function(out_dir, apptainer_bin, time_h = 1 / 120) {
+  base_params(list(
+    job_name = "local_test", partition = NA_character_, sif = "/tmp/fake.sif",
+    apptainer_bin = apptainer_bin, out_dir = out_dir,
+    out_file = file.path(out_dir, "report.tsv"),
+    slurm_out = "", slurm_err = "", time_h = time_h,
+    script_path = file.path(out_dir, sprintf("job_%d.sh", as.integer(runif(1, 1, 1e9))))))
+}
+
+# 轮询本地作业直到终态 (成功/失败/超时/已取消); 返回 label
+poll_local_status <- function(p, job_id, timeout_s = 30) {
+  fns <- backend_status_fns("local")
+  lp <- backend_log_paths(job_id, p$out_dir, "local", p$script_path)
+  t0 <- Sys.time(); label <- NA_character_
+  while (as.numeric(Sys.time() - t0) < timeout_s) {
+    st <- diann_job_status(job_id, p$out_dir, p$out_file, script_path = p$script_path,
+                           squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn,
+                           log_path = lp$out)
+    label <- st$label
+    if (label %in% c("成功", "失败", "超时", "已取消")) break
+    Sys.sleep(0.3)
+  }
+  label
+}
 
 # 构造一份与 GUI server 收集结果同构的参数表
 base_params <- function(overrides = list()) {

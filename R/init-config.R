@@ -28,7 +28,8 @@ detect_sif_dirs <- function() {
 init_config_autofill <- function(txt, partitions = character(0),
                                  apptainer_dirs = character(0),
                                  default_apptainer = "",
-                                 sif_dirs = character(0)) {
+                                 sif_dirs = character(0),
+                                 backend = NULL) {
   rquote <- function(x) paste0('"', gsub('"', '\\\\"', x, fixed = TRUE), '"')
   rvec <- function(x) sprintf("c(%s)", paste(vapply(x, rquote, ""), collapse = ", "))
   lines <- strsplit(txt, "\n", fixed = TRUE)[[1]]
@@ -46,6 +47,17 @@ init_config_autofill <- function(txt, partitions = character(0),
       }
     }
     c(lines, new_line)
+  }
+  # 执行后端 (v1.12): 把模板里的注释行 `# EXEC_BACKEND <- "auto"` 换成探测结果
+  # (auto/slurm/local 之一); 模板没有该行时插到 SLURM_PARTITIONS / Slurm 小节后。
+  if (!is.null(backend) && length(backend) &&
+      !is.na(backend[1]) && nzchar(trimws(as.character(backend[1])))) {
+    bkv <- tolower(trimws(as.character(backend)[1]))
+    if (bkv %in% c("auto", "slurm", "local")) {
+      lines <- replace_or_insert(lines, "^#?\\s*EXEC_BACKEND\\s*<-",
+                                 sprintf("EXEC_BACKEND <- \"%s\"", bkv),
+                                 after_pattern = "^#?\\s*(SLURM_PARTITIONS\\s*<-|---- Slurm)")
+    }
   }
   if (length(partitions)) {
     lines <- replace_or_insert(lines, "^#\\s*SLURM_PARTITIONS\\s*<-",
@@ -71,8 +83,8 @@ init_config_autofill <- function(txt, partitions = character(0),
 #' 生成每用户配置文件
 #'
 #' 把包内模板 `inst/config/config.example.R` 复制到 `~/.diann_gui/config.R`，
-#' 并把家目录占位符替换为真实路径。`auto = TRUE` 时还会探测 Slurm 分区、
-#' apptainer 候选与常见 SIF 目录并写入。
+#' 并把家目录占位符替换为真实路径。`auto = TRUE` 时还会探测执行后端
+#' (写回 `EXEC_BACKEND`)、Slurm 分区、apptainer 候选与常见 SIF 目录并写入。
 #'
 #' @param path 目标文件 (默认 `~/.diann_gui/config.R`)
 #' @param overwrite 已存在时是否覆盖 (默认 FALSE, 只提示)
@@ -98,7 +110,13 @@ init_config <- function(path = file.path(path.expand("~"), ".diann_gui", "config
 
   txt <- paste(readLines(tpl, warn = FALSE), collapse = "\n")
   txt <- gsub("DIANN_GUI_USER_HOME", path.expand("~"), txt, fixed = TRUE)
+  backend <- NULL
   if (isTRUE(auto)) {
+    # 探测本机执行后端 (有 sbatch -> slurm; 否则 local), 与 run_app() 启动时一致
+    backend <- tryCatch({
+      info <- backend_info()
+      if (is.list(info) && length(info$backend) == 1 && !is.na(info$backend)) info$backend else NULL
+    }, error = function(e) NULL)
     if (is.null(partitions)) partitions <- tryCatch(detect_slurm_partitions(), error = function(e) character(0))
     if (is.null(sif_dirs)) sif_dirs <- tryCatch(detect_sif_dirs(), error = function(e) character(0))
     if (is.null(apptainer_dirs) || is.null(default_apptainer)) {
@@ -114,11 +132,15 @@ init_config <- function(path = file.path(path.expand("~"), ".diann_gui", "config
     txt <- init_config_autofill(txt, partitions = partitions,
                                 apptainer_dirs = apptainer_dirs,
                                 default_apptainer = default_apptainer %||% "",
-                                sif_dirs = sif_dirs)
+                                sif_dirs = sif_dirs, backend = backend)
   }
   writeLines(txt, path, useBytes = TRUE)
   try(Sys.chmod(path, "0600"), silent = TRUE)
   message("已生成配置: ", path)
-  message("下一步: 按需编辑该文件 (SIF_DIRS / APPTAINER_PATHS / DATA_HOME), 然后运行 diann.gui::run_app()")
+  if (isTRUE(auto) && !is.null(backend)) {
+    message(sprintf("执行后端: %s (写入 EXEC_BACKEND <- \"%s\"; 换机器可改回 \"auto\")",
+                    backend_label(backend), backend))
+  }
+  message("下一步: 按需编辑该文件 (SIF_DIRS / APPTAINER_PATHS / DATA_HOME / EXEC_BACKEND), 然后运行 diann.gui::run_app()")
   invisible(path)
 }

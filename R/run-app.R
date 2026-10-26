@@ -25,6 +25,11 @@ run_app <- function(port = NULL, host = "127.0.0.1",
                     config_file = NULL, app_only = FALSE) {
   diann_load_config(config_file)
 
+  # 执行后端 (v1.12): auto 检测 + 安全防护 (HPC 登录节点 / legacy 中央部署)。
+  # error 时给出可操作报错并停止启动; warn 打印到控制台。
+  backend_startup_check()
+  binfo <- backend_info()
+
   # apptainer 运行环境: 启动时发现候选并解析版本 (带缓存; 登录节点没有 apptainer 也正常,
   # 只有"选择为空"才会在提交前被拦下)。结果供 UI 下拉/自检面板/提交前校验读取。
   .cfg$APPTAINER_CANDS <- tryCatch(apptainer_candidates(),
@@ -57,7 +62,9 @@ run_app <- function(port = NULL, host = "127.0.0.1",
     port <- tryCatch(httpuv::randomPort(min = 30000L, max = 39999L), error = function(e) NULL)
   }
   who <- Sys.info()[["user"]]
-  message(sprintf("DIA-NN GUI %s — 运行身份: %s (作业将以该身份提交)", GUI_VERSION, who))
+  message(sprintf("DIA-NN GUI %s — 运行身份: %s (作业将以该身份执行)", GUI_VERSION, who))
+  message(sprintf("执行后端: %s (%s)", backend_label(),
+                  if (isTRUE(binfo$auto)) "自动检测" else "配置指定"))
   message(sprintf("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)"))
   message(sprintf("访问地址: http://%s:%s/", host, if (is.null(port)) "(随机)" else port))
   if (!is.null(port) && nzchar(Sys.getenv("SSH_CONNECTION")) && identical(host, "127.0.0.1")) {
