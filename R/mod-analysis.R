@@ -447,6 +447,10 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
       source           = src_of()
     ))
 
+    # 非抛错版 prep (req 失败/预处理失败 -> NULL): 页签输出用它做前置判断,
+    # 避免 renderUI 被 validation error 打断而显示成空白 (引导提示被吞掉)
+    prep_ok <- reactive(tryCatch(prep(), error = function(e) NULL))
+
     prep <- reactive({
       raw <- raw_data(); req(raw)
       prm <- global_params()
@@ -508,10 +512,8 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
 
     # ---------------- ② 预处理页输出 ----------------
     output$prep_page <- renderUI({
-      if (!is.null(prep())) return(NULL)
-      if (is.null(raw_data()))
-        return(div(class = "an-err", icon("circle-info"), " 请先在「① 数据与分组」读取矩阵。"))
-      NULL
+      if (!is.null(prep_ok())) return(NULL)
+      div(class = "an-err", icon("circle-info"), " 请先在「① 数据与分组」读取矩阵。")
     })
     an_stat_card <- function(num, label)
       sprintf('<div class="an-stat-card"><div class="num">%s</div><div class="label">%s</div></div>',
@@ -585,9 +587,11 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
         zip::zipr(f, files = files, mode = "mirror")
       })
     output$qc_figures <- renderUI({
+      # 先判 prep 再调 qc_res: 矩阵未读时 qc_res 内部 req() 会抛验证错误,
+      # 打断本输出的引导提示 (renderUI 的输出表现为空白页)
+      if (is.null(prep_ok())) return(NULL)
       q <- qc_res()
       if (is.null(q)) {
-        if (is.null(prep())) return(NULL)
         if (!"qc" %in% mods())
           return(div(class = "an-err", icon("circle-info"),
                      " 未执行 QC 模块：请在上方「分析模块」勾选「QC 可视化」。"))
@@ -648,9 +652,10 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
            div(class = "an-plot-caption", caption))
     }
     output$de_content <- renderUI({
+      pp <- prep_ok()
+      if (is.null(pp))
+        return(div(class = "an-err", icon("circle-info"), " 请先在「① 数据与分组」读取矩阵。"))
       dd <- de_res()
-      pp <- prep()
-      if (is.null(pp)) return(NULL)
       if (is.null(dd)) {
         why <- if (!"de" %in% mods()) "未勾选「limma 差异分析」模块。"
                else if (!isTRUE(pp$imputed))
@@ -729,11 +734,21 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
                      kegg_online = identical(input$en_kegg, "online"))
     })
     output$enrich_content <- renderUI({
-      en <- enrich_res()
-      if (is.null(prep()) || is.null(de_res())) return(NULL)
+      pp <- prep()
+      dd <- de_res()
+      if (is.null(pp) || is.null(dd)) {
+        if (is.null(prep())) return(NULL)
+        why <- if (!"de" %in% mods())
+          "「功能富集」依赖差异分析的显著蛋白结果，但「④ 差异分析」模块未勾选；请同时勾选两者。"
+        else if (!isTRUE(prep()$imputed))
+          "缺失值处理为「不填补」导致差异分析停用，功能富集随之不可用（请改选插补方法）。"
+        else "差异分析依赖缺失（见 ④ 差异分析页提示）。"
+        return(div(class = "an-err", icon("circle-info"), why))
+      }
       if (is.null(en))
         return(div(class = "an-err", icon("circle-info"),
-                   if (!"enrich" %in% mods()) "未勾选「GO/KEGG 功能富集」模块。" else "依赖缺失。"))
+                   if (!"enrich" %in% mods()) "未勾选「GO/KEGG 功能富集」模块。"
+                   else "富集依赖缺失（见上方安装命令）。"))
       if (isTRUE(en$skipped))
         return(div(class = "an-err", icon("circle-info"), " 富集已跳过：", en$reason))
       go_figs <- en$plots[grepl("^13_enrichment_go_barplot_", names(en$plots))]

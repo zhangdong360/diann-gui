@@ -8,7 +8,8 @@ for (f in c("prep_run", "qc_compute", "de_compute", "enrich_compute",
             "de_safe_levels", "an_deps_check", "an_deps_status", "an_deps_install_hint",
             "an_deps_groups", "an_deps_optional", "theme_proteo", "new_plot",
             "save_plot_obj", "median_norm_boxplot", "missing_profile_plots",
-            "combat_correct", "normalize_sample_map", "infer_groups")) {
+            "combat_correct", "normalize_sample_map", "infer_groups",
+            "analysis_find_matrices")) {
   assign(f, getFromNamespace(f, "diann.gui"))
 }
 

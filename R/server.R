@@ -1513,7 +1513,9 @@ server <- function(input, output, session) {
     tagList(
       selectInput("analysis_matrix", sprintf("蛋白矩阵 (%d 个候选, pg_matrix 优先):", nrow(ms)),
                   choices = ms$path, selected = ms$path[1]),
-      helpText(sprintf("选中文件 %.1f MB", ms$size[ms$path == input$analysis_matrix][1] / 1024^2)))
+      helpText(sprintf("选中文件 %.1f MB",
+                       { sz <- ms$size[ms$path == (input$analysis_matrix %||% ms$path[1])]
+                         if (length(sz)) sz[1] else ms$size[1] } / 1024^2)))
   })
   observeEvent(input$goto_analysis, {
     mp <- input$analysis_matrix
