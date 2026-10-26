@@ -41,10 +41,21 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   # ---- 执行后端 (v1.12): 注入优先 > 配置解析结果 > slurm (v1.11 唯一行为) ----
   backend_injected <- !is.null(backend) && length(backend) > 0 &&
     !is.na(backend[1]) && nzchar(trimws(as.character(backend[1])))
-  if (!backend_injected) backend <- cfg_get("EXEC_BACKEND_RESOLVED") %||% "slurm"
+  binfo <- tryCatch(cfg_get("EXEC_BACKEND_INFO"), error = function(e) NULL)
+  if (!backend_injected) {
+    # 默认走 backend_info() (与 run_app/server 使用同一解析结果; 测试可注入
+    # .cfg$EXEC_BACKEND_INFO 覆盖); 解析失败才退回字符串缓存。
+    info <- tryCatch(backend_info(), error = function(e) NULL)
+    if (!is.null(info) && !is.null(info$backend) &&
+        length(info$backend) == 1 && !is.na(info$backend) && nzchar(as.character(info$backend))) {
+      backend <- info$backend
+      binfo <- info
+    } else {
+      backend <- cfg_get("EXEC_BACKEND_RESOLVED") %||% "slurm"
+    }
+  }
   backend <- tolower(trimws(as.character(backend)[1]))
   if (!backend %in% c("slurm", "local")) backend <- "slurm"
-  binfo <- tryCatch(cfg_get("EXEC_BACKEND_INFO"), error = function(e) NULL)
   backend_how <- if (backend_injected || !isTRUE(binfo$auto)) "配置指定" else "自动检测"
   add("执行后端", "ok", sprintf("%s (%s)", backend, backend_how))
 
