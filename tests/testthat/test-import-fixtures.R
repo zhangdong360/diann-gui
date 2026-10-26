@@ -1,7 +1,7 @@
 # 真实用户粘贴回归夹具 (2026-10-09 导入断连事故):
 # 两份命令均含真实服务器路径, 曾因 app.R source 环境作用域 bug 导致会话断连。
 # 本文件固化其解析/范围/构建契约; 浏览器端到端验证另见 tests/e2e/run_e2e.sh。
-FIX_DIR <- file.path(PROJECT_ROOT, "tests", "fixtures")
+FIX_DIR <- FIXTURES_DIR
 read_fixture <- function(name) paste(readLines(file.path(FIX_DIR, name), warn = FALSE), collapse = "\n")
 
 test_that("夹具: 小命令 (39 RAW, 经验谱库+建库工作流) 完整解析", {

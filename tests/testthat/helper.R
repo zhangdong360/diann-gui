@@ -3,12 +3,26 @@
 proj_root <- function() {
   d <- getwd()
   for (i in 1:6) {
-    if (file.exists(file.path(d, "DESCRIPTION"))) return(normalizePath(d))
+    if (file.exists(file.path(d, "DESCRIPTION")) && dir.exists(file.path(d, "R"))) {
+      return(normalizePath(d))
+    }
     d <- dirname(d)
   }
-  stop("DESCRIPTION not found upward from ", getwd())
+  # R CMD check 在 <pkg>.Rcheck/tests 下运行: 源码树不可得, 返回 "" 让依赖源码
+  # 文本的交叉核对用例显式 skip (安装态测试不应依赖源码路径)。
+  ""
 }
 PROJECT_ROOT <- proj_root()
+# 夹具目录: 源码树用 <root>/tests/fixtures; R CMD check 时 tests/ 整体复制,
+# 夹具可能在 tests/ 或 tests/testthat/ 的上一级 (兼容两种 testthat 工作目录)。
+FIXTURES_DIR <- local({
+  cands <- c(getwd(), file.path(getwd(), ".."), file.path(getwd(), "..", ".."))
+  for (d in cands) {
+    fx <- file.path(d, "fixtures")
+    if (dir.exists(fx)) return(normalizePath(fx))
+  }
+  if (nzchar(PROJECT_ROOT)) file.path(PROJECT_ROOT, "tests", "fixtures") else ""
+})
 
 library(diann.gui)
 

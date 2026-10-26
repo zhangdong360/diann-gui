@@ -8,6 +8,10 @@ on:
 jobs:
   r-tests:
     runs-on: ubuntu-latest
+    # CI 无 Slurm (无 sbatch): 显式 local 后端, 让执行后端解析走确定路径而不是
+    # 依赖 auto 探测; 同时保证测试里任何提交路径都不会误调 sbatch。
+    env:
+      DIANN_GUI_EXEC_BACKEND: local
     steps:
       - uses: actions/checkout@v4
 
@@ -135,5 +139,18 @@ jobs:
           [ "$code" = "200" ] || { echo "::error::包级启动冒烟失败 (http=$code)"; exit 1; }
           echo "package launch smoke OK"
 
-      - name: Browser E2E (import + apptainer)
+      - name: Browser E2E (import + apptainer + local backend)
+        env:
+          # v1.12: 主实例按 local 后端启动 (CI 无 Slurm); 第 3 组 e2e 亦为 local 后端
+          E2E_BACKEND: local
         run: bash tests/e2e/run_e2e.sh
+
+      - name: Upload E2E logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            /tmp/diann_e2e*.log
+            /tmp/diann_e2e_env.*/app.log
+          if-no-files-found: ignore

@@ -96,3 +96,56 @@ test_that("SLURM_EXTRA_ARGS 逐行写成 #SBATCH 选项", {
   diann.gui::set_core_const("SLURM_EXTRA_ARGS", character(0))
   expect_false(grepl("--account=lab", make_slurm_script(base_params()), fixed = TRUE))
 })
+
+# ---------- v1.12: Slurm 脚本保持原样 / 本地脚本共用程序体 ----------
+
+test_that("make_slurm_script 头部保持 v1.11 逐字节契约 (Slurm 模式界面/脚本不变)", {
+  expected <- paste0(
+    "#!/bin/bash\n",
+    "#SBATCH -J 'T'\n",
+    "#SBATCH -p compute\n",
+    "#SBATCH --nodes=1\n",
+    "#SBATCH --cpus-per-task=16\n",
+    "#SBATCH --mem=64G\n",
+    "#SBATCH -t 720\n",
+    "#SBATCH -o '/o/slurm-%j.out'\n",
+    "#SBATCH -e '/o/slurm-%j.err'\n",
+    "\n\n")
+  expect_identical(slurm_script_header(base_params()), expected)
+  expect_identical(make_slurm_script(base_params()), paste0(expected, job_body(base_params(), "slurm")))
+})
+
+test_that("make_local_script: 无 #SBATCH / 本地头含时限 / 忽略 SLURM_EXTRA_ARGS / 共用 job_body", {
+  old <- diann.gui::cfg_get("SLURM_EXTRA_ARGS")
+  on.exit(diann.gui::set_core_const("SLURM_EXTRA_ARGS", old), add = TRUE)
+  diann.gui::set_core_const("SLURM_EXTRA_ARGS", c("--account=lab", "--qos=normal"))
+  p <- base_params(list(time_h = 1.9))
+  loc <- make_local_script(p)
+  expect_false(grepl("#SBATCH", loc, fixed = TRUE))
+  expect_false(grepl("--account=lab", loc, fixed = TRUE))
+  expect_match(loc, "#!/bin/bash\n# diann.gui 本地执行脚本 (无 Slurm)", fixed = TRUE)
+  expect_match(loc, "# 时限: 114 分钟 (由运行器 timeout 强制执行)", fixed = TRUE)
+  expect_match(loc, "printf '%s' \"$rc\" > '/o/diann_gui_scripts/diann_test.rc'", fixed = TRUE)
+  expect_match(loc, "exit $rc", fixed = TRUE)
+
+  # 共用同一段程序体: 从 APPTAINER_BIN= 起到结尾除"调度态"措辞外完全一致
+  body_of <- function(s) {
+    l <- strsplit(s, "\n", fixed = TRUE)[[1]]
+    paste(l[grep("^APPTAINER_BIN=", l)[1]:length(l)], collapse = "\n")
+  }
+  bl <- body_of(loc)
+  bs <- body_of(make_slurm_script(p))
+  expect_identical(sub("本地进程态", "Slurm 终态", bl, fixed = TRUE), bs)
+
+  # 时限留空 = 不限
+  loc_na <- make_local_script(base_params(list(time_h = NA_real_)))
+  expect_match(loc_na, "# 时限: 不限", fixed = TRUE)
+})
+
+test_that("make_job_script 按后端分派 (默认 slurm; local 与预览一致)", {
+  p <- base_params(list(time_h = 0.25))
+  expect_identical(make_job_script(p, "local"), make_local_script(p))
+  expect_identical(make_job_script(p, "slurm"), make_slurm_script(p))
+  expect_identical(make_job_script(p), make_slurm_script(p))
+  expect_match(make_local_script(p), "# 时限: 15 分钟", fixed = TRUE)
+})

@@ -58,3 +58,100 @@ test_that("watcher_spawn_command: 显式带用户库路径与配置文件", {
                                 logf = "/tmp/s.log", cfg_file = "")
   expect_false(grepl("DIANN_GUI_CONFIG", cmd2, fixed = TRUE))
 })
+
+# ---------- v1.12: snapshot 注入 + local 记录不调 sacct/squeue ----------
+
+test_that("diann_notify_tick(snapshot=): local 记录按 rc/产物合成成功并发送邮件, 全程不调 Slurm 命令", {
+  unlink(c(NOTIFY_STATE, paste0(NOTIFY_STATE, ".lock")), recursive = TRUE, force = TRUE)
+  old_enabled <- diann.gui::cfg_get("MAIL_ENABLED")
+  old_python <- diann.gui::cfg_get("MAIL_PYTHON")
+  old_path <- Sys.getenv("PATH")
+  on.exit({
+    diann.gui::set_core_const("MAIL_ENABLED", old_enabled)
+    diann.gui::set_core_const("MAIL_PYTHON", old_python)
+    Sys.setenv(PATH = old_path)
+    unlink(c(NOTIFY_STATE, paste0(NOTIFY_STATE, ".lock")), recursive = TRUE, force = TRUE)
+  }, add = TRUE)
+
+  td <- file.path(tempdir(), sprintf("notify_local_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(td, showWarnings = FALSE, recursive = TRUE)
+  sd <- file.path(td, "diann_gui_scripts"); dir.create(sd, showWarnings = FALSE)
+  jid <- "1000301"
+  sp <- file.path(sd, "diann_local.sh"); writeLines("#!/bin/bash", sp)
+  writeLines("0", sub("\\.sh$", ".rc", sp))
+  rep_ok <- file.path(td, "report.tsv"); writeLines(c("h", "r"), rep_ok)
+  now <- as.integer(Sys.time())
+  lf <- file.path(td, sprintf("local-%s.out", jid))
+  writeLines(c(sprintf("DIANN_GUI_START_EPOCH %d", now - 20), "exit code: 0",
+               sprintf("DIANN_GUI_END_EPOCH %d", now)), lf)
+
+  # 假 Slurm 命令: 一旦被调用就落 marker (证明 local 记录没走 squeue/sacct)
+  bind <- file.path(td, "bin"); dir.create(bind)
+  marker <- file.path(td, "slurm_called.txt")
+  for (nm in c("squeue", "sacct", "sbatch", "scancel")) {
+    writeLines(c("#!/bin/bash", sprintf("echo %s >> %s", nm, shQuote(marker)), "exit 1"),
+               file.path(bind, nm))
+    Sys.chmod(file.path(bind, nm), "0755")
+  }
+  mail_log <- file.path(td, "mail_args.txt")
+  mail_sh <- file.path(td, "fake_mail.sh")
+  writeLines(c("#!/bin/bash", sprintf("printf '%%s\\n' \"$@\" > %s", shQuote(mail_log)),
+               "exit 0"), mail_sh)
+  Sys.chmod(mail_sh, "0755")
+
+  Sys.setenv(PATH = paste(bind, old_path, sep = ":"))
+  diann.gui::set_core_const("MAIL_ENABLED", TRUE)
+  diann.gui::set_core_const("MAIL_PYTHON", mail_sh)
+  expect_true(diann_notify_add(list(jobid = jid, to = "a@b.c", task = "L", out_dir = td,
+                                    out_file = rep_ok, sif = "/x.sif", script_path = sp,
+                                    desc_file = "", backend = "local", log_out = lf)))
+
+  # 作业仍在队列里 (snapshot 注入) -> 本轮跳过, 不发信
+  expect_false(isTRUE(diann_notify_tick(snapshot = list(squeue_map = list("1000301" = "RUNNING")))))
+  expect_false(isTRUE(diann_notify_load()$recs[[1]]$done))
+  expect_false(file.exists(mail_log))
+
+  # 队列空 -> 四层合成 (rc=0 + 新产物) = 成功, 发信并置 done
+  expect_true(isTRUE(diann_notify_tick(snapshot = list(squeue_map = list()))))
+  st <- diann_notify_load()$recs[[1]]
+  expect_true(isTRUE(st$done))
+  expect_equal(st$status_label, "成功")
+  expect_equal(st$rc, 0L)
+  expect_true(file.exists(mail_log))
+  args <- readLines(mail_log, warn = FALSE)
+  expect_true("--job-id" %in% args)
+  expect_true(jid %in% args)
+  expect_true("--status-label" %in% args)
+  expect_true("成功" %in% args)
+  expect_true("--rc" %in% args)
+  # local 记录全程没有调用 Slurm 命令
+  expect_false(file.exists(marker))
+})
+
+test_that("diann_notify_tick: 旧 slurm 记录 (无 backend 字段) 仍按 slurm 解释且 snapshot 生效", {
+  unlink(c(NOTIFY_STATE, paste0(NOTIFY_STATE, ".lock")), recursive = TRUE, force = TRUE)
+  old_enabled <- diann.gui::cfg_get("MAIL_ENABLED")
+  old_python <- diann.gui::cfg_get("MAIL_PYTHON")
+  on.exit({
+    diann.gui::set_core_const("MAIL_ENABLED", old_enabled)
+    diann.gui::set_core_const("MAIL_PYTHON", old_python)
+    unlink(c(NOTIFY_STATE, paste0(NOTIFY_STATE, ".lock")), recursive = TRUE, force = TRUE)
+  }, add = TRUE)
+  td <- file.path(tempdir(), sprintf("notify_slurm_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(td, showWarnings = FALSE, recursive = TRUE)
+  mail_log <- file.path(td, "mail_args.txt")
+  mail_sh <- file.path(td, "fake_mail.sh")
+  writeLines(c("#!/bin/bash", sprintf("printf '%%s\\n' \"$@\" >> %s", shQuote(mail_log)),
+               "exit 0"), mail_sh)
+  Sys.chmod(mail_sh, "0755")
+  diann.gui::set_core_const("MAIL_ENABLED", TRUE)
+  diann.gui::set_core_const("MAIL_PYTHON", mail_sh)
+  diann_notify_add(list(jobid = "424242", to = "a@b.c", task = "S", out_dir = td,
+                        out_file = file.path(td, "r.tsv"), sif = "/x.sif",
+                        script_path = file.path(td, "s.sh"), desc_file = ""))
+  # 无 backend 字段 -> diann_notify_add 按当前后端补; snapshot 注入避免真实 squeue/sacct
+  expect_false(isTRUE(diann_notify_tick(snapshot = list(squeue_map = list("424242" = "RUNNING")))))
+  st <- diann_notify_load()$recs[[1]]
+  expect_false(isTRUE(st$done))
+  expect_true(nzchar(as.character(st$backend)))
+})

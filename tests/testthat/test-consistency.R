@@ -1,6 +1,11 @@
 # 类别级不变量: 命令构建↔解析往返 + 旗标映射↔UI/重置控件交叉核对
 # 目的: 把"新加旗标漏改映射/reset/UI 之一"这类漂移在 CI 拦下, 而不是等生产事故
 
+# R CMD check 安装态没有源码树 (PROJECT_ROOT == ""): 依赖源码文本的交叉核对用例跳过
+skip_no_source <- function() {
+  skip_if(!nzchar(PROJECT_ROOT), "源码树不可得 (R CMD check 安装态), 跳过源码交叉核对")
+}
+
 test_that("build -> parse 往返: 全部映射旗标语义等价, 无未知/裸旗标残留", {
   bools <- setdiff(names(BOOL_FLAG_MAP), "--convert")  # convert 单独分支
   p <- base_params(list(
@@ -55,6 +60,7 @@ test_that("build -> parse 往返: 全部映射旗标语义等价, 无未知/裸�
 })
 
 test_that("三方交叉核对: 映射里的每个 inputId 都在应用源码中出现", {
+  skip_no_source()
   sources <- list.files(file.path(PROJECT_ROOT, "R"), pattern = "\\.R$", full.names = TRUE)
   src <- paste(vapply(sources, function(f) paste(readLines(f, warn = FALSE), collapse = "\n"), ""), collapse = "\n")
   ids <- unname(c(BOOL_FLAG_MAP, NUM_FLAG_MAP, TEXT_FLAG_MAP))
@@ -65,6 +71,7 @@ test_that("三方交叉核对: 映射里的每个 inputId 都在应用源码中�
 })
 
 test_that("reset_import_state 的数值重置清单 = 数值映射 - 约定例外", {
+  skip_no_source()
   src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
   m <- regmatches(src, regexpr(
     'for \\(ctrl in c\\([^)]*\\)\\)\\s*\\{?\\s*updateNumericInput\\(session, ctrl, value = NA\\)',
@@ -84,6 +91,7 @@ test_that("PATH_VALUE_FLAGS 全部可作为裸旗标被识别记录", {
 })
 
 test_that("apptainer/覆盖层的新 inputId 在 ui.R 与 server.R 中成对出现", {
+  skip_no_source()
   ui_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "ui.R"), warn = FALSE), collapse = "\n")
   srv_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
   ids <- c("apptainer_version", "refresh_apptainer", "use_custom_apptainer",
@@ -96,6 +104,7 @@ test_that("apptainer/覆盖层的新 inputId 在 ui.R 与 server.R 中成对出�
 })
 
 test_that("apptainer 选项写入 params_ready 与脚本模板", {
+  skip_no_source()
   srv_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
   core_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "diann-core.R"), warn = FALSE), collapse = "\n")
   expect_match(srv_src, "apptainer_bin = effective_apptainer()", fixed = TRUE)
