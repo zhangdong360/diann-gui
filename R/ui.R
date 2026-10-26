@@ -3,6 +3,12 @@
 # inputId/DOM/JS 条件为三重契约的一部分 (server + 旗标映射 + e2e), 不得单独改动。
 # ============================================================
 app_ui <- function() {
+# v1.12 执行后端: UI 在启动时按解析结果条件渲染 (会话期间不切换)。
+# backend_slurm = FALSE 时隐藏分区/集群节点资源等 Slurm 专属控件, 提交按钮与文案改为本地。
+backend <- cfg_get("EXEC_BACKEND_RESOLVED") %||% "slurm"
+if (!backend %in% c("slurm", "local")) backend <- "slurm"
+is_local <- identical(backend, "local")
+backend_cn <- if (is_local) "本地单机" else "Slurm 集群"
 # SIF 运行时版本要求 (apptainer ≥ 1.0 / singularity ≥ 3.0) 的统一文案:
 # 先算成 HTML 字符串, 再交给 helpText, 避免多层嵌套把 UI 结构写乱。
 sif_min_txt <- sif_min_version_text()
@@ -19,7 +25,8 @@ sif_req_chain <- HTML(sprintf(paste0(
   "验证链: 文件存在/可读 → SIF 魔数 → 运行时版本 (<b>%s</b>) ",
   "→ apptainer inspect → 容器内启动 diann-linux。"), htmltools::htmlEscape(sif_min_txt)))
 ui <- dashboardPage(
-  dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION))),
+  dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION),
+                               tags$small(sprintf(" · 执行后端: %s", backend_cn)))),
   dashboardSidebar(
     sidebarMenu(
       menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
@@ -147,7 +154,9 @@ ui <- dashboardPage(
           box(title = "命令导入 (自动识别并填充参数)", status = "info", solidHeader = TRUE, width = 12,
               collapsible = TRUE, collapsed = TRUE,
               column(8,
-                textAreaInput("import_cmd", "粘贴 DIA-NN 命令 (支持 Windows GUI 生成的命令、本页预览的 Slurm 脚本):",
+                textAreaInput("import_cmd",
+                              sprintf("粘贴 DIA-NN 命令 (支持 Windows GUI 生成的命令、本页预览的 %s 脚本):",
+                                      if (is_local) "本地" else "Slurm"),
                               height = "90px",
                               placeholder = "diann.exe --f C:\\data\\run.raw --lib C:\\lib.parquet --qvalue 0.01 --matrices ...")
               ),
@@ -165,12 +174,26 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = "6. Slurm 资源", status = "info", solidHeader = TRUE, width = 12,
+          box(title = if (is_local) "6. 运行资源 (本地)" else "6. Slurm 资源", status = "info", solidHeader = TRUE, width = 12,
               column(3, textInput("job_name", "任务名称:", "DIANN_Task")),
-              column(3, selectInput("partition", "计算分区:", choices = cfg_get("SLURM_PARTITIONS"), selected = cfg_get("SLURM_PARTITIONS")[1])),
-              column(3, numericInput("mem_gb", "内存 (GB):", 64, min = 1, max = 4096)),
-              column(3, numericInput("time_h", "时限 (小时, 留空=不限):", NA, min = 1)),
-              helpText("CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, 由「5. 分析参数 → 常规 → 线程数」决定。")
+              if (!is_local) {
+                column(3, selectInput("partition", "计算分区:",
+                                      choices = cfg_get("SLURM_PARTITIONS"),
+                                      selected = cfg_get("SLURM_PARTITIONS")[1]))
+              },
+              column(3, if (is_local) {
+                numericInput("mem_gb", "内存建议 (GB, 仅提示不可强制):", 64, min = 1, max = 4096)
+              } else {
+                numericInput("mem_gb", "内存 (GB):", 64, min = 1, max = 4096)
+              }),
+              column(3, numericInput("time_h", if (is_local) "超时时限 (小时, 留空=不限):" else "时限 (小时, 留空=不限):", NA, min = 1)),
+              helpText(if (is_local) {
+                paste0("本地模式直接在 GUI 所在主机运行 (无排队/无 Slurm 记账); ",
+                       "线程数由「5. 分析参数 → 常规 → 线程数」决定, 时限到点由运行器 timeout 强制终止。")
+              } else {
+                paste0("CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, ",
+                       "由「5. 分析参数 → 常规 → 线程数」决定。")
+              })
           )
         ),
         fluidRow(
@@ -192,11 +215,18 @@ ui <- dashboardPage(
                   tags$div(class = "scrollbox", verbatimTextOutput("preview"))
                 ),
                 column(4,
-                  actionButton("submit_job", "提交 Slurm 任务", icon = icon("paper-plane"),
+                  actionButton("submit_job", if (is_local) "提交本地任务" else "提交 Slurm 任务",
+                               icon = icon("paper-plane"),
                                class = "btn-lg btn-success", width = "100%"),
                   br(), br(),
-                  helpText("提交前请确认上方校验提示为空、命令预览符合预期。",
-                           "Slurm 脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 slurm-<任务ID>.out/.err。")
+                  if (is_local) {
+                    helpText("提交前请确认上方校验提示为空、命令预览符合预期。",
+                             "本地脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 local-<任务ID>.out/.err;",
+                             "作业脱离浏览器会话运行, 关闭页面不影响执行。")
+                  } else {
+                    helpText("提交前请确认上方校验提示为空、命令预览符合预期。",
+                             "Slurm 脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 slurm-<任务ID>.out/.err。")
+                  }
                 )
               )
           )
@@ -205,30 +235,42 @@ ui <- dashboardPage(
 
       # ==================== 任务队列 ====================
       tabItem(tabName = "monitor",
-        fluidRow(
-          box(title = "集群节点资源 (sinfo)", status = "info", solidHeader = TRUE, width = 12,
-              tableOutput("sinfo_table")
+        if (!is_local) {
+          fluidRow(
+            box(title = "集群节点资源 (sinfo)", status = "info", solidHeader = TRUE, width = 12,
+                tableOutput("sinfo_table")
+            )
           )
-        ),
+        },
         fluidRow(
-          box(title = "运行队列 (squeue)", status = "primary", solidHeader = TRUE, width = 12,
+          box(title = if (is_local) "本地运行任务" else "运行队列 (squeue)",
+              status = "primary", solidHeader = TRUE, width = 12,
               checkboxInput("auto_refresh", "自动刷新 (10 秒)", TRUE),
               actionButton("refresh_q", "立即刷新", icon = icon("sync")),
               tags$div(class = "scrollbox", verbatimTextOutput("squeue_output"))
           )
         ),
         fluidRow(
-          box(title = "近期历史 (sacct, 最近一天)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
+          box(title = if (is_local) "近期历史 (本地作业, 最近 300 条)" else "近期历史 (sacct, 最近一天)",
+              status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               tableOutput("sacct_table"),
-              helpText("作业ID: Slurm 作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 (已完成/运行中/排队中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻")
+              helpText(if (is_local) {
+                paste0("作业ID: 本地作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 ",
+                       "(已完成/运行中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻")
+              } else {
+                paste0("作业ID: Slurm 作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 ",
+                       "(已完成/运行中/排队中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻")
+              })
           )
         ),
         fluidRow(
           box(title = "取消作业", status = "danger", solidHeader = TRUE, width = 4,
               numericInput("cancel_id", "作业 ID:", NA),
-              actionButton("cancel_btn", "scancel 取消该作业", icon = icon("ban"), class = "btn-danger", width = "100%")
+              actionButton("cancel_btn", if (is_local) "取消该作业" else "scancel 取消该作业",
+                           icon = icon("ban"), class = "btn-danger", width = "100%")
           ),
-          box(title = "运行日志查看 (slurm-<ID>.out 尾部)", status = "warning", solidHeader = TRUE, width = 8,
+          box(title = if (is_local) "运行日志查看 (local-<ID>.out 尾部)" else "运行日志查看 (slurm-<ID>.out 尾部)",
+              status = "warning", solidHeader = TRUE, width = 8,
               fluidRow(
                 column(4, numericInput("log_id", "作业 ID:", NA)),
                 column(8,

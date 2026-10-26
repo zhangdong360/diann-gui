@@ -394,6 +394,21 @@ local_running_count <- function() {
   sum(vapply(recs, function(r) local_job_state(r) %in% c("RUNNING", "PENDING"), logical(1)))
 }
 
+# 本机资源快照 (本地模式提交前校验/提示用)
+local_cpu_count <- function() {
+  v <- suppressWarnings(as.integer(system("nproc", intern = TRUE)))
+  if (length(v) == 1 && !is.na(v) && v > 0) v else NA_integer_
+}
+
+local_mem_available_gb <- function() {
+  x <- tryCatch(suppressWarnings(readLines("/proc/meminfo", warn = FALSE)),
+                error = function(e) character(0))
+  line <- grep("^MemAvailable:", x, value = TRUE)
+  if (!length(line)) return(NA_real_)
+  kb <- suppressWarnings(as.numeric(strsplit(trimws(line[1]), "[[:space:]]+")[[1]][2]))
+  if (is.na(kb)) NA_real_ else kb / 1024^2
+}
+
 # ---------- 运行器 / 提交 / 取消 ----------
 
 local_runner_path <- function() {
