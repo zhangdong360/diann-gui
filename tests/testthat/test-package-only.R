@@ -75,7 +75,10 @@ test_that("本地后端: run_app(app_only=TRUE) 构建 local 版 UI (按钮/标�
   html <- paste(as.character(htmltools::renderTags(ui_obj)$html), collapse = "")
   expect_match(html, "提交本地任务", fixed = TRUE)
   expect_match(html, "本地运行任务", fixed = TRUE)
-  expect_match(html, "执行后端: 本地单机", fixed = TRUE)
+  # v1.13: header 徽标 + 提交页/监控页模式 banner
+  expect_match(html, "当前执行后端：本地单机（无 Slurm）", fixed = TRUE)
+  expect_match(html, 'id="backend_banner"', fixed = TRUE)
+  expect_match(html, 'id="backend_banner_monitor"', fixed = TRUE)
   expect_false(grepl("sinfo_table", html, fixed = TRUE))
   expect_true(grepl("local-&lt;ID&gt;.out", html, fixed = TRUE))
   # 包内自带本地运行器 (R CMD INSTALL 后 inst/scripts 就位)
@@ -109,4 +112,5 @@ test_that("Slurm 模式 app 构建保持原样 (按钮/标题/含 sinfo)", {
   expect_match(html, "提交 Slurm 任务", fixed = TRUE)
   expect_match(html, "运行队列 (squeue)", fixed = TRUE)
   expect_match(html, "sinfo_table", fixed = TRUE)
+  expect_match(html, "当前执行后端：Slurm 集群", fixed = TRUE)   # v1.13 banner
 })

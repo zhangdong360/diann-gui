@@ -65,6 +65,14 @@ server <- function(input, output, session) {
     else as.character(input$sif_version %||% "")
   })
 
+  # 本地作业状态文件告警 (v1.13: RDS/seq 损坏时一次性提示; 监控页 banner 托管)
+  output$local_state_note <- renderUI({
+    w <- cfg_get("LOCAL_JOBS_WARN") %||% ""
+    if (!nzchar(w)) return(NULL)
+    tags$div(class = "alert alert-warning", style = "margin: 0 0 10px 0; padding: 8px 12px;",
+             HTML(htmltools::htmlEscape(w)))
+  })
+
   # ---------- SIF 版本识别 (v1.13: 版本只来自容器内实测, 结果懒缓存) ----------
   sif_rows <- reactiveVal(cfg_get("sif_df"))
 

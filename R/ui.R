@@ -25,8 +25,10 @@ sif_req_chain <- HTML(sprintf(paste0(
   "验证链: 文件存在/可读 → SIF 魔数 → 运行时版本 (<b>%s</b>) ",
   "→ apptainer inspect → 容器内启动 diann-linux。"), htmltools::htmlEscape(sif_min_txt)))
 ui <- dashboardPage(
-  dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION),
-                               tags$small(sprintf(" · 执行后端: %s", backend_cn)))),
+  dashboardHeader(title = span(
+    "DIA-NN 控制台", tags$small(GUI_VERSION),
+    if (is_local) tags$span(class = "label label-success", "本地单机")
+    else tags$span(class = "label label-primary", "Slurm 集群"))),
   dashboardSidebar(
     sidebarMenu(
       menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
@@ -40,6 +42,17 @@ ui <- dashboardPage(
     tabItems(
       # ==================== 提交分析 ====================
       tabItem(tabName = "analysis",
+        fluidRow(
+          column(12, div(id = "backend_banner", class = if (is_local) "alert alert-success" else "alert alert-info",
+            style = "margin: 0 0 10px 0; padding: 8px 12px;",
+            HTML(if (is_local) paste0(
+              "<b>当前执行后端：本地单机（无 Slurm）</b> — 作业在本 GUI 所在主机直接运行；",
+              "关闭浏览器不影响作业；日志为 <code>local-&lt;作业ID&gt;.out/.err</code>；",
+              "并发上限见 LOCAL_MAX_JOBS。")
+            else paste0(
+              "<b>当前执行后端：Slurm 集群</b> — 作业提交到队列，需排队；",
+              "日志为 <code>slurm-&lt;作业ID&gt;.out/.err</code>；进度在「任务队列」页查看。"))))
+        ),
         fluidRow(
           box(title = "1. apptainer 运行环境", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(4,
@@ -199,7 +212,8 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = "7. 命令预览与提交", status = "danger", solidHeader = TRUE, width = 12,
+          box(title = if (is_local) "7. 命令预览与提交 (本地执行)" else "7. 命令预览与提交 (Slurm 提交)",
+              status = "danger", solidHeader = TRUE, width = 12,
               fluidRow(
                 column(4,
                   textInput("notify_email", "邮箱通知 (可选):", placeholder = "someone@126.com, someone2@126.com"),
@@ -237,6 +251,18 @@ ui <- dashboardPage(
 
       # ==================== 任务队列 ====================
       tabItem(tabName = "monitor",
+        fluidRow(
+          column(12, div(id = "backend_banner_monitor",
+                         class = if (is_local) "alert alert-success" else "alert alert-info",
+                         style = "margin: 0 0 10px 0; padding: 8px 12px;",
+                         HTML(if (is_local) paste0(
+                           "<b>当前执行后端：本地单机（无 Slurm）</b> — 本地作业状态来自本机状态文件，",
+                           "无 Slurm 记账；日志为 <code>local-&lt;作业ID&gt;.out</code>。")
+                         else paste0(
+                           "<b>当前执行后端：Slurm 集群</b> — 队列/记账数据来自 squeue/sacct；",
+                           "日志为 <code>slurm-&lt;作业ID&gt;.out</code>。"))),
+                 uiOutput("local_state_note"))
+        ),
         if (!is_local) {
           fluidRow(
             box(title = "集群节点资源 (sinfo)", status = "info", solidHeader = TRUE, width = 12,
