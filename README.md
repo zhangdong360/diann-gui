@@ -194,78 +194,37 @@ verification modes and the pre-submit check flag such candidates as
 
 ## Building the DIA-NN container image (`.sif`)
 
-The GUI never ships DIA-NN binaries or images — **each user builds their own
-`.sif`** from the official release, per DIA-NN's licensing (free for academic
-use; redistribution of binaries/images is not permitted — see the maintainer's
-note in [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202)).
+The GUI never ships DIA-NN binaries, images, or build scripts — **each user
+builds their own `.sif`, following the official DIA-NN instructions**
+(free for academic use; redistribution of binaries/images is not permitted —
+see the maintainer's note in [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202)):
 
-**Why a container**: DIA-NN ≥ 1.9 needs a modern C++ runtime and often dies on
-HPC compute nodes with `Illegal instruction` / `GLIBCXX_3.4.30 not found`;
-Docker needs root, apptainer/singularity does not; a `.sif` is reproducible and
-travels with the exact version.
+- the official repository README (https://github.com/vdemichev/DiaNN) — the
+  release ships an image-build script for Docker, and the README explains
+  converting a Docker image to `.sif` with apptainer/singularity;
+- [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) — a
+  community-maintained Dockerfile discussion (build steps there are authoritative,
+  not this document).
 
-### Route A (recommended): official `make-docker.sh` → apptainer build
+**What the GUI requires from your image** (this is our only contract):
 
-On any machine with Docker (a workstation is fine — the cluster usually has no
-daemon):
-
-```bash
-# 1) official release zip for your version (NOT a third-party mirror)
-#    https://github.com/vdemichev/DiaNN/releases
-unzip DIA-NN-<ver>.Linux.zip -d diann-<ver> && cd diann-<ver>
-bash ./make-docker.sh                       # builds the docker image
-docker images                               # note the image/tag
-
-# 2a) with a local Docker daemon:
-apptainer build diann-<ver>.sif docker-daemon://<image>:<tag>
-# 2b) without a daemon (typical HPC workflow): save on the Docker machine,
-#     copy the tar over, then:
-apptainer build diann-<ver>.sif docker-archive://diann-<ver>.tar
-```
-
-### Route B: minimal Dockerfile (adapted from issue #1202)
-
-When you need a custom image and no `make-docker.sh` is available —
-ubuntu:22.04 + official Linux zip + **`ENV PATH` including the DIA-NN binary
-directory** (the GUI invokes `diann-linux` without an absolute path, so PATH is
-required):
-
-```dockerfile
-FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y --no-install-recommends         wget unzip libgomp1 locales && rm -rf /var/lib/apt/lists/*
-ARG DIANN_VER=2.3.2
-RUN wget -q https://github.com/vdemichev/DiaNN/releases/download/<rel>/DIA-NN-${DIANN_VER}.Linux.zip     && unzip DIA-NN-${DIANN_VER}.Linux.zip -d /opt/diann     && rm DIA-NN-${DIANN_VER}.Linux.zip
-ENV PATH=/opt/diann/DIA-NN-${DIANN_VER}.Linux:$PATH
-```
-
-```bash
-docker build -t diann:<ver> . && docker save -o diann-<ver>.tar diann:<ver>
-apptainer build diann-<ver>.sif docker-archive://diann-<ver>.tar
-```
-
-### Verify, place, and let the GUI identify it
-
-```bash
-apptainer exec diann-<ver>.sif diann-linux --version   # must print DIA-NN <ver> …
-```
-
-Put the `.sif` on storage visible to the compute nodes (shared filesystem,
-absolute paths), add its directory to `SIF_DIRS` — **any file name works**
-(`image.sif`, `diann_latest.sif`, …): since v1.13 the GUI scans all `*.sif`
-and reads the real version from inside the container (cached per
-size+mtime). Multiple versions coexist side by side; the dropdown sorts them
-numerically (2.10.0 before 2.9.1) and preselects the highest identified one.
+1. the DIA-NN binary directory must be **inside the container's `PATH`** — the
+   GUI invokes `diann-linux` as a bare command; without PATH the job fails with
+   "容器内找不到 diann-linux";
+2. verify after building: `apptainer exec diann-<ver>.sif diann-linux --version`
+   must print `DIA-NN <ver> …`;
+3. put the `.sif` on storage visible to the compute nodes and add its directory
+   to `SIF_DIRS` — **any file name works**: since v1.13 the GUI scans all
+   `*.sif`, reads the real version from inside the container (cached per
+   size+mtime), sorts numerically (2.10.0 before 2.9.1) and preselects the
+   highest identified image.
 
 Runtime notes: apptainer must be installed setuid-root (`.deb`) or provided as
 an admin-built conda env; the GUI node and the compute nodes must both see it.
 If the compute nodes cannot, point `APPTAINER_PATHS` at them — the generated
 job script already falls back `APPTAINER_PATHS` → `PATH` → `module load` →
-`singularity`. Version discipline: when you upgrade DIA-NN, build a new `.sif`
-and re-run a small-sample regression before switching production data.
-
-Do **not** redistribute the built `.sif` (or any DIA-NN binary); each user
-builds their own. The Dockerfiles/scripts above are instructions only and
-contain no DIA-NN code.
+`singularity`. Do **not** redistribute the built `.sif` (or any DIA-NN
+binary); each user builds their own.
 
 ## Running without Slurm (local mode)
 

@@ -773,12 +773,11 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 
 ### 10.9 镜像构建 / 容器内无 diann-linux / 计算节点无 apptainer / 版本未识别
 
-- **怎么构建 .sif**：见 README「构建 DIA-NN 容器镜像」章节（官方 make-docker.sh
-  或 issue #1202 Dockerfile → docker → apptainer build；文件名任意，构建后放入
-  SIF_DIRS，GUI 会自动识别版本）。
-- **识别报「容器内找不到 diann-linux」**：镜像没把 DIA-NN 二进制目录加进 PATH
-  （Dockerfile 缺 `ENV PATH=/opt/diann/...:$PATH`）——按 README 路线 B 补上 PATH
-  重新构建。
+- **怎么构建 .sif**：按 DIA-NN 官方说明自行构建（官方仓库 README 与 release
+  附带的构建脚本、issue #1202 社区 Dockerfile 讨论——本项目不提供构建脚本/
+  Dockerfile）；构建后放入 SIF_DIRS（文件名任意），GUI 会自动识别版本。
+- **识别报「容器内找不到 diann-linux」**：镜像没把 DIA-NN 二进制目录加进容器内
+  `PATH`——重新构建镜像，把二进制目录加入 PATH。
 - **计算节点看不到 apptainer**：作业脚本自带回退链 `APPTAINER_PATHS` → `PATH` →
   `module load` → `singularity`；把计算节点可见的运行时路径配进 `APPTAINER_PATHS`。
 - **版本未识别（不影响提交）**：GUI 节点没有可用 apptainer 时无法在容器内实测

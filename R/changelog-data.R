@@ -15,7 +15,7 @@ CHANGELOG <- list(
     "新增: 本地并发 LOCAL_MAX_JOBS 达上限时给出预计可提交时间 (按运行中作业时限取最早；全无时限时明示未知)；未达上限的提示也显示预计释放时间",
     "新增: 本地作业状态文件损坏自愈——RDS 解析失败自动备份 .corrupt-<时间戳>、写状态日志、界面黄色告警一次性提示 (含 ps -ef | grep local_runner 指引)；序列文件损坏/落后自愈为 max(jobid)+1 防撞号；doctor() 新增只读检查项",
     "改进: doctor() 按重要性重排分组——[0]执行后端 → [1]R → [2]依赖包 (本地模式含执行原语) → [3]apptainer → [4]SIF 镜像 (含识别状态) → [5]其他环境 → [6]Slurm 依赖 (最后)；输出带组标题/状态符号/汇总；返回表新增 group 列 (check/status/detail 不变)",
-    "文档: README 中英新增「构建 DIA-NN 容器镜像 (.sif)」章节 (官方 make-docker.sh 与 issue #1202 Dockerfile 两路线、docker→apptainer build、验证与放置、计算节点注意事项、许可说明)；GUI 不分发 DIA-NN 二进制/镜像，每人自行构建",
+    "文档: README 中英新增「构建 DIA-NN 容器镜像 (.sif)」指引章节——只给官方渠道指针 (官方仓库 README 与 release 附带构建脚本、issue #1202), 不提供构建脚本/Dockerfile, 构建完全由用户自行完成；写明本项目对镜像的硬性要求 (容器内 PATH 含 diann-linux、构建后自验 --version、放入 SIF_DIRS 文件名任意)；GUI 不分发 DIA-NN 二进制/镜像，每人自行构建",
     "文档: 随包参数速查 (inst/docs/DIANN_param_reference.md) 标注来源与版权——DIA-NN 官方文档快照，版权归 DIA-NN 作者，不随 MIT 再发布；新手指南新增两张本地模式截图 (图 3-2/3-3)",
     "删除: legacy 中央 shiny-server 共享账号部署——SHARED_GROUP/组修复、LOCAL_ALLOW_SHARED、工作目录 config.R 与 mail_config.txt 回退、docs/legacy 全部移除；历史实现保留在 central-shiny-server 分支；共享读取请用标准 Unix 组/ACL",
     "测试: SIF 扫描/识别/缓存/数值排序矩阵 (含 2.10.0>2.9.1 与默认选中回归)、本地 ETA/损坏恢复、doctor 分组顺序、UI 契约 (banner/新 id) 全部离线可跑"
