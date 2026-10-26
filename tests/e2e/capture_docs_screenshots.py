@@ -249,7 +249,7 @@ def capture(fx, url):
     opts = Options()
     opts.add_argument("-headless")
     drv = webdriver.Firefox(options=opts)
-    drv.set_window_size(1680, 1600)
+    drv.set_window_size(1680, 2600)   # 整页入镜: 校验与脚本预览 (盒 7) 也在画面内
 
     def body_text():
         try:
@@ -279,6 +279,13 @@ def capture(fx, url):
         drv.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
         drv.execute_script("arguments[0].click();", el)
 
+    def wait_no_toasts(timeout=25):
+        """等 Shiny 通知气泡淡出 (截图不被 toast 遮挡)。"""
+        def gone():
+            el = drv.find_elements(By.ID, "shiny-notification-panel")
+            return not el or not el[0].is_displayed() or not el[0].text.strip()
+        wait_until(gone, timeout, interval=0.5)
+
     def go_tab(name):
         link = drv.find_element(By.CSS_SELECTOR, 'a[href="#shiny-tab-%s"]' % name)
         drv.execute_script("arguments[0].click();", link)
@@ -294,7 +301,7 @@ def capture(fx, url):
             "var walk=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);"
             "var n; while(n=walk.nextNode()){"
             "  if(n.nodeValue.indexOf(%r)>=0) n.nodeValue=n.nodeValue.split(%r).join('demo');"
-            "  if(n.nodeValue.indexOf('/share/home/')>=0) n.nodeValue=n.nodeValue.replace(/\/share\/home\/[^ ]*/g,'/home/demo');"
+            "  if(n.nodeValue.indexOf('/share/home/')>=0) n.nodeValue=n.nodeValue.replace(/\\/share\\/home\\/[^ ]*/g,'/home/demo');"
             "}" % (who, who))
         txt = body_text()
         for bad in (who, "/share/home/"):
@@ -348,6 +355,7 @@ def capture(fx, url):
             "校验仍有阻断项: %s" % elem_text("validation_msgs")[:200]
 
         # ---- 匿名化 + 冻结定时器, 截图 1: 提交页 ----
+        wait_no_toasts()
         freeze_and_anonymize()
         drv.execute_script("window.scrollTo(0, 0);")
         time.sleep(0.8)
@@ -365,7 +373,17 @@ def capture(fx, url):
             return "已完成" in elem_text("sacct_table")
         assert wait_until(done, 120, interval=2), \
             "作业未完成: %s" % elem_text("sacct_table")[:160]
-        # 切 tab/刷新会重建 DOM: 再次匿名化后截图 2
+        # 状态一致: 运行队列不再显示该作业 RUNNING (否则同图并存两种状态, 审查 P1-D6)
+        def not_running():
+            click_js("#refresh_q")
+            return "RUNNING" not in elem_text("squeue_output")
+        assert wait_until(not_running, 30, interval=1), \
+            "运行队列仍显示 RUNNING: %s" % elem_text("squeue_output")[:120]
+        # 填充日志面板 (图 3-3 展示 local-<ID>.out 尾部, 不留空面板)
+        click_js("#view_log")
+        # 切 tab/刷新会重建 DOM: 等日志正文出现, 清气泡, 再匿名化后截图 2
+        wait_until(lambda: len(elem_text("log_output")) > 50, 30)
+        wait_no_toasts()
         freeze_and_anonymize()
         drv.execute_script("window.scrollTo(0, 0);")
         time.sleep(0.8)
@@ -379,64 +397,78 @@ def capture(fx, url):
 
 
 def embed_guide(png1, png2):
-    """两图 base64 嵌入新手指南 §3 (图 3-2/3-3), 版本号 v1.13, 既有 11 图哈希不变。"""
+    """两图 base64 嵌入新手指南 §3 末尾 (图 3-2/3-3), 版本号 v1.13。
+    幂等: 插入块与 §8.1 引用都用 <!-- v1.13-local-mode:start/end --> 注释包裹,
+    重跑先按标记整块移除 (审查 P1-D1: 旧实现幂等清理只删 figure, h3/p/bullet
+    逐次累积)。既有 11 图哈希回归。"""
     guide = REPO / "docs" / "DIANN_GUI_新手指南.html"
     src = guide.read_text(encoding="utf-8")
 
-    # 幂等: 已嵌入过则先移除上一版两张 (按图号 3-2/3-3 识别), 再取基线哈希。
-    # 用 <figure>.*?</figure> 整块过滤 (figure 不嵌套), 不吞锚点缩进。
+    # 幂等清理: 注释标记之间的内容整块移除
+    src = re.sub(r'<!-- v1\.13-local-mode:start -->.*?<!-- v1\.13-local-mode:end -->\n?', '', src, flags=re.S)
+    src = re.sub(r'\n?[ \t]*<!-- v1\.13-local-mode-ref:start -->.*?<!-- v1\.13-local-mode-ref:end -->', '', src, flags=re.S)
+    # 兼容一次性清理旧版无标记残留 (figure 对 / h3+p / bullet)
+    src = re.sub(r'[ \t]*<h3>两种执行模式的界面差异（v1\.13）</h3>\s*<p>.*?</p>\s*\n?', '', src, flags=re.S)
     src = re.sub(
-        r'[ \t]*<figure>(?:(?!</figure>).)*?<figcaption><b>图 3-[23]</b>(?:(?!</figure>).)*?</figure>[ \t]*\n?',
-        lambda m: '' if 'alt="本地模式' in m.group(0) else m.group(0),
-        src, flags=re.S)
+        r'[ \t]*<figure>\s*<img src="data:image/png;base64,[A-Za-z0-9+/=]+" alt="本地模式提交页[^"]*">\s*'
+        r'<figcaption><b>图 3-2</b>.*?</figcaption>\s*</figure>\s*'
+        r'<figure>\s*<img src="data:image/png;base64,[A-Za-z0-9+/=]+" alt="本地模式任务队列[^"]*">\s*'
+        r'<figcaption><b>图 3-3</b>.*?</figcaption>\s*</figure>\s*\n?', '', src, flags=re.S)
+    src = re.sub(r'\n?[ \t]*<li>两种模式的任务队列页样例见<a href="#s3">第 3 节</a>图 3-3[^<]*（[^<]*）。</li>', '', src)
+
     old_hashes = [hashlib.sha1(m.encode()).hexdigest()
                   for m in re.findall(r'data:image/png;base64,([A-Za-z0-9+/=]+)', src)]
     assert len(old_hashes) == 11, "期望既有 11 张图, 实际 %d" % len(old_hashes)
 
     b64_1 = base64.b64encode(Path(png1).read_bytes()).decode()
     b64_2 = base64.b64encode(Path(png2).read_bytes()).decode()
-
-    anchor = '  <h2><span class="sec-no">4</span>第一次搜库 · 手把手</h2>'
+    anchor = '<section id="s4">'
     assert anchor in src
     block = (
+        '<!-- v1.13-local-mode:start -->\n'
         '  <h3>两种执行模式的界面差异（v1.13）</h3>\n'
-        '  <p>v1.12 起执行后端可选：有 Slurm 时作业提交到集群队列（<code>slurm-&lt;ID&gt;.out</code>）；'
-        '无 Slurm 的主机自动切换为<b>本地单机</b>模式（<code>local-&lt;ID&gt;.out</code>，关闭浏览器不影响作业）。'
-        '页面顶部与标题栏会明确标注当前模式，提交页/任务队列页各有一条常驻提示条；'
-        'sif 镜像下拉按「扫描全部 <code>*.sif</code> + 容器内实测版本」工作，文件名任意，未识别的镜像选中后会自动识别。</p>\n'
+        '  <p>v1.12 起执行后端可选：有 Slurm 时作业提交到集群队列（<code>slurm-&lt;ID&gt;.out</code>）；\n'
+        '  无 Slurm 的主机自动切换为<b>本地单机</b>模式（<code>local-&lt;ID&gt;.out</code>，关闭浏览器不影响作业）。\n'
+        '  页面顶部与标题栏会明确标注当前模式，提交页/任务队列页各有一条常驻提示条。sif 镜像下拉按\n'
+        '  「扫描全部 <code>*.sif</code> + 容器内实测版本」工作：文件名任意，页面加载不识别（不跑容器），\n'
+        '  切换镜像或点「识别所有未识别镜像」时才实测（结果缓存，按 size+mtime 失效）。</p>\n'
         '  <figure>\n'
-        '    <img src="data:image/png;base64,%s" alt="本地模式提交页（顶部绿色提示条「当前执行后端：本地单机」、镜像 image.sif 已识别 v2.7.0、校验通过与脚本预览）">\n'
-        '    <figcaption><b>图 3-2</b> 本地单机模式「提交分析」页：顶部模式提示条、镜像识别回显（文件名 image.sif 也能识别出 v2.7.0）、校验与脚本预览</figcaption>\n'
+        '    <img src="data:image/png;base64,%s" alt="本地模式提交页（顶部模式提示条、镜像 image.sif 识别 v2.7.0、校验与脚本预览）">\n'
+        '    <figcaption><b>图 3-2</b> 本地单机模式「提交分析」页：顶部模式提示条、镜像识别回显（文件名 image.sif 也能识别出 v2.7.0）、提交校验与脚本预览</figcaption>\n'
         '  </figure>\n'
         '  <figure>\n'
-        '    <img src="data:image/png;base64,%s" alt="本地模式任务队列页（运行中→已完成、本地运行任务/近期历史、运行日志查看）">\n'
-        '    <figcaption><b>图 3-3</b> 本地单机模式「任务队列」页：作业 运行中→已完成、本地历史与日志；无 Slurm 时没有节点资源表与排队列</figcaption>\n'
-        '  </figure>\n' % (b64_1, b64_2)
+        '    <img src="data:image/png;base64,%s" alt="本地模式任务队列页（已完成 + 本地历史/日志面板）">\n'
+        '    <figcaption><b>图 3-3</b> 本地单机模式「任务队列」页：作业完成后的本地历史与运行日志；无 Slurm 时没有节点资源表与排队列</figcaption>\n'
+        '  </figure>\n'
+        '  <!-- v1.13-local-mode:end -->\n' % (b64_1, b64_2)
     )
     src = src.replace(anchor, block + anchor)
 
-    # 顶部版本说明与品牌
-    src = src.replace('<b>版本说明（v1.12）</b>', '<b>版本说明（v1.13）</b>')
-    src = src.replace('本指南截图仍为 v1.6 界面，请以<b>面板名称</b>为准；操作步骤与按钮文字不变。',
-                      'v1.13 起 sif 镜像下拉扫描全部 <code>*.sif</code>（文件名任意）并在容器内实测版本（见 3.x 末尾两张截图）。本指南前 11 张截图仍为 v1.6 界面，请以<b>面板名称</b>为准；操作步骤与按钮文字不变。')
-    src = src.replace('<span>新手指南 · v1.12</span>', '<span>新手指南 · v1.13</span>')
-    # §8.1 引用新图
-    src = src.replace(
-        '  <h3>8.1 看进度</h3>\n  <ul>',
-        '  <h3>8.1 看进度</h3>\n  <ul>'
-        '\n    <li>两种模式的任务队列页样例见<a href="#s3">第 3 节</a>图 3-3（本地单机：运行中→已完成、本地历史与日志）。</li>')
+    h3_anchor = '  <h3>8.1 看进度</h3>\n  <ul>'
+    h3_new = ('  <h3>8.1 看进度</h3>\n  <ul>\n'
+              '    <!-- v1.13-local-mode-ref:start -->\n'
+              '    <li>两种模式的任务队列页样例见<a href="#s3">第 3 节</a>图 3-3（本地单机：已完成、本地历史与日志）。</li>\n'
+              '    <!-- v1.13-local-mode-ref:end -->')
+    src = src.replace(h3_anchor, h3_new)
+
+    # 结构断言: h3/bullet 各恰 1 次, 且小节位于 section s3 (审查 P1-D1)
+    assert src.count('两种执行模式的界面差异') == 1
+    assert src.count('第 3 节</a>图 3-3') == 1
+    i = src.find('两种执行模式的界面差异')
+    secs = re.findall(r'<section id="(s\d)"', src[:i])
+    assert secs[-1] == "s3", "v1.13 小节应在 section s3 内, 实际 %s" % secs[-1]
 
     # 哈希回归: 既有 11 图逐个仍在
     new_hashes = [hashlib.sha1(m.encode()).hexdigest()
                   for m in re.findall(r'data:image/png;base64,([A-Za-z0-9+/=]+)', src)]
-    for h in old_hashes:
-        assert h in new_hashes, "既有截图哈希发生变化!"
+    new_imgs = {hashlib.sha1(b64_1.encode()).hexdigest(), hashlib.sha1(b64_2.encode()).hexdigest()}
+    kept = [x for x in new_hashes if x not in new_imgs]
+    assert len(kept) == 11 and all(h in kept for h in old_hashes), "既有截图哈希发生变化!"
 
     guide.write_text(src, encoding="utf-8")
-    # HTML 可解析性
     from html.parser import HTMLParser
     HTMLParser().feed(guide.read_text(encoding="utf-8"))
-    log("新手指南已嵌入图 3-2/3-3 (共 %d 张内嵌图), HTML 可解析" % len(new_hashes))
+    log("新手指南已嵌入图 3-2/3-3 (§3 末尾, 共 %d 张内嵌图), HTML 可解析" % len(new_hashes))
 
 
 def main():
