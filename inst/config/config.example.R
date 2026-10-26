@@ -34,6 +34,40 @@
 # 留空 = 无预选 (想要 cRAP 扣除时, 自行下载一份 cRAP FASTA 并在此指向它)。
 # CON_FASTA <- "DIANN_GUI_USER_HOME/data/fasta/cRAP_contaminants.fasta"
 
+# ---- 执行后端 (v1.12): Slurm 可选 / 本地单机 -------------------------------
+
+# 作业在哪儿执行 (v1.12 起 Slurm 只是可选后端之一):
+#   "auto"  (默认) 自动检测: PATH 上有 sbatch 就用 Slurm 集群, 否则在本机执行;
+#   "slurm" 强制 Slurm 集群 (GUI 与计算节点需共享文件系统);
+#   "local" 强制本地单机: 用 setsid+nohup 在当前主机派生进程 (不需要 Slurm),
+#           日志为 local-<ID>.out, 状态/取消/邮件/月报与 Slurm 模式同一套语义。
+# 优先级: 环境变量 DIANN_GUI_EXEC_BACKEND (导出后无需改此文件) > 本文件 > "auto"。
+# EXEC_BACKEND <- "auto"
+
+# 安全阀 (仅 auto 模式生效): 本机检测到 Slurm 痕迹 (squeue/sacct/sinfo 或 /etc/slurm)
+# 但 PATH 上没有 sbatch 时, 拒绝静默回退到本地执行 —— 防止在 HPC 登录节点上直接
+# 跑计算任务。确认本机就是单机服务器后可设为 FALSE 关闭该保护。
+# LOCAL_REQUIRE_EXCLUSIVE_HOST <- TRUE
+
+# legacy 中央 shiny-server 部署 (所有用户共用一个 GUI 运行账号) 是否允许本地执行:
+# FALSE (默认) = 拒绝 (共享账号执行会破坏每用户隔离), TRUE 才放行并给出警告。
+# 每用户自托管 (library(diann.gui) + run_app()) 不需要改这项。
+# LOCAL_ALLOW_SHARED <- FALSE
+
+# ---- 本地执行参数 (EXEC_BACKEND = "local") --------------------------------
+
+# 本地作业 nice 值 (默认 10)。
+# LOCAL_NICE <- 10
+
+# 超时后先 TERM, 等该秒数再 KILL (默认 30)。
+# LOCAL_TIMEOUT_GRACE <- 30
+
+# 本地并发上限: 0 = 不限; 达到上限时提交直接报错提示 (不排队等待)。
+# LOCAL_MAX_JOBS <- 0
+
+# 提交前用 /proc/meminfo 对比申请内存, 不足时只警告不阻断 (默认 TRUE)。
+# LOCAL_MEM_ADVISORY <- TRUE
+
 # ---- Slurm ----------------------------------------------------------------
 
 # 提交表单提供的分区; 第一个是默认值。
