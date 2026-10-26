@@ -20,8 +20,8 @@ test_that("run_app(app_only = TRUE) 在任意工作目录返回 shiny.appobj", {
 
   app <- diann.gui::run_app(app_only = TRUE)
   expect_s3_class(app, "shiny.appobj")
-  # 包内资源从 system.file 读取, 不依赖 getwd()
-  expect_true(nzchar(diann.gui:::param_doc_path()))
+  # v1.13 起参数文档快照不随包分发 (许可归属 DIA-NN 作者): 中立 cwd 下无文档是预期
+  expect_equal(diann.gui:::param_doc_path(), "")
   # 状态目录落在本次 HOME 下 (每用户隔离)
   expect_true(startsWith(diann.gui::cfg_get("NOTIFY_STATE"), td))
 })

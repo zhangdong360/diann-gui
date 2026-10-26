@@ -1396,7 +1396,7 @@ server <- function(input, output, session) {
       pd <- cfg_get("PARAM_DOC")
       if (!nz_str(pd)) pd <- param_doc_path()
       sprintf("来源: %s (共 %d 个参数)\n官方文档: https://github.com/vdemichev/DiaNN", pd, nrow(cfg_get("param_ref")))
-    } else "未找到参数说明文档 (inst/docs/DIANN_param_reference.md)"
+    } else "未找到参数说明文档 — 请自行从 DIA-NN 官方仓库获取命令行参考, 存为工作目录下的 DIANN_param_reference.md (v1.13 起不再随包分发)"
   })
   output$param_ref <- renderUI({
     if (is.null(cfg_get("param_ref"))) return(NULL)
