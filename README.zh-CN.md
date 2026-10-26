@@ -88,6 +88,12 @@ watcher 的 pid/日志，以及 `~/.diann_gui/` 下的 apptainer 探测缓存。
 - **邮件通知（可选）** —— 每用户独立守护进程 `diann.gui::watch_daemon()`（自动拉起）
   轮询执行后端（Slurm 队列或本地作业状态文件），作业结束后经 `mail_notify.py`
   发送完成邮件；适用计算节点无出网的集群。
+- **结果分析（v1.14）** —— 「结果分析」页直接消费 DIA-NN `--matrices` 导出的蛋白矩阵
+  （pg_matrix）：预处理（污染/反库剔除、低检出过滤、log2、LoD/KNN/seqKNN 插补、
+  样本中位数归一化、可选 ComBat 去批次）→ 9 张 QC 图 → limma 差异分析
+  （2 组单对比；≥3 组自动全局 F 检验 + 全部两两对比）→ GO/KEGG 富集 → 一键生成
+  自包含 HTML 报告。任务队列页可把已完成作业的矩阵一键带入；也可用
+  `run_app(analysis_only = TRUE)` 在无容器环境单独启动分析页。
 - **参数速查** —— 应用内可搜索的 DIA-NN 旗标参考手册。
 
 ## 架构
@@ -103,7 +109,14 @@ flowchart LR
     LP --> DN
     SS -->|"自动拉起"| W["diann.gui::watch_daemon()"]
     W -->|"轮询队列/本地状态；解析 slurm-&lt;id&gt;.out / local-&lt;id&gt;.out"| M["mail_notify.py → SMTP"]
+    DN -->|"*matrix*.tsv (pg_matrix)"| AN["结果分析模块（v1.14）<br/>预处理 → QC 9 图 → limma → GO/KEGG"]
+    AN --> RPT["自包含 HTML 报告<br/>+ analysis_params.json"]
+    Q -.->|"任务队列页一键带入"| AN
 ```
+
+> 结果分析依赖（ggplot2 / limma / clusterProfiler 等）为可选包：不安装不影响
+> 提交与监控主链，进入分析页时会给出可复制的安装命令；`doctor()` 的
+> 「结果分析依赖」组做整体体检。
 
 ## 环境要求
 
@@ -115,6 +128,7 @@ flowchart LR
 | **R** ≥ 4.1 | 装进用户库；依赖随包安装 |
 | **Apptainer 或 Singularity** | 以及一个 DIA-NN 的 `.sif` 镜像（登录节点可以没有 apptainer，GUI 允许填计算节点专用路径）。**.sif 需要 apptainer ≥ 1.0 或 singularity ≥ 3.0**；2.x 只能读 `.simg` |
 | **python3** | 可选，仅邮件通知需要（纯标准库） |
+| 分析依赖（ggplot2/limma 等） | *可选*——仅「结果分析」页需要；缺失时该页给出安装命令，不影响提交/监控 |
 
 ## 配置项（`~/.diann_gui/config.R`）
 
@@ -232,6 +246,46 @@ EXEC_BACKEND <- "local"
 
 本版不做：原生二进制（不用容器）、云执行器、Windows、PBS/LSF。本地模式仅支持
 Linux，且和 Slurm 模式一样仍然需要 Apptainer/Singularity 与 `.sif` 镜像。
+
+## 结果分析（下游蛋白矩阵分析，v1.14）
+
+「结果分析」页把 DIA 数据的下游统计搬进同一个 GUI：输入是 DIA-NN
+`--matrices` 导出的**蛋白水平矩阵**（`*pg_matrix*.tsv`，Spectronaut `PG.*`
+矩阵亦可），输出是可发表的 HTML 报告。
+
+**工作流**（页内 6 个子页签）：
+
+1. **① 数据与分组** —— 填写矩阵路径（服务端共享存储直接读取，不走上传）；
+   自动识别注释列与样本列、自动推断分组，可编辑分组表双击修正，
+   支持 Excel 粘贴批量填入；可选 ComBat 去批次（批次表粘贴/按顺序生成）。
+2. **② 预处理** —— 处理明细与告警实时刷新；缺失机制诊断图辅助判断
+   MAR/MNAR，从而选择插补方法。
+3. **③ QC 可视化** —— 检出数、缺失率、PCA、样本相关性热图、层次聚类、
+   组内 CV 分布与重复性箱线图、归一化前后对比；可打包导出 SVG。
+4. **④ 差异分析** —— limma 经验贝叶斯；2 组单对比，≥3 组自动全局 F 检验 +
+   全部两两对比（火山图/数量统计/Z-score 热图/关键蛋白箱线/结果表）。
+5. **⑤ 功能富集** —— GO (BP/MF/CC)；KEGG 数据源可选**本地 KEGG.db**
+   （默认，与 CLI 版一致；该包已被 Bioconductor 移除，缺失时自动降级为仅 GO）
+   或**在线 enrichKEGG**（需联网，物种更全）。
+6. **⑥ 生成报告** —— 生成 `analysis_report_<时间戳>/`（report.html、data/
+   图形与结果表、assets、`analysis_params.json` 参数快照、`08_summary_report.md`），
+   页面内 iframe 预览、新窗口打开、zip 下载。
+
+**与运行管理页的闭环**：任务队列页的「结果分析入口」从提交记录里选定已完成
+作业，自动发现其输出目录内的蛋白矩阵（`pg_matrix` 优先），点「进入下游分析」
+即带入路径——raw → DIA-NN → 矩阵 → 统计 → 报告全程不出浏览器。
+
+**独立启动模式**（无 Slurm/apptainer 的机器）：
+
+```r
+diann.gui::run_app(analysis_only = TRUE)
+```
+
+**依赖**：结果分析的全部依赖为可选（Suggests + 运行时检查）。QC 层
+（ggplot2/ggrepel/gridExtra/pheatmap/scales/svglite）与差异层（limma/openxlsx）
+较轻；富集层需 clusterProfiler + AnnotationDbi + 物种注释库（org.Hs/Mm/Rn.eg.db，
+按需安装）。缺失时页面顶部与 `doctor()` 给出可复制的安装命令；可编辑分组表
+还需 DT。不装任何分析依赖时，主界面的提交/监控功能完全不受影响。
 
 ## 邮件通知（可选）
 
