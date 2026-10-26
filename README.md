@@ -49,7 +49,7 @@ system-wide installation. The app is just an R package: everything it needs
 - **RStudio "Run App" / `shiny::runApp()`**: the repo root ships an optional
   `app.R` shim (`diann.gui::run_app(app_only = TRUE)`) so both keep working.
   It is not required for normal use — `diann.gui::run_app()` is the entry point.
-- **Embedding / legacy shiny-server**: `run_app(app_only = TRUE)` returns the
+- **Embedding / custom launcher**: `run_app(app_only = TRUE)` returns the
   app object without starting a server.
 - **Per-user settings**: `diann.gui::init_config()` writes
   `~/.diann_gui/config.R` (it auto-detects the execution backend — `slurm` or
@@ -80,8 +80,7 @@ and ID sequence in `~/diann_gui_local_jobs.rds` and `~/diann_gui_local_seq`
   v1.11) and runs locally otherwise. Both backends use the **same** generated
   DIA-NN command and the **same** `.sif` image — only the executor differs.
   Safety valves: `auto` refuses to fall back to local execution when Slurm
-  traces are present but `sbatch` is missing (login-node protection), and legacy
-  central shiny-server deployments deny local execution by default.
+  traces are present but `sbatch` is missing (login-node protection).
 - **apptainer runtime selection** — the GUI auto-detects `apptainer` /
   `singularity` binaries (PATH, `APPTAINER_PATHS`, common install locations,
   conda envs), resolves each version and lists them as candidates, like the
@@ -164,10 +163,8 @@ the local backend. `EXEC_BACKEND` can be overridden per launch with the
 | `APPTAINER_STRICT_CHECK` | `TRUE` = block submit when the selected runtime is not runnable on the GUI node | `FALSE` (warn only) |
 | `APPTAINER_MODULE_FALLBACK` | Environment module loaded as a fallback | *(empty — no module)* |
 | `BIND_PATHS` | Host paths bind-mounted into the container (`--bind`) | *(empty)* |
-| `SHARED_GROUP` | Legacy shared-output group repair (multi-account shared instance) | *(empty — disabled)* |
 | `EXEC_BACKEND` | Execution backend: `"auto"` (detect), `"slurm"` or `"local"` | `"auto"` |
 | `LOCAL_REQUIRE_EXCLUSIVE_HOST` | `auto`-mode safety valve: refuse to fall back to local execution when Slurm traces are detected but `sbatch` is missing (HPC login-node protection) | `TRUE` |
-| `LOCAL_ALLOW_SHARED` | Allow local execution in legacy central shiny-server deployments (shared run account) | `FALSE` |
 | `LOCAL_NICE` | `nice` value applied to local job processes | `10` |
 | `LOCAL_TIMEOUT_GRACE` | Seconds between SIGTERM and SIGKILL when a local job reaches its time limit | `30` |
 | `LOCAL_MAX_JOBS` | Local concurrency cap: `0` = unlimited; `>0` rejects new submissions once reached (no queueing) | `0` |
@@ -243,9 +240,6 @@ EXEC_BACKEND <- "local"
 # Sys.setenv(DIANN_GUI_EXEC_BACKEND = "local")
 ```
 
-Legacy central shiny-server deployments deny local execution by default (all
-jobs would run as the shared server account); set `LOCAL_ALLOW_SHARED <- TRUE`
-only if you understand that trade-off.
 
 Out of scope in this version: native DIA-NN binaries (no container), cloud
 execution, Windows, and PBS/LSF. Local mode is Linux-only and still requires
@@ -370,21 +364,16 @@ Cron example (first day of each month, for the previous month):
 0 9 1 * *  Rscript -e 'diann.gui::usage_report(month = format(Sys.Date() - 1, "%Y-%m"), out_dir = "/path/to/reports")'
 ```
 
-## Legacy: central shiny-server deployment (not recommended)
+## Removed in v1.13: legacy central shiny-server deployment
 
-One shared instance, all jobs running as the server's `run_as` user — there is
-**no per-user isolation**, and everyone can see the shared notification records.
-Local execution is denied by default in this deployment (every job would run as
-the shared account); `LOCAL_ALLOW_SHARED <- TRUE` overrides that and prints a
-warning. Use it only if per-user installs are impossible. Entry point:
-
-```r
-# app.R in the site directory (needs config.R next to it)
-diann.gui::run_app(app_only = TRUE)
-```
-
-See [`docs/legacy/shiny-server-config.example.R`](docs/legacy/shiny-server-config.example.R)
-for a sanitized site-config example.
+v1.13 removed the legacy central shiny-server shared-account deployment (one
+shared instance, all jobs running as the server's `run_as` user — no per-user
+isolation). Use per-user self-hosting instead: each user installs the package
+into their own library and runs `diann.gui::run_app()` in their own R session;
+jobs are then submitted under their own account. For shared read access to
+output directories, use standard Unix groups/ACL. If you still need the old
+central deployment, use v1.12 or the `central-shiny-server` branch (kept as a
+historical archive).
 
 ## License
 

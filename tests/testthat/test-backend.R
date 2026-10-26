@@ -8,43 +8,39 @@ cmds_all <- c(sbatch = "/usr/bin/sbatch", squeue = "/usr/bin/squeue", sacct = "/
 cmds_none <- stats::setNames(rep("", length(cmds_all)), names(cmds_all))
 
 test_that("detect_exec_backend: auto + sbatch -> slurm; 无 Slurm -> local", {
-  d <- detect_exec_backend(request = "auto", cmds = cmds_all, slurm_traces = FALSE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "auto", cmds = cmds_all, slurm_traces = FALSE)
   expect_equal(d$backend, "slurm")
   expect_true(d$auto)
   expect_length(d$error, 0)
-  d2 <- detect_exec_backend(request = "auto", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  d2 <- detect_exec_backend(request = "auto", cmds = cmds_none, slurm_traces = FALSE)
   expect_equal(d2$backend, "local")
   expect_length(d2$error, 0)
 })
 
 test_that("detect_exec_backend: auto + Slurm 痕迹但 sbatch 缺失 -> 默认拒绝 (HPC 登录节点保护)", {
   cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
-  d <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE)
   expect_equal(d$backend, "local")
   expect_true(length(d$error) >= 1)
   expect_match(d$error[1], "拒绝", fixed = TRUE)
   d2 <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE,
-                            legacy_central = FALSE, require_exclusive = FALSE)
+                            require_exclusive = FALSE)
   expect_length(d2$error, 0)
   expect_true(length(d2$warn) >= 1)
 })
 
-test_that("detect_exec_backend: 显式 local 放行但 warn; legacy 中央部署默认拒绝", {
+test_that("detect_exec_backend: 显式 local 放行但 warn (legacy 中央部署拒绝已随 v1.13 删除)", {
   cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
-  d <- detect_exec_backend(request = "local", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "local", cmds = cmds, slurm_traces = TRUE)
   expect_equal(d$backend, "local")
   expect_length(d$error, 0)
   expect_true(length(d$warn) >= 1)
-  dl <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE, legacy_central = TRUE)
-  expect_true(length(dl$error) >= 1)
-  dl2 <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE,
-                             legacy_central = TRUE, allow_shared = TRUE)
-  expect_length(dl2$error, 0)
-  expect_true(length(dl2$warn) >= 1)
+  # v1.13: 不再有 legacy_central/allow_shared 参数
+  expect_false("legacy_central" %in% names(formals(detect_exec_backend)))
 })
 
 test_that("detect_exec_backend: 显式 slurm 但无 sbatch -> 保留 slurm 并 warn", {
-  d <- detect_exec_backend(request = "slurm", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "slurm", cmds = cmds_none, slurm_traces = FALSE)
   expect_equal(d$backend, "slurm")
   expect_true(length(d$warn) >= 1)
   expect_length(d$error, 0)

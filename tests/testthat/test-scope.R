@@ -94,27 +94,22 @@ test_that("container_visible: $HOME/cwd/BIND_PATHS 之外的路径被报告", {
   expect_equal(container_visible(paste0(home, "X/a.raw"), home), paste0(home, "X/a.raw"))
 })
 
-test_that("resolve_user_config: 工作目录 config.R 仅在 app.R (legacy 标记) 存在时生效", {
+test_that("resolve_user_config: v1.13 起工作目录 config.R 一律不生效 (含 app.R 存在时)", {
   old_home <- Sys.getenv("HOME")
   old_env <- Sys.getenv("DIANN_GUI_CONFIG")
-  empty_home <- file.path(tempdir(), sprintf("cfgdisc_home_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
-  dir.create(empty_home, showWarnings = FALSE, recursive = TRUE)
+  empty_home <- tempfile("cfgdisc_home"); dir.create(empty_home, showWarnings = FALSE, recursive = TRUE)
   Sys.setenv(HOME = empty_home)
   Sys.unsetenv("DIANN_GUI_CONFIG")
   on.exit({ Sys.setenv(HOME = old_home, DIANN_GUI_CONFIG = old_env) }, add = TRUE)
 
-  d <- file.path(tempdir(), sprintf("cfgdisc_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
-  dir.create(d, showWarnings = FALSE, recursive = TRUE)
-  cfg <- file.path(d, "config.R")
-  writeLines('DATA_HOME <- "/from/cwd"', cfg)
-
-  # 无 app.R: 工作目录 config.R 不得劫持用户在 R 里跑的应用
+  d <- tempfile("cfgdisc"); dir.create(d, showWarnings = FALSE)
+  writeLines('DATA_HOME <- "/from/cwd"', file.path(d, "config.R"))
+  # 无 app.R: 不劫持
   expect_equal(resolve_user_config(d), "")
-  # 有 app.R (历史 shiny-server 入口): 认可
+  # 有 app.R (历史 legacy 标记): v1.13 起同样不生效
   file.create(file.path(d, "app.R"))
-  expect_equal(normalizePath(resolve_user_config(d), mustWork = FALSE),
-               normalizePath(cfg, mustWork = FALSE))
-  # 显式命名的 diann_gui_config.R 优先于 legacy config.R
+  expect_equal(resolve_user_config(d), "")
+  # 显式命名的 diann_gui_config.R 仍然生效
   explicit <- file.path(d, "diann_gui_config.R")
   writeLines('DATA_HOME <- "/from/explicit"', explicit)
   expect_equal(normalizePath(resolve_user_config(d), mustWork = FALSE),

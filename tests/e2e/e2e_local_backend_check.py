@@ -161,7 +161,6 @@ def build_fixtures(base, backend="local"):
         "DATA_HOME <- \"%s\"\n"
         "BASE_VOLUMES <- c(Data = \"%s\", Out = \"%s\")\n"
         "MAIL_PYTHON <- \"\"\n"
-        "LOCAL_ALLOW_SHARED <- TRUE\n"
         "RETENTION_DAYS <- 7\n"
         % (backend, fx["bin"], fx["base"] / "sif", fx["sif"], fx["data"], fx["data"], fx["out"]),
         encoding="utf-8")

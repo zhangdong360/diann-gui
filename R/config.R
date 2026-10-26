@@ -4,7 +4,7 @@
 # 配置发现顺序 (resolve_user_config):
 #   1. 环境变量 DIANN_GUI_CONFIG 指定的文件 —— 程序化注入点, 供一键部署使用
 #   2. ~/.diann_gui/config.R —— 每用户设置面 (模板 inst/config/config.example.R)
-#   3. <工作目录>/config.R —— 中央 shiny-server 部署沿用
+#   3. <工作目录>/diann_gui_config.R —— 显式命名的项目级配置
 # 均不存在时使用内置默认 = "用户家目录模式": 数据/输出归当前用户, 作业以本人提交。
 #
 # 访问: cfg_get(key) 读; set_core_const(key, value) 写 (测试与站点注入接口)。
@@ -14,12 +14,12 @@
 
 .cfg <- new.env(parent = emptyenv())
 
-#' 解析配置文件路径 (env → 每用户 → 显式站点文件 → legacy), 找不到返回 ""
+#' 解析配置文件路径 (env → 每用户 → 显式项目文件), 找不到返回 ""
 #'
-#' 顺序: `DIANN_GUI_CONFIG` → `~/.diann_gui/config.R` → `<dir>/diann_gui_config.R`
-#' → 仅当 `<dir>/app.R` 存在 (历史 shiny-server 部署标记) 时 `<dir>/config.R`。
-#' 不再无条件下读工作目录的 `config.R`: 用户在 R / RStudio 里跑 `run_app()` 时,
-#' 项目目录里同名的 `config.R` 会静默劫持配置。
+#' 顺序: `DIANN_GUI_CONFIG` → `~/.diann_gui/config.R` → `<dir>/diann_gui_config.R`。
+#' v1.13 起 `<dir>/config.R` 完全不再被读取 (legacy 中央部署已删除): 用户在
+#' R / RStudio 里跑 `run_app()` 时, 项目目录里同名的 `config.R` 不应劫持配置;
+#' 需要项目级配置请显式命名为 `diann_gui_config.R`。
 #' @export
 resolve_user_config <- function(dir = getwd()) {
   env <- Sys.getenv("DIANN_GUI_CONFIG")
@@ -28,10 +28,6 @@ resolve_user_config <- function(dir = getwd()) {
   if (file.exists(user_cfg)) return(user_cfg)
   explicit <- file.path(dir, "diann_gui_config.R")
   if (file.exists(explicit)) return(normalizePath(explicit, mustWork = FALSE))
-  legacy <- file.path(dir, "config.R")
-  if (file.exists(file.path(dir, "app.R")) && file.exists(legacy)) {
-    return(normalizePath(legacy, mustWork = FALSE))
-  }
   ""
 }
 
@@ -59,10 +55,10 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     scratch <- new.env(parent = baseenv())
     source(file, local = scratch)
     for (k in c("SIF_DIRS", "DEFAULT_SIF", "DATA_HOME", "BASE_VOLUMES", "CON_FASTA",
-                "SHARED_GROUP", "SLURM_PARTITIONS", "SLURM_EXTRA_ARGS", "APPTAINER_PATHS",
+                "SLURM_PARTITIONS", "SLURM_EXTRA_ARGS", "APPTAINER_PATHS",
                 "APPTAINER_MODULE_FALLBACK", "BIND_PATHS", "MAIL_PYTHON",
                 "DEFAULT_APPTAINER", "APPTAINER_STRICT_CHECK", "RETENTION_DAYS",
-                "EXEC_BACKEND", "LOCAL_REQUIRE_EXCLUSIVE_HOST", "LOCAL_ALLOW_SHARED",
+                "EXEC_BACKEND", "LOCAL_REQUIRE_EXCLUSIVE_HOST",
                 "LOCAL_NICE", "LOCAL_TIMEOUT_GRACE", "LOCAL_MAX_JOBS", "LOCAL_MEM_ADVISORY")) {
       if (exists(k, envir = scratch, inherits = FALSE)) {
         assign(k, get(k, envir = scratch, inherits = FALSE), envir = .cfg)
@@ -82,7 +78,6 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     .cfg$BASE_VOLUMES <- c(.cfg$BASE_VOLUMES, setNames(extra, paste0("Extra", seq_along(extra))))
   }
   if (is.null(.cfg$CON_FASTA)) .cfg$CON_FASTA <- ""
-  if (is.null(.cfg$SHARED_GROUP)) .cfg$SHARED_GROUP <- ""
   if (is.null(.cfg$SLURM_PARTITIONS)) .cfg$SLURM_PARTITIONS <- c("compute")
   if (is.null(.cfg$APPTAINER_PATHS)) .cfg$APPTAINER_PATHS <- character(0)
   if (is.null(.cfg$APPTAINER_MODULE_FALLBACK)) .cfg$APPTAINER_MODULE_FALLBACK <- ""
@@ -97,7 +92,6 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   # 安全阀见 R/backend.R 的 detect_exec_backend() 与 run_app() 的启动检查。
   if (is.null(.cfg$EXEC_BACKEND)) .cfg$EXEC_BACKEND <- "auto"
   if (is.null(.cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST)) .cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST <- TRUE
-  if (is.null(.cfg$LOCAL_ALLOW_SHARED)) .cfg$LOCAL_ALLOW_SHARED <- FALSE
   if (is.null(.cfg$LOCAL_NICE) || !is.finite(.cfg$LOCAL_NICE)) .cfg$LOCAL_NICE <- 10L
   if (is.null(.cfg$LOCAL_TIMEOUT_GRACE) || !is.finite(.cfg$LOCAL_TIMEOUT_GRACE)) .cfg$LOCAL_TIMEOUT_GRACE <- 30L
   if (is.null(.cfg$LOCAL_MAX_JOBS) || !is.finite(.cfg$LOCAL_MAX_JOBS)) .cfg$LOCAL_MAX_JOBS <- 0L
@@ -111,10 +105,7 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     if (nzchar(env) && file.exists(env)) return(env)
     user_mc <- file.path(path.expand("~"), ".diann_gui", "mail_config.txt")
     if (file.exists(user_mc)) return(user_mc)
-    # legacy: 仅历史 shiny-server 部署目录 (有 app.R 标记) 才读同目录 mail_config.txt
-    legacy <- file.path(getwd(), "mail_config.txt")
-    if (file.exists(file.path(getwd(), "app.R")) && file.exists(legacy)) return(legacy)
-    user_mc  # 默认返回每用户路径 (用于"未找到"提示)
+    user_mc  # 默认返回每用户路径 (v1.13 起不再读工作目录 mail_config.txt)
   })
   .cfg$MAIL_ENABLED <- nzchar(.cfg$MAIL_PYTHON) && file.exists(.cfg$MAIL_CONF)
 
@@ -131,11 +122,9 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   # 真正的安全拦截在 run_app() 里的 backend_startup_check(): 普通函数/测试调用
   # diann_load_config() 时不应直接报错 (否则单测与 doctor 无法离线运行)。
   .cfg$EXEC_BACKEND_INFO <- tryCatch(
-    detect_exec_backend(
-      require_exclusive = isTRUE(.cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST),
-      allow_shared = isTRUE(.cfg$LOCAL_ALLOW_SHARED)),
+    detect_exec_backend(require_exclusive = isTRUE(.cfg$LOCAL_REQUIRE_EXCLUSIVE_HOST)),
     error = function(e) list(request = "auto", backend = "local", auto = TRUE,
-                             slurm_available = FALSE, traces = FALSE, legacy_central = FALSE,
+                             slurm_available = FALSE, traces = FALSE,
                              warn = conditionMessage(e), error = character(0)))
   .cfg$EXEC_BACKEND_RESOLVED <- .cfg$EXEC_BACKEND_INFO$backend
 

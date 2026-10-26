@@ -25,7 +25,7 @@ run_app <- function(port = NULL, host = "127.0.0.1",
                     config_file = NULL, app_only = FALSE) {
   diann_load_config(config_file)
 
-  # 执行后端 (v1.12): auto 检测 + 安全防护 (HPC 登录节点 / legacy 中央部署)。
+  # 执行后端 (v1.12): auto 检测 + 安全防护 (HPC 登录节点拒绝静默回退本地执行)。
   # error 时给出可操作报错并停止启动; warn 打印到控制台。
   backend_startup_check()
   binfo <- backend_info()

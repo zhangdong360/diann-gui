@@ -1090,9 +1090,6 @@ server <- function(input, output, session) {
                          type = "error", duration = NULL)
         return()
       }
-      # dir.create 陷阱的补救: out_dir 祖先链每一层(含新建的中间父目录)恢复
-      # 组diann + 组可写 + setgid, 否则 mass 在中间层就被挡住, 作业也无法写结果
-      fix_shared_dirs(unique(c(p$out_dir, script_dir)))
       # 遗留产物归档: 旧 report/矩阵改名为 *.pre_<时间戳>.tsv, 防止其掩盖本次运行的状态判定
       archived <- archive_stale_artifacts(p$out_dir, p$out_file)
       # 保留策略: 清理过期脚本/rc/项目简介/旧归档 (默认 90 天), 防止输出目录无限增长

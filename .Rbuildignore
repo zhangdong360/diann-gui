@@ -4,7 +4,6 @@
 ^bin$
 ^docs/DIANN_GUI_技术手册\.md$
 ^docs/DIANN_GUI_新手指南\.html$
-^docs/legacy$
 ^README\.zh-CN\.md$
 ^app\.R$
 ^tests/e2e$

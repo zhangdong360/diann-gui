@@ -77,20 +77,17 @@ Slurm 分区、apptainer 候选与 SIF 目录），或手动编辑模板 `inst/c
 | `APPTAINER_MODULE_FALLBACK` | `apptainer/1.4.5` | 脚本里 PATH 也找不到时的 module 回退 |
 | `BIND_PATHS` | `c("/share")` | 绑定进容器的宿主路径（不配则容器内看不到 /share） |
 | `CON_FASTA` | `.../cRAP_contaminants.fasta` | 内置 cRAP 污染物库 |
-| `SHARED_GROUP` | `""` | 仅 legacy 共享部署使用；自托管保持为空 |
 | `RETENTION_DAYS` | `90` | 输出目录脚本/旧归档的保留天数（0=不清理） |
 | `EXEC_BACKEND` | `"auto"` | 执行后端：`"auto"` 自动检测 / `"slurm"` / `"local"`；环境变量 `DIANN_GUI_EXEC_BACKEND` 覆盖 |
 | `LOCAL_REQUIRE_EXCLUSIVE_HOST` | `TRUE` | auto 安全阀：检测到 Slurm 痕迹但无 `sbatch` 时拒绝回退本地（防 HPC 登录节点误跑） |
-| `LOCAL_ALLOW_SHARED` | `FALSE` | legacy 中央 shiny-server 部署下是否允许本地执行（共享账号） |
 | `LOCAL_NICE` | `10` | 本地进程 nice 值 |
 | `LOCAL_TIMEOUT_GRACE` | `30` | 本地作业到时限后 SIGTERM→SIGKILL 等待秒数 |
 | `LOCAL_MAX_JOBS` | `0` | 本地并发上限：0=不限，>0 达到即阻断提交（不排队） |
 | `LOCAL_MEM_ADVISORY` | `TRUE` | 提交前按 `/proc/meminfo` 比对内存（仅警告，本地不可强制） |
 
 配置发现顺序：`DIANN_GUI_CONFIG` 环境变量 → `~/.diann_gui/config.R` →
-`<工作目录>/diann_gui_config.R` →（仅历史 shiny-server 部署，目录内有 `app.R` 时）
-`<工作目录>/config.R`。**不再无条件下读取工作目录的 `config.R`**，避免项目目录里的
-同名文件劫持配置（v1.11 起）。
+`<工作目录>/diann_gui_config.R`。**工作目录的 `config.R` 一律不读取**（v1.13 起，
+legacy 中央部署删除后彻底移除），避免项目目录里的同名文件劫持配置。
 
 `SLURM_*` 常量仅 slurm 后端使用，`LOCAL_*` 常量仅 local 后端使用；换机器时把
 `EXEC_BACKEND` 改回 `"auto"` 即可重新自动检测。`run_app()` 启动时会打印当前执行
@@ -101,11 +98,9 @@ Slurm 分区、apptainer 候选与 SIF 目录），或手动编辑模板 `inst/c
 - **默认（推荐）：每用户自托管**。应用运行在你的账号下，Slurm 作业以你本人提交、
   本地模式的进程也以你本人身份运行，产物归你所有；配置、通知状态、注册表、watcher
   都在你自己的 `$HOME`。同事之间不需要共享组或 ACL。
-- **legacy：中央 shiny-server 部署**（不推荐）。所有作业以 `run_as` 用户运行，
-  需要 `SHARED_GROUP` + setgid + ACL 才能让其他账号读取产出；且所有用户共享
-  同一份通知记录。该部署下 local 后端默认被拒绝（所有作业都会以共享运行账号执行），
-  只有显式 `LOCAL_ALLOW_SHARED <- TRUE` 才放行并给出警告。仅在无法每用户安装时
-  使用，见 README 附录。
+- **（已移除）legacy 中央 shiny-server 部署**：v1.13 起删除——共享 `run_as` 账号
+  破坏每用户隔离。历史实现保留在 `central-shiny-server` 分支；确需中央部署请用
+  v1.12。共享读取产出用标准 Unix 组/ACL。
 
 ---
 
@@ -455,9 +450,8 @@ exit $rc
 Slurm 与本地共用同一入口 `submit_job`，脚本生成后交给后端门面 `backend_submit()`：
 
 1. 校验存在 ✗ 阻断项 → 弹错误通知，拒绝提交。
-2. 创建 `<输出目录>/diann_gui_scripts/`，`fix_shared_dirs()` 修复目录链组权限
-   （2770 + diann 组；仅站点配置了 `SHARED_GROUP` 时生效）；归档上次运行的遗留
-   report/矩阵文件，并按 `RETENTION_DAYS` 清理过期脚本/归档。
+2. 创建 `<输出目录>/diann_gui_scripts/`；归档上次运行的遗留 report/矩阵文件，
+   并按 `RETENTION_DAYS` 清理过期脚本/归档。
 3. 按当前后端写入脚本（+ 可选 `_desc.txt`）。
 4. **Slurm 后端**：`sbatch` 提交，解析 `Submitted batch job N`；失败信息原样返回
    （不抛错）。
@@ -565,7 +559,7 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 起校验按此�
 
 ### 6.3 配置（管理员）
 
-`~/.diann_gui/mail_config.txt`（每用户；历史 shiny-server 部署才读与 `app.R` 同目录的 `mail_config.txt`；模板 `inst/config/mail_config.example.txt`）：
+`~/.diann_gui/mail_config.txt`（每用户；模板 `inst/config/mail_config.example.txt`）：
 
 ```
 smtp_host = smtp.126.com
@@ -723,23 +717,13 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 3. 自测：`python3 mail_notify.py --check`（连通性）、`--self-test`（发测试邮件）、`Rscript -e 'diann.gui::watch_daemon(once = TRUE)'`（手动补发一轮）。
 4. 提交时未填邮箱自然没有邮件（通知按作业记录，不支持事后补填——可让管理员用 `--once` 对指定记录补发）。
 
-### 10.6 「lab 用户无权限」读写 GUI 产出（仅 legacy 共享部署）
-
-自托管模式下产物属于你本人，不存在本节问题。以下排查仅适用于中央 shiny-server 共享身份部署：
-
-排查顺序（按实际案例总结）：
-
-1. **重新登录**：组关系在登录时计算——lab 用户加入 diann 组之前就建立的会话看不到新组；重登录或 `newgrp diann`。
-2. **节点本地 /etc/group 陈旧**：计算节点 node1–node4 使用本地账号表，若 diann 组成员列表过期，跑 `sync_users_to_nodes.sh`（root）强制按 head-node 当前内容刷新。（注：本脚本属本站点运维脚本，不随开源仓库分发。）
-3. **文件系统层**：对出问题的目录 `getfacl` 检查 `group:diann` 条目与 mask。GUI 提交时已自动把输出目录链设为 2770 + diann 组 + 默认 ACL；手动在 GUI 之外建目录则需自行保证。
-
-### 10.7 提交后立刻失败 / 参数报错
+### 10.6 提交后立刻失败 / 参数报错
 
 - 查看预览脚本（提交前就有）与 `.err` 日志。
 - 「额外参数」中的裸旗标（如 `--f` 后没有取值）会让 DIA-NN 直接退出——多为命令导入残留，校验会 ✗ 提示。
 - 版本行为差异见第 11 节；改用其他 sif 版本对比是快速定位手段。
 
-### 10.8 apptainer 识别不到 / 版本不对
+### 10.6 apptainer 识别不到 / 版本不对
 
 1. 先看「1. apptainer 运行环境 → 运行环境自检」：列出每个候选的来源、版本与 module 回退状态。
 2. 登录节点没有 apptainer 是常见且可接受的：手动填写计算节点可见的路径（如
@@ -752,7 +736,7 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 5. `apptainer --version` 能跑但容器起不来：用「深度验证」看 `inspect`/容器内启动的具体报错；
    也可在登录节点直接 `apptainer exec <sif> diann-linux --version` 复现。
 
-### 10.9 无 Slurm 主机：单机模式（本地执行）
+### 10.6 无 Slurm 主机：单机模式（本地执行）
 
 1. **`run_app()` 启动报错「检测到 Slurm 痕迹……但 PATH 上没有 sbatch」**：这是
    `auto` 的安全阀（`LOCAL_REQUIRE_EXCLUSIVE_HOST=TRUE`）——本机像 HPC 登录节点，
@@ -774,8 +758,8 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
    的等待秒数。
 6. **内存/并发**：本地模式内存只做建议检查（提交前比对 `/proc/meminfo`，仅警告），
    不做强制；没有排队机制，可用 `LOCAL_MAX_JOBS` 限制同时运行的本地作业数。
-7. **legacy 中央 shiny-server 部署报「不支持本地执行」**：共享运行账号会破坏
-   每用户隔离，默认拒绝；确需启用才设 `LOCAL_ALLOW_SHARED <- TRUE`（应用会警告）。
+7. **同事读不了你的输出目录**：自托管产物属你本人；请用标准 Unix 组/ACL 授权
+   （`chmod -R g+rX` 或 `setfacl`）——v1.13 起 GUI 不再代做组修复。
 
 ### 10.10 每用户自托管：装包 / 运行 / 端口
 
