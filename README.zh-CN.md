@@ -283,9 +283,9 @@ v1.11 及更早的旧注册表按 Slurm 记录读取。
   新手图文教程，单文件完全离线可用。
 - [`docs/DIANN_GUI_技术手册.md`](docs/DIANN_GUI_技术手册.md) ——
   完整技术手册：架构、控件详解、标准工作流、通知机制、故障排查。
-- [`inst/docs/DIANN_param_reference.md`](inst/docs/DIANN_param_reference.md) ——
-  应用内参数速查页的数据源。该文件是 **DIA-NN 官方仓库文档的快照**（版权归
-  DIA-NN 作者），仅为离线速查随包携带，不随 diann.gui 的 MIT 许可再发布。
+- **应用内参数速查**：v1.13 起 DIA-NN 文档快照不再随包分发（版权归 DIA-NN
+  作者、条款不允许再分发）。如需启用应用内参数速查，请自行从官方仓库获取
+  命令行参考，存为工作目录下的 `DIANN_param_reference.md`——GUI 会自动读取。
 
 ## 测试
 

@@ -337,10 +337,12 @@ v1.11-and-earlier registries are read as Slurm records.
 - [`docs/DIANN_GUI_技术手册.md`](docs/DIANN_GUI_技术手册.md) — full technical
   manual: architecture, every control, workflows, notification internals,
   troubleshooting.
-- [`inst/docs/DIANN_param_reference.md`](inst/docs/DIANN_param_reference.md) —
-  the in-app parameter reference data source. This is a **vendored documentation
-  snapshot from the DIA-NN repository** (copyright DIA-NN authors); included
-  for offline reference only and not relicensed under diann.gui's MIT license.
+- **In-app parameter reference**: since v1.13 the DIA-NN documentation snapshot
+  is no longer bundled (the copyright belongs to the DIA-NN authors and the
+  terms do not permit redistribution). To enable the in-app parameter
+  quick-reference, save the official command-line reference as
+  `DIANN_param_reference.md` in your working directory — the GUI picks it up
+  automatically.
 
 *(Documentation is in Chinese.)*
 
