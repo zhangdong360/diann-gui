@@ -1,7 +1,17 @@
 # ============================================================
 # server.R — 应用服务端逻辑
 # ============================================================
-app_server <- function(input, output, session) {
+
+# v1.14 独立启动模式 (run_app(analysis_only = TRUE)): 只注册结果分析模块,
+# 不初始化执行后端 / apptainer / SIF (下游分析不依赖它们)。
+server_analysis_only <- function(input, output, session) {
+  volumes <- cfg_get("BASE_VOLUMES")[file.exists(unname(cfg_get("BASE_VOLUMES")))]
+  analysis_req <- reactiveVal(NULL)
+  mod_analysis_server("analysis", volumes = volumes, matrix_req = analysis_req)
+}
+
+app_server <- function(analysis_only = FALSE) {
+  if (isTRUE(analysis_only)) return(server_analysis_only)
 server <- function(input, output, session) {
   volumes <- cfg_get("BASE_VOLUMES")[file.exists(unname(cfg_get("BASE_VOLUMES")))]
   user <- Sys.getenv("USER"); if (!nzchar(user)) user <- Sys.info()[["user"]]

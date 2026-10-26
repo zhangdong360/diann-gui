@@ -2,7 +2,7 @@
 # ui.R — 应用界面 (dashboardPage)
 # inputId/DOM/JS 条件为三重契约的一部分 (server + 旗标映射 + e2e), 不得单独改动。
 # ============================================================
-app_ui <- function() {
+app_ui <- function(analysis_only = FALSE) {
 # v1.12 执行后端: UI 在启动时按解析结果条件渲染 (会话期间不切换)。
 # backend_slurm = FALSE 时隐藏分区/集群节点资源等 Slurm 专属控件, 提交按钮与文案改为本地。
 backend <- cfg_get("EXEC_BACKEND_RESOLVED") %||% "slurm"
@@ -27,21 +27,24 @@ sif_req_chain <- HTML(sprintf(paste0(
 ui <- dashboardPage(
   dashboardHeader(title = span(
     "DIA-NN 控制台", tags$small(GUI_VERSION),
-    if (is_local) tags$span(class = "label label-success", "本地单机")
+    if (analysis_only) tags$span(class = "label label-success", "结果分析")
+    else if (is_local) tags$span(class = "label label-success", "本地单机")
     else tags$span(class = "label label-primary", "Slurm 集群"))),
-  dashboardSidebar(
-    sidebarMenu(
-      menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
-      menuItem("任务队列", tabName = "monitor", icon = icon("list-ul")),
-      menuItem("参数速查", tabName = "help", icon = icon("book")),
-      menuItem("更新说明", tabName = "changelog", icon = icon("history"))
-    )
-  ),
-  dashboardBody(
-    tags$head(PARAM_CSS_TAG),
-    tabItems(
+  dashboardSidebar({
+    # shinydashboard 的 sidebarMenu/tabItems 不接受 NULL 元素: 先收集再过滤
+    # (analysis_only 模式下隐藏运行管理相关页签)
+    an_menu_items <- list(
+      if (!analysis_only) menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
+      if (!analysis_only) menuItem("任务队列", tabName = "monitor", icon = icon("list-ul")),
+      menuItem("结果分析", tabName = "downstream", icon = icon("chart-column")),
+      if (!analysis_only) menuItem("参数速查", tabName = "help", icon = icon("book")),
+      if (!analysis_only) menuItem("更新说明", tabName = "changelog", icon = icon("history")))
+    sidebarMenu(.list = an_menu_items[!vapply(an_menu_items, is.null, logical(1))])
+  }),
+  dashboardBody({
+    an_tab_items <- list(
       # ==================== 提交分析 ====================
-      tabItem(tabName = "analysis",
+      if (!analysis_only) tabItem(tabName = "analysis",
         fluidRow(
           column(12, div(id = "backend_banner", class = if (is_local) "alert alert-success" else "alert alert-info",
             style = "margin: 0 0 10px 0; padding: 8px 12px;",
@@ -250,7 +253,7 @@ ui <- dashboardPage(
       ),
 
       # ==================== 任务队列 ====================
-      tabItem(tabName = "monitor",
+      if (!analysis_only) tabItem(tabName = "monitor",
         fluidRow(
           column(12, div(id = "backend_banner_monitor",
                          class = if (is_local) "alert alert-success" else "alert alert-info",
@@ -318,8 +321,13 @@ ui <- dashboardPage(
         )
       ),
 
+      # ==================== 结果分析 (v1.14 下游分析模块) ====================
+      tabItem(tabName = "downstream",
+        analysis_ui("analysis")
+      ),
+
       # ==================== 参数速查 ====================
-      tabItem(tabName = "help",
+      if (!analysis_only) tabItem(tabName = "help",
         box(title = "DIA-NN 命令行参数速查", status = "primary", solidHeader = TRUE, width = 12,
             verbatimTextOutput("doc_path_display"),
             tags$div(class = "scrollbox", uiOutput("param_ref"))
@@ -327,7 +335,7 @@ ui <- dashboardPage(
       ),
 
       # ==================== 更新说明 ====================
-      tabItem(tabName = "changelog",
+      if (!analysis_only) tabItem(tabName = "changelog",
         fluidRow(
           box(title = "DIA-NN 版本说明 (含实测结论)", status = "info", solidHeader = TRUE, width = 12,
               uiOutput("version_notes"),
@@ -349,7 +357,9 @@ ui <- dashboardPage(
         )
       )
     )
-  )
+    tagList(tags$head(PARAM_CSS_TAG),
+            do.call(tabItems, an_tab_items[!vapply(an_tab_items, is.null, logical(1))]))
+  })
 )
 
 # ============================================================
