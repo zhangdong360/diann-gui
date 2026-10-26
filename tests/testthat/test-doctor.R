@@ -129,7 +129,7 @@ test_that("doctor 默认按配置解析结果标注执行后端来源 (自动检
 # ---------- v1.13: 分组顺序 / group 列 / 汇总 / SIF 识别状态 / 只读 ----------
 
 DOCTOR_GROUPS <- c("执行后端", "R 环境", "依赖包", "apptainer 依赖", "SIF 镜像",
-                   "其他环境", "Slurm 依赖")
+                   "其他环境", "结果分析依赖", "Slurm 依赖")
 
 test_that("v1.13: 返回 df 含 group 列且按固定顺序分组; Slurm 组在最后", {
   df <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
@@ -151,7 +151,8 @@ test_that("v1.13: 输出带组标题/符号/汇总行", {
                             mail_conf = "/nonexistent/mail.txt", state_dir = tempdir(),
                             backend = "slurm", deps = character(0))))
   expect_true(any(grepl("^── \\[0\\] 执行后端 ──", out)))
-  expect_true(any(grepl("^── \\[6\\] Slurm 依赖 ──", out)))
+  expect_true(any(grepl("^── \\[7\\] Slurm 依赖 ──", out)))
+  expect_true(any(grepl("^── \\[6\\] 结果分析依赖 ──", out)))
   expect_true(any(grepl("^[[:space:]]*[✓⚠✗–] ", out)))
   # 汇总行走 message (stderr), 单独捕获
   msg <- tryCatch(capture.output(

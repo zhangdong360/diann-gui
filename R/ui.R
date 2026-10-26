@@ -39,7 +39,9 @@ ui <- dashboardPage(
       menuItem("结果分析", tabName = "downstream", icon = icon("chart-column")),
       if (!analysis_only) menuItem("参数速查", tabName = "help", icon = icon("book")),
       if (!analysis_only) menuItem("更新说明", tabName = "changelog", icon = icon("history")))
-    sidebarMenu(.list = an_menu_items[!vapply(an_menu_items, is.null, logical(1))])
+    # id 供 updateTabItems 服务端切页 (结果分析入口联动)
+    sidebarMenu(id = "tabs",
+                .list = an_menu_items[!vapply(an_menu_items, is.null, logical(1))])
   }),
   dashboardBody({
     an_tab_items <- list(
@@ -317,6 +319,21 @@ ui <- dashboardPage(
           box(title = "本会话提交记录", status = "info", solidHeader = TRUE, width = 12,
               tableOutput("jobs_table"),
               verbatimTextOutput("notify_status")
+          )
+        ),
+        fluidRow(
+          box(title = "结果分析入口 (已完成作业的蛋白矩阵)", status = "success",
+              solidHeader = TRUE, width = 12,
+              fluidRow(
+                column(4, selectInput("analysis_job", "已完成作业 (提交记录):",
+                                      choices = "", selected = NULL)),
+                column(8, uiOutput("analysis_matrix_ui"))
+              ),
+              actionButton("goto_analysis", "进入下游分析", icon = icon("chart-column"),
+                           class = "btn-primary"),
+              helpText("从提交记录定位已完成作业输出目录内的 *matrix*.tsv 蛋白矩阵",
+                       "(DIA-NN --matrices 导出; pg_matrix 优先), 一键带入「结果分析」页。",
+                       "提交记录为空或作业较旧时, 请直接在「结果分析」页填写矩阵路径。")
           )
         )
       ),

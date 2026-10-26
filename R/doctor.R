@@ -38,7 +38,8 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
                    sif_dirs = NULL, sif_probe = NULL, mail_conf = NULL, state_dir = NULL,
                    deps = c("shiny", "shinydashboard", "shinyFiles", "htmltools"),
                    backend = NULL, local_cmds = NULL) {
-  groups <- c("执行后端", "R 环境", "依赖包", "apptainer 依赖", "SIF 镜像", "其他环境", "Slurm 依赖")
+  groups <- c("执行后端", "R 环境", "依赖包", "apptainer 依赖", "SIF 镜像", "其他环境",
+              "结果分析依赖", "Slurm 依赖")
   rows <- list()
   add <- function(group, check, status, detail = "") {
     rows[[length(rows) + 1L]] <<- list(group = group, check = check, status = status,
@@ -201,7 +202,25 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   add(groups[6], "运行身份", "ok", sprintf("%s @ %s (HOME=%s)", Sys.info()[["user"]],
                                            Sys.info()[["nodename"]], path.expand("~")))
 
-  # ---- [6] Slurm 依赖 (最后; 本地模式合并 1 行 na) ----
+  # ---- [6.5] 结果分析依赖 (v1.14 可选模块; 缺包不阻断主链, 只给安装命令) ----
+  adf <- tryCatch(an_deps_check(), error = function(e) NULL)
+  if (!is.null(adf) && nrow(adf)) {
+    amiss <- adf[!adf$installed, , drop = FALSE]
+    add(groups[7], "分析依赖包", if (nrow(amiss)) "warn" else "ok",
+        if (nrow(amiss))
+          sprintf("缺失 %d/%d: %s (安装: %s)", nrow(amiss), nrow(adf),
+                  paste(amiss$pkg, collapse = ", "),
+                  paste(an_deps_install_hint(amiss$pkg, amiss$bioc), collapse = "; "))
+        else sprintf("全部就绪 (%d 个)", nrow(adf)))
+    aopt <- an_deps_optional()
+    aopt_miss <- names(aopt)[!vapply(names(aopt), requireNamespace, logical(1), quietly = TRUE)]
+    add(groups[7], "分析可选增强", if (length(aopt_miss)) "warn" else "ok",
+        if (length(aopt_miss))
+          paste(sprintf("%s (%s)", aopt_miss, unname(aopt[aopt_miss])), collapse = "; ")
+        else "全部就绪")
+  }
+
+  # ---- [7] Slurm 依赖 (最后; 本地模式合并 1 行 na) ----
   if (identical(backend, "slurm")) {
     if (is.null(slurm_cmds)) {
       cmds <- c("sbatch", "squeue", "sacct", "sinfo", "scontrol")
@@ -210,18 +229,18 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     for (nm in names(slurm_cmds)) {
       p <- unname(slurm_cmds[[nm]])
       if (!nzchar(p)) {
-        add(groups[7], sprintf("Slurm 命令 %s", nm), "fail", "PATH 上找不到 (不在提交节点?)")
+        add(groups[8], sprintf("Slurm 命令 %s", nm), "fail", "PATH 上找不到 (不在提交节点?)")
       } else if (file.access(p, 1) != 0) {
-        add(groups[7], sprintf("Slurm 命令 %s", nm), "fail", sprintf("%s (文件不可执行)", p))
+        add(groups[8], sprintf("Slurm 命令 %s", nm), "fail", sprintf("%s (文件不可执行)", p))
       } else {
-        add(groups[7], sprintf("Slurm 命令 %s", nm), "ok", p)
+        add(groups[8], sprintf("Slurm 命令 %s", nm), "ok", p)
       }
     }
     if (is.null(partitions)) partitions <- tryCatch(detect_slurm_partitions(), error = function(e) character(0))
-    add(groups[7], "Slurm 分区", if (length(partitions)) "ok" else "warn",
+    add(groups[8], "Slurm 分区", if (length(partitions)) "ok" else "warn",
         if (length(partitions)) paste(partitions, collapse = ", ") else "sinfo 无输出 (未配置 Slurm?)")
   } else {
-    add(groups[7], "Slurm 依赖", "na", "本地模式未启用 (可选后端)")
+    add(groups[8], "Slurm 依赖", "na", "本地模式未启用 (可选后端)")
   }
 
   # ---- 输出: 组标题 + 符号 + 对齐 + 汇总 ----
