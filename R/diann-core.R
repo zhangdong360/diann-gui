@@ -73,22 +73,21 @@ sif_magic_ok <- function(path) {
   }, error = function(e) FALSE)
   isTRUE(ok)
 }
-# 返回 list(exists, size_bytes, readable, sif_magic, ver_from_name):
-# readable/sif_magic 为 NA 表示因前置条件缺失而未检查; ver_from_name 从文件名提取 DIA-NN 版本 (空=提取失败)
+# 返回 list(exists, size_bytes, readable, sif_magic):
+# readable/sif_magic 为 NA 表示因前置条件缺失而未检查。
+# v1.13: 删除 ver_from_name — 版本不再从文件名提取, 只来自容器识别 (见 R/sif.R)。
 sif_check_local <- function(path) {
   p <- trimws(as.character(path %||% ""))
   if (length(p) != 1 || !nzchar(p)) {
-    return(list(exists = FALSE, size_bytes = NA_real_, readable = FALSE, sif_magic = FALSE, ver_from_name = ""))
+    return(list(exists = FALSE, size_bytes = NA_real_, readable = FALSE, sif_magic = FALSE))
   }
   ex <- file.exists(p)
-  res <- list(exists = ex, size_bytes = NA_real_, readable = NA, sif_magic = NA, ver_from_name = "")
+  res <- list(exists = ex, size_bytes = NA_real_, readable = NA, sif_magic = NA)
   if (!ex) return(res)
   fi <- file.info(p)
   res$size_bytes <- if (is.finite(fi$size)) fi$size else NA_real_
   res$readable <- unname(file.access(p, 4)[1]) == 0
   if (isTRUE(res$readable)) res$sif_magic <- sif_magic_ok(p)
-  v <- sub("(?i).*diann[-._ ]?([0-9]+(?:\\.[0-9]+)*).*", "\\1", basename(p), perl = TRUE)
-  res$ver_from_name <- if (nzchar(v) && v != basename(p)) v else ""
   res
 }
 

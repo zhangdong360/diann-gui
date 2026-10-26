@@ -65,6 +65,115 @@ server <- function(input, output, session) {
     else as.character(input$sif_version %||% "")
   })
 
+  # ---------- SIF 版本识别 (v1.13: 版本只来自容器内实测, 结果懒缓存) ----------
+  sif_rows <- reactiveVal(cfg_get("sif_df"))
+
+  # 识别用 apptainer: 当前生效路径优先, 否则候选默认 (apptainer_default 已按 可执行+支持SIF 排序)
+  sif_pick_apptainer <- function() {
+    ap <- effective_apptainer()
+    if (nzchar(ap)) ap else apptainer_default(apt_cands())
+  }
+
+  # 重建下拉选项 (保留仍有效的当前选择)
+  sif_refresh_choices <- function() {
+    merged <- sif_rows()
+    .cfg$sif_df <- merged
+    .cfg$sif_choices <- sif_choice_labels(merged)
+    sel <- effective_sif()
+    if (!nzchar(sel) || !sel %in% .cfg$sif_choices) {
+      idx <- sif_default_index(merged, cfg_get("DEFAULT_SIF"))
+      sel <- if (!is.na(idx)) merged$path[idx] else ""
+    }
+    updateSelectInput(session, "sif_version", choices = .cfg$sif_choices,
+                      selected = if (nzchar(sel)) sel else NULL)
+    invisible(NULL)
+  }
+
+  # 识别单个镜像并落缓存; 返回 sif_identify() 结果
+  sif_identify_path <- function(path) {
+    p <- trimws(as.character(path %||% ""))
+    if (!nzchar(p)) return(list(ok = FALSE, version = "", stage = "", reason = "missing",
+                                message = "未选择镜像", inspect = "", raw_version_lines = character(0)))
+    res <- sif_identify(p, sif_pick_apptainer())
+    fi <- file.info(p)
+    probe <- sif_probe_load()
+    probe <- sif_probe_record(probe, p, unname(fi$size), as.numeric(fi$mtime),
+                              ver = res$version, ok = res$ok,
+                              message = res$message, reason = res$reason)
+    sif_probe_save(probe)
+    sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+    sif_refresh_choices()
+    res
+  }
+
+  # 选中未识别镜像 → 自动识别; 有失败缓存不自动重试 (按钮可重试)
+  observeEvent(input$sif_version, {
+    if (isTRUE(input$use_custom_sif)) return(invisible(NULL))
+    p <- effective_sif()
+    if (!nz_str(p)) return(invisible(NULL))
+    r <- sif_rows()
+    hit <- which(r$path == p)
+    if (length(hit)) {
+      if (isTRUE(r$verified[hit[1]])) return(invisible(NULL))
+      if (nzchar(r$probe_message[hit[1]])) return(invisible(NULL))   # 上次失败: 等手动重试
+    }
+    res <- NULL
+    withProgress(message = "识别镜像版本 (容器内运行 diann-linux)…", value = 0.4,
+                 { res <- sif_identify_path(p) })
+    if (isTRUE(res$ok)) {
+      showNotification(sprintf("已识别: DIA-NN v%s (已缓存)", res$version), type = "message")
+    }
+  })
+
+  observeEvent(input$sif_identify_all, {
+    r <- sif_rows()
+    todo <- r$path[!r$verified]
+    if (!length(todo)) {
+      showNotification("没有未识别的镜像", type = "message")
+      return(invisible(NULL))
+    }
+    ok_n <- 0L; fails <- character(0)
+    withProgress(message = sprintf("识别未识别镜像 0/%d…", length(todo)), value = 0, {
+      for (i in seq_along(todo)) {
+        incProgress(1 / length(todo), message = sprintf("识别未识别镜像 %d/%d…", i, length(todo)))
+        res <- sif_identify_path(todo[i])
+        if (isTRUE(res$ok)) ok_n <- ok_n + 1L
+        else fails <- c(fails, sprintf("%s — %s", basename(todo[i]), substr(res$message, 1, 100)))
+      }
+    })
+    if (length(fails)) {
+      showNotification(HTML(htmltools::htmlEscape(
+        sprintf("识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
+                ok_n, length(fails), paste(fails, collapse = "\n")))),
+        type = "warning", duration = 20)
+    } else {
+      showNotification(sprintf("识别完成: 成功 %d / %d", ok_n, length(todo)), type = "message")
+    }
+  })
+
+  output$sif_version_info <- renderUI({
+    p <- effective_sif()
+    if (!nz_str(p)) return(NULL)
+    r <- sif_rows()
+    hit <- which(r$path == p)
+    if (length(hit) && isTRUE(r$verified[hit[1]])) {
+      tags$div(style = "color:#00a65a;font-weight:600;",
+               sprintf("版本: v%s (已识别, 缓存)", r$ver[hit[1]]))
+    } else if (length(hit) && nzchar(r$probe_message[hit[1]])) {
+      tags$div(style = "color:#dd4b39;",
+               sprintf("版本未识别 — 上次失败: %s (点「识别版本并深度验证」重试)",
+                       substr(r$probe_message[hit[1]], 1, 120)))
+    } else {
+      v <- sif_version_of(p)
+      if (nzchar(v)) {
+        tags$div(style = "color:#00a65a;font-weight:600;", sprintf("版本: v%s (已识别, 缓存)", v))
+      } else {
+        tags$div(style = "color:#e08e0b;",
+                 "版本未识别 — 选中后自动尝试; 也可点「识别版本并深度验证」")
+      }
+    }
+  })
+
   selected_raws <- reactive({
     if (isTRUE(input$use_imported_raws) && length(ov$raws)) ov$raws
     else as.character(parseFilePaths(volumes, input$raw_files)$datapath)
@@ -101,9 +210,9 @@ server <- function(input, output, session) {
     if (!nz_str(p)) {
       if (isTRUE(input$use_custom_sif)) "(未填写自定义路径)" else "未找到可用镜像"
     } else {
-      v <- sif_check_local(p)$ver_from_name
+      v <- sif_version_of(p)
       prefix <- if (isTRUE(input$use_custom_sif)) "(自定义" else "("
-      sprintf("%sv%s) %s", prefix, if (nzchar(v)) v else "?", p)
+      sprintf("%sv%s) %s", prefix, if (nzchar(v)) v else "未识别", p)
     }
   })
   # ---------- apptainer 运行环境 (自动识别候选 → 下拉; 识别不到 → 手动路径) ----------
@@ -319,7 +428,7 @@ server <- function(input, output, session) {
       add_row("ok", sprintf("运行时版本满足 SIF 要求: %s (需 %s)", ver_txt, sif_min_version_text()))
     }
     if (!isTRUE(deep)) {
-      add_row("info", "快速验证通过; 需要确认容器内能启动 diann-linux 请点「深度验证」")
+      add_row("info", "快速验证通过; 需要确认容器内能启动 diann-linux 请点「识别版本并深度验证」")
       return(rows)
     }
     ins <- tryCatch(suppressWarnings(apptainer_run(ap, c("inspect", shQuote(sif)), timeout = 15)),
@@ -350,10 +459,18 @@ server <- function(input, output, session) {
     if (length(m)) {
       ver_real <- trimws(sub("^DIA-NN ", "", m))
       ver_num <- sub("^([0-9]+(?:\\.[0-9]+)*).*", "\\1", ver_real, perl = TRUE)
-      cmp <- if (nzchar(lc$ver_from_name)) {
-        if (identical(ver_num, lc$ver_from_name)) ", 与文件名版本一致" else sprintf(", 注意: 文件名版本为 %s", lc$ver_from_name)
-      } else ""
-      add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s%s", ver_real, cmp))
+      add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
+      # v1.13: 深度验证解析到版本 → 写入识别缓存 (下拉/回显/提交记账共用)
+      try({
+        fi <- file.info(sif)
+        probe <- sif_probe_load()
+        probe <- sif_probe_record(probe, sif, unname(fi$size), as.numeric(fi$mtime),
+                                  ver = ver_num, ok = TRUE,
+                                  message = sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
+        sif_probe_save(probe)
+        sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+        sif_refresh_choices()
+      }, silent = TRUE)
     } else {
       add_row("warn", "容器内启动 diann-linux 未成功 — 若为 GUI 节点限制 (FUSE/命名空间) 可忽略, 以作业实际运行为准")
     }
@@ -415,8 +532,9 @@ server <- function(input, output, session) {
       sif = sif,
       apptainer_bin = effective_apptainer(),
       ver = if (nz_str(sif)) {
-        v <- sif_check_local(sif)$ver_from_name
-        if (nzchar(v)) v else "自定义"
+        r <- sif_rows(); h <- which(r$path == sif)
+        v <- if (length(h) && isTRUE(r$verified[h[1]])) as.character(r$ver[h[1]]) else sif_version_of(sif)
+        if (nzchar(v)) v else "未识别"
       } else "",
       raw_mode = input$raw_mode,
       raws = selected_raws(), raw_dir = if (length(selected_raw_dir())) selected_raw_dir() else "",
@@ -492,6 +610,20 @@ server <- function(input, output, session) {
         msgs <- c(msgs, "✗ 该文件不是有效的 SIF 镜像 (魔数校验失败, 可能损坏或下载截断); 可用版本页「验证镜像可用性」按钮逐项排查")
       } else if (!is.na(lc$size_bytes) && lc$size_bytes < 1024^2) {
         warn <- c(warn, sprintf("⚠ 镜像仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)", lc$size_bytes / 1024^2))
+      }
+      # v1.13: 版本识别状态 (不阻断 — Slurm 计算节点可能可跑容器而 GUI 节点不能)
+      r <- sif_rows(); h <- which(r$path == p$sif)
+      known <- if (length(h)) isTRUE(r$verified[h[1]]) else nzchar(sif_version_of(p$sif))
+      if (known) {
+        info <- c(info, "ℹ 镜像版本已识别 (容器内实测)")
+      } else if (length(h) && nzchar(r$probe_message[h[1]])) {
+        warn <- c(warn, sprintf("⚠ 镜像版本识别失败: %s (可在「2. DIA-NN 版本」点「识别版本并深度验证」重试)",
+                                substr(r$probe_message[h[1]], 1, 100)))
+      } else {
+        info <- c(info, "ℹ 镜像版本未识别 (不影响提交; 选中镜像后会自动识别)")
+      }
+      if (identical(backend, "local")) {
+        info <- c(info, "ℹ 本地模式要求 GUI 所在主机可运行 apptainer/singularity (作业在本机执行)")
       }
     }
     # apptainer 运行环境: 空选择阻断; "GUI 节点看不见/不可执行"只警告 (strict 模式才阻断)。
@@ -1243,13 +1375,22 @@ server <- function(input, output, session) {
 
   # ---------- 更新说明 ----------
   output$version_notes <- renderUI({
-    if (!nrow(cfg_get("sif_df"))) return(tags$p("未扫描到 sif 镜像, 请检查 config.R 中的 SIF_DIRS"))
+    r <- sif_rows()
+    if (!nrow(r)) return(tags$p("未扫描到 sif 镜像, 请检查 config.R 中的 SIF_DIRS"))
+    n_ok <- sum(r$verified)
     tags$div(
       tags$p(style = "color:#27ae60;",
-             "✔ 以下版本均已通过 GUI 三种模式实测 (RAW→DIA 转换 / 直接搜库+MBR+污染物扣除 / FASTA 生成预测库), 全部命令行参数兼容。"),
-      tags$ul(lapply(seq_len(nrow(cfg_get("sif_df"))), function(i) {
-        note <- DIANN_VERSION_NOTES[[cfg_get("sif_df")$ver[i]]] %||% "暂无实测说明。"
-        tags$li(tags$strong(sprintf("DIA-NN %s", cfg_get("sif_df")$ver[i])), " — ", note, tags$br(), tags$code(cfg_get("sif_df")$path[i]))
+             sprintf("✔ 共 %d 个镜像, 已识别 %d 个; 已识别版本均通过 GUI 三种模式实测 (RAW→DIA 转换 / 直接搜库+MBR+污染物扣除 / FASTA 生成预测库), 全部命令行参数兼容。",
+                     nrow(r), n_ok)),
+      tags$ul(lapply(seq_len(nrow(r)), function(i) {
+        if (isTRUE(r$verified[i])) {
+          note <- DIANN_VERSION_NOTES[[r$ver[i]]] %||% "暂无实测说明。"
+          tags$li(tags$strong(sprintf("DIA-NN %s", r$ver[i])), " — ", note, tags$br(), tags$code(r$path[i]))
+        } else {
+          msg <- if (nzchar(r$probe_message[i])) r$probe_message[i] else
+            "版本未识别 — 在「2. DIA-NN 版本」选中后自动识别, 或点「识别所有未识别镜像」。"
+          tags$li(tags$strong("版本未识别"), " — ", msg, tags$br(), tags$code(r$path[i]))
+        }
       }))
     )
   })
@@ -1265,11 +1406,14 @@ server <- function(input, output, session) {
     }))
   })
   output$sif_table <- renderTable({
-    if (!nrow(cfg_get("sif_df"))) return(data.frame(提示 = "未扫描到 sif 镜像", stringsAsFactors = FALSE))
-    fi <- file.info(cfg_get("sif_df")$path)
-    data.frame(版本 = cfg_get("sif_df")$ver, sif路径 = cfg_get("sif_df")$path,
-               `大小(GB)` = round(fi$size / 1024^3, 2),
-               修改日期 = format(fi$mtime, "%Y-%m-%d"),
+    r <- sif_rows()
+    if (!nrow(r)) return(data.frame(提示 = "未扫描到 sif 镜像", stringsAsFactors = FALSE))
+    data.frame(版本 = ifelse(r$verified, sprintf("v%s", r$ver), "未识别"),
+               sif路径 = r$path,
+               `大小(GB)` = round(r$size / 1024^3, 2),
+               修改日期 = format(as.POSIXct(r$mtime, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d"),
+               状态 = ifelse(r$verified, "已识别",
+                             ifelse(nzchar(r$probe_message), "上次识别失败", "未识别")),
                stringsAsFactors = FALSE, check.names = FALSE)
   }, striped = TRUE, bordered = TRUE)
   output$gui_changelog <- renderUI({
