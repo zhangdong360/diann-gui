@@ -208,7 +208,7 @@ restore_local_state <- function(snap) {
   # 清理损坏备份与告警
   unlink(Sys.glob(paste0(snap$jf_path, ".corrupt-*")))
   unlink(Sys.glob(paste0(snap$sf_path, ".corrupt-*")))
-  try(diann.gui:::.cfg$LOCAL_JOBS_WARN <- NULL, silent = TRUE)
+  try(diann.gui::set_core_const("LOCAL_JOBS_WARN", NULL), silent = TRUE)
 }
 
 test_that("local_next_slot_info: 有时限给 ETA, 无时限明示未知, 多作业取最早", {

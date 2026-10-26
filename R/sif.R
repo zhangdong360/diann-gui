@@ -125,7 +125,8 @@ sif_probe_file <- function() {
 }
 
 sif_probe_load <- function(file = sif_probe_file()) {
-  x <- tryCatch(readRDS(file), error = function(e) NULL)
+  if (!nzchar(file) || !file.exists(file)) return(list(entries = list(), version = 1L))
+  x <- tryCatch(suppressWarnings(readRDS(file)), error = function(e) NULL)
   if (is.list(x) && is.list(x$entries)) x else list(entries = list(), version = 1L)
 }
 
