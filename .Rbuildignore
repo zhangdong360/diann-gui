@@ -17,3 +17,4 @@
 ^\.assessment$
 ^diann\.gui v1\.12.*\.md$
 .*\.log$
+^docs/img$

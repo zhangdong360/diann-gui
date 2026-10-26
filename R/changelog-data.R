@@ -7,6 +7,19 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.13", date = "2026-10-27", items = c(
+    "新增: SIF 镜像下拉扫描 SIF_DIRS 下全部 *.sif (文件名无关)——image.sif / diann_latest.sif 等不再不可见；版本不再取自文件名，改为选中镜像后在容器内实测 (apptainer exec <sif> diann-linux --version)，结果按 size+mtime 缓存到 ~/.diann_gui/sif_probe.rds，文件变化自动失效",
+    "新增: 「识别所有未识别镜像」按钮 (带进度逐个识别) 与选中未识别镜像自动识别；「识别版本并深度验证」成功后同样写缓存并刷新下拉；启动不跑容器 (HPC 登录节点安全)；版本未识别不阻断提交 (GUI 节点无 apptainer 时提示而不报错)",
+    "变更: 已识别镜像按数值版本降序 (2.10.0 在 2.9.1 之前)、未识别排后；默认选中 DEFAULT_SIF → 已识别最高版本 → 首个路径；注册表/邮件/月报的版本列为容器实测值 (未识别记\"未识别\")",
+    "新增: 提交页/任务队列页常驻模式提示条与标题栏彩色徽标——本地单机 (绿)/Slurm 集群 (蓝)，日志命名、排队语义、并发上限一目了然",
+    "新增: 本地并发 LOCAL_MAX_JOBS 达上限时给出预计可提交时间 (按运行中作业时限取最早；全无时限时明示未知)；未达上限的提示也显示预计释放时间",
+    "新增: 本地作业状态文件损坏自愈——RDS 解析失败自动备份 .corrupt-<时间戳>、写状态日志、界面黄色告警一次性提示 (含 ps -ef | grep local_runner 指引)；序列文件损坏/落后自愈为 max(jobid)+1 防撞号；doctor() 新增只读检查项",
+    "改进: doctor() 按重要性重排分组——[0]执行后端 → [1]R → [2]依赖包 (本地模式含执行原语) → [3]apptainer → [4]SIF 镜像 (含识别状态) → [5]其他环境 → [6]Slurm 依赖 (最后)；输出带组标题/状态符号/汇总；返回表新增 group 列 (check/status/detail 不变)",
+    "文档: README 中英新增「构建 DIA-NN 容器镜像 (.sif)」章节 (官方 make-docker.sh 与 issue #1202 Dockerfile 两路线、docker→apptainer build、验证与放置、计算节点注意事项、许可说明)；GUI 不分发 DIA-NN 二进制/镜像，每人自行构建",
+    "文档: 随包参数速查 (inst/docs/DIANN_param_reference.md) 标注来源与版权——DIA-NN 官方文档快照，版权归 DIA-NN 作者，不随 MIT 再发布；新手指南新增两张本地模式截图 (图 3-2/3-3)",
+    "删除: legacy 中央 shiny-server 共享账号部署——SHARED_GROUP/组修复、LOCAL_ALLOW_SHARED、工作目录 config.R 与 mail_config.txt 回退、docs/legacy 全部移除；历史实现保留在 central-shiny-server 分支；共享读取请用标准 Unix 组/ACL",
+    "测试: SIF 扫描/识别/缓存/数值排序矩阵 (含 2.10.0>2.9.1 与默认选中回归)、本地 ETA/损坏恢复、doctor 分组顺序、UI 契约 (banner/新 id) 全部离线可跑"
+  )),
   list(ver = "v1.12", date = "2026-10-26", items = c(
     "新增: 执行后端可选——EXEC_BACKEND = auto|slurm|local (默认 auto); 环境变量 DIANN_GUI_EXEC_BACKEND 覆盖。auto 在 PATH 上有 sbatch 时用 Slurm 集群 (与 v1.11 行为一致), 没有则自动在本机执行。",
     "新增: 本地执行模式——在 GUI 所在 Linux 主机直接运行 DIA-NN, 仍用 apptainer/singularity + 同一个 diann*.sif 镜像与同一套命令构建 (与 Slurm 模式共享 job_body); setsid+nohup 派生进程脱离浏览器会话, 关闭页面不影响作业; 本地 JobID 从 1000001 起递增; 日志固定 local-<作业ID>.out/.err; 脚本仍保存到 输出目录/diann_gui_scripts/。",
