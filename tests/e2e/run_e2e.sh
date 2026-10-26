@@ -96,6 +96,33 @@ PYSIF
   # 假 RAW / 光谱库: local 后端 e2e 的输入 (内容不参与真实分析)
   printf 'fake raw for e2e\n' > "$CLEANUP_DIR/data/sample.raw"
   printf 'fake spectral library for e2e\n' > "$CLEANUP_DIR/data/fake.parquet"
+  # v1.14: 合成 pg_matrix (结果分析页 e2e 输入; 前 12 个蛋白 B 组上调 4 倍, MNAR 缺失)
+  python3 - "$CLEANUP_DIR/data/pg_matrix.tsv" <<'PYMAT'
+import random, sys
+random.seed(42)
+cols = ["A1", "A2", "A3", "B1", "B2", "B3"]
+head = ["Protein.Group", "Protein.Names", "PG.Genes", "First.Protein.Description",
+        "N.Sequences", "N.Proteotypic.Sequences"] + cols
+lines = ["\t".join(head)]
+for i in range(1, 41):
+    base = random.uniform(18.0, 22.0)
+    pg = f"P{i:03d}_HUMAN"
+    if i == 40:
+        pg = "cRAP_ALBU_HUMAN"
+    elif i == 39:
+        pg = "REV_P039_HUMAN"
+    desc = "Albumin (Contaminant)" if i == 40 else f"Protein_{i:03d} (Homo sapiens)"
+    vals = []
+    for c in cols:
+        mult = 4.0 if (i <= 12 and c.startswith("B")) else 1.0
+        if random.random() < (0.12 if base < 19.3 else 0.02):
+            vals.append("NA")
+        else:
+            vals.append("%.3f" % (2 ** (base + random.gauss(0, 0.15)) * mult))
+    lines.append("\t".join([pg, f"Protein_{i:03d}_HUMAN", f"GENE{i}", desc, "10", "5"] + vals))
+open(sys.argv[1], "w").write("\n".join(lines) + "\n")
+print("synthetic pg_matrix written:", sys.argv[1])
+PYMAT
   # 独立配置: 后端 + 运行时/镜像/数据/输出根全指临时目录; 不碰用户 ~/.diann_gui
   cat > "$CLEANUP_DIR/config.R" <<EOF
 EXEC_BACKEND <- "$E2E_BACKEND"
@@ -133,10 +160,10 @@ EOF
   echo "[e2e] 实例就绪"
 fi
 
-echo "[e2e] 1/3 命令导入回归"
+echo "[e2e] 1/4 命令导入回归"
 python3 tests/e2e/e2e_import_check.py --url "$URL" --repo-root "$REPO" || RC=1
 
-echo "[e2e] 2/3 apptainer 运行环境回归"
+echo "[e2e] 2/4 apptainer 运行环境回归"
 if [ -n "$FAKE_APT" ]; then
   python3 tests/e2e/e2e_apptainer_check.py --url "$URL" --apptainer "$FAKE_APT" || RC=1
 else
@@ -145,13 +172,19 @@ fi
 
 # 第 3 组: 本地执行后端 (假 apptainer exec 走完整 提交→监控→日志→取消 链路)。
 # 主实例本身就是 local 后端时直接复用 (省一次应用启动); 否则自起一个 local 实例。
-echo "[e2e] 3/3 本地执行后端回归 (EXEC_BACKEND=local)"
+echo "[e2e] 3/4 本地执行后端回归 (EXEC_BACKEND=local)"
 if [ "$E2E_BACKEND" = "local" ] && [ -n "$CLEANUP_DIR" ]; then
   python3 tests/e2e/e2e_local_backend_check.py --repo-root "$REPO" \
     --url "$URL" --workdir "$CLEANUP_DIR" || RC=1
 else
   python3 tests/e2e/e2e_local_backend_check.py --repo-root "$REPO" || RC=1
 fi
+
+# 第 4 组: 结果分析页 (合成矩阵 → 读取 → QC 渲染 → 报告生成)。依赖分析层
+# Suggests 包 (ggplot2/limma/zip 等, CI 由 setup-r-dependencies 安装)。
+echo "[e2e] 4/4 结果分析页回归 (矩阵 → QC → 报告)"
+python3 tests/e2e/e2e_analysis_check.py --url "$URL" \
+  --matrix "$CLEANUP_DIR/data/pg_matrix.tsv" || RC=1
 
 [ "$RC" = 0 ] && echo "[e2e] 通过" || echo "[e2e] 失败"
 exit $RC

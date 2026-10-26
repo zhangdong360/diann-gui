@@ -365,7 +365,7 @@ Slurm/容器/RAW 数据）：后端解析与 auto 检测、日志命名契约、
 **脱敏约定**：夹具与文档只允许合成标识（`/share/home/demo`、`demo_sample_NNN.raw`、
 `human_proteome*.fasta` 等）；`tests/check_synthetic_ids.py` 在 CI 强制执行。
 
-浏览器端到端验证（自动起本地实例、粘贴夹具、检查 apptainer 面板）：
+浏览器端到端验证（自动起本地实例，覆盖 4 组：命令导入 / apptainer 运行环境 / 本地执行后端 / 结果分析页（合成矩阵 → QC → 报告））：
 
 ```bash
 tests/e2e/run_e2e.sh
