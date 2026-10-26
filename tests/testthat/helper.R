@@ -42,6 +42,12 @@ path_in_scope <- diann.gui:::path_in_scope
 collapse_dots <- diann.gui:::collapse_dots
 imported_var_mods_max <- diann.gui:::imported_var_mods_max
 vm_default <- diann.gui:::vm_default
+local_next_slot_info <- diann.gui:::local_next_slot_info
+local_jobs_save <- diann.gui:::local_jobs_save
+local_jobs_status <- diann.gui:::local_jobs_status
+local_jobs_file <- diann.gui:::local_jobs_file
+local_seq_file <- diann.gui:::local_seq_file
+local_jobs_load <- diann.gui:::local_jobs_load
 scan_sif_images <- diann.gui:::scan_sif_images
 sif_check_local <- diann.gui:::sif_check_local
 parse_diann_version <- diann.gui:::parse_diann_version

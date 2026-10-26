@@ -795,12 +795,20 @@ server <- function(input, output, session) {
     # 单机没有调度器: 运行时必须在本机可用; 资源限制只能建议——内存不可强制,
     # 时限由 local_runner.sh 的 timeout 强制。这里统一给出清晰的阻断/警告。
     if (is_local) {
-      nrun <- tryCatch(local_running_count(), error = function(e) 0L)
+      slot <- tryCatch(local_next_slot_info(), error = function(e)
+        list(n = 0L, eta = NA_real_, earliest_job = "", unknown_limit = FALSE,
+             detail = "无法读取本地作业状态"))
+      nrun <- slot$n
       mx <- suppressWarnings(as.integer(cfg_get("LOCAL_MAX_JOBS") %||% 0L))
       if (!is.na(mx) && mx > 0 && nrun >= mx) {
-        msgs <- c(msgs, sprintf("✗ 本地并发已达上限 LOCAL_MAX_JOBS=%d; 请等当前本地作业结束后再提交", mx))
+        tail_txt <- if (isTRUE(slot$unknown_limit)) "请等作业完成或手动取消"
+                    else "此后可提交 (提前完成可提前提交)"
+        msgs <- c(msgs, sprintf("✗ 本地并发已达上限 LOCAL_MAX_JOBS=%d (%s); %s",
+                                mx, slot$detail, tail_txt))
       } else if (nrun > 0) {
-        info <- c(info, sprintf("ℹ 当前已有 %d 个本地作业在运行; 单机同时跑多个 DIA-NN 会争抢 CPU/内存", nrun))
+        extra <- if (isTRUE(slot$unknown_limit)) "" else sprintf("; %s", slot$detail)
+        info <- c(info, sprintf("ℹ 当前已有 %d 个本地作业在运行; 单机同时跑多个 DIA-NN 会争抢 CPU/内存%s",
+                                nrun, extra))
       }
       th <- suppressWarnings(as.integer(p$threads))
       ncpu <- tryCatch(local_cpu_count(), error = function(e) NA_integer_)

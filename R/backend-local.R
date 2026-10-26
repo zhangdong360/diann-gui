@@ -31,12 +31,61 @@ local_seq_file <- function() file.path(local_state_dir(), "diann_gui_local_seq")
 
 local_jobs_empty <- function() list(recs = list())
 
-local_jobs_load <- function() {
+# v1.13: 损坏不再静默返回空 — 备份 .corrupt-<ts> + 落状态日志 + 设置一次性 UI/doctor
+# 告警 (.cfg$LOCAL_JOBS_WARN) 后返回空表; 逐条记录校验, 坏记录丢弃并计数。
+local_jobs_note_corrupt <- function(f, why) {
+  stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  bak <- sprintf("%s.corrupt-%s", f, stamp)
+  ok <- file.rename(f, bak)
+  if (!ok) {  # 重名 .N; 再失败退化为 copy
+    n <- 0L
+    repeat { cand <- sprintf("%s.%d", bak, n); if (!file.exists(cand)) break; n <- n + 1L }
+    ok <- try(file.copy(f, cand, overwrite = TRUE), silent = TRUE)
+    bak <- if (isTRUE(ok)) cand else "(备份失败)"
+  }
+  logf <- file.path(local_state_dir(), "diann_gui_local_state.log")
+  try(cat(sprintf("%s local_jobs_load: %s; 备份: %s\n",
+                  format(Sys.time(), "%Y-%m-%d %H:%M:%S"), why, bak),
+          file = logf, append = TRUE), silent = TRUE)
+  warn <- sprintf(paste0("本地作业状态文件损坏 (%s), 已备份为 %s — 在跑作业已从面板移除, ",
+                         "进程可能仍在运行: 可用 ps -ef | grep local_runner 查看/手动结束; ",
+                         "详见 diann_gui_local_state.log"),
+                  basename(f), bak)
+  try(assign("LOCAL_JOBS_WARN", warn, envir = .cfg), silent = TRUE)
+}
+
+local_jobs_load <- function(recover = TRUE) {
   f <- local_jobs_file()
   if (!file.exists(f)) return(local_jobs_empty())
   x <- tryCatch(readRDS(f), error = function(e) NULL)
-  if (!is.list(x) || is.null(x$recs) || !is.list(x$recs)) return(local_jobs_empty())
+  if (!is.list(x) || is.null(x$recs) || !is.list(x$recs)) {
+    if (isTRUE(recover)) local_jobs_note_corrupt(f, "RDS 解析失败或结构非法")
+    return(local_jobs_empty())
+  }
+  # 逐条校验: 无 jobid 的坏记录丢弃 (计数告警, 不静默)
+  ok_rec <- vapply(x$recs, function(r) is.list(r) && !is.null(r$jobid) &&
+                     nzchar(as.character(r$jobid)[1]), logical(1))
+  if (!all(ok_rec)) {
+    n_bad <- sum(!ok_rec)
+    x$recs <- x$recs[ok_rec]
+    try(cat(sprintf("%s local_jobs_load: 丢弃 %d 条坏记录\n",
+                    format(Sys.time(), "%Y-%m-%d %H:%M:%S"), n_bad),
+            file = file.path(local_state_dir(), "diann_gui_local_state.log"), append = TRUE),
+        silent = TRUE)
+  }
   x
+}
+
+# 只读健康检查 (doctor 用): 不修改任何文件, 返回 list(ok, detail, warn)
+local_jobs_status <- function() {
+  f <- local_jobs_file()
+  if (!file.exists(f)) return(list(ok = TRUE, detail = "尚未创建 (无本地作业历史)", warn = ""))
+  w <- cfg_get("LOCAL_JOBS_WARN") %||% ""
+  x <- tryCatch(readRDS(f), error = function(e) NULL)
+  if (!is.list(x) || is.null(x$recs) || !is.list(x$recs)) {
+    return(list(ok = FALSE, detail = sprintf("文件存在但不可解析: %s", f), warn = w))
+  }
+  list(ok = TRUE, detail = sprintf("%d 条记录, %s", length(x$recs), f), warn = w)
 }
 
 # 调用方负责锁; 这里只做最近 300 条截断 + 原子写
@@ -65,6 +114,19 @@ local_seq_next <- function() {
     if (file.exists(f)) {
       v <- suppressWarnings(as.integer(trimws(readLines(f, warn = FALSE)[1])))
       if (!is.na(v)) cur <- v
+    }
+    # v1.13 自愈: 序列文件损坏(NA)或落后于已有作业 max(jobid) 时, 以 max(existing)+1
+    # 续号, 防止撞号 (撞号会覆盖/误取消旧作业)。异常序列文件备份 .corrupt-<ts>。
+    existing <- suppressWarnings(as.integer(vapply(
+      local_jobs_load()$recs, function(r) as.character(r$jobid)[1], character(1))))
+    existing <- existing[!is.na(existing)]
+    mx <- if (length(existing)) max(existing) else 0L
+    if (is.na(cur) || cur <= mx) {
+      if (file.exists(f)) {
+        stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+        try(file.rename(f, sprintf("%s.corrupt-%s", f, stamp)), silent = TRUE)
+      }
+      cur <- mx
     }
     nxt <- cur + 1L
     tmp <- sprintf("%s.tmp.%d", f, Sys.getpid())
@@ -386,6 +448,40 @@ local_history <- function() {
   }
   if (!length(rows)) return(NULL)
   do.call(rbind, rows)
+}
+
+# v1.13: 并发上限的"预计可提交时间"。运行中/启动中作业 -> eta = min(submitted_epoch
+# + time_sec); 无时限 (time_sec=0/NA) 的作业无法预估 -> unknown_limit=TRUE。
+# 纯函数式读取, 供提交校验与 UI 提示共用; 返回
+# list(n, eta, earliest_job, unknown_limit, detail)。
+local_next_slot_info <- function(now = Sys.time()) {
+  recs <- local_jobs_load()$recs
+  run <- Filter(function(r) local_job_state(r) %in% c("RUNNING", "PENDING"), recs)
+  n <- length(run)
+  if (!n) return(list(n = 0L, eta = NA_real_, earliest_job = "", unknown_limit = FALSE,
+                      detail = "当前没有本地作业在运行"))
+  lim <- vapply(run, function(r) {
+    ts <- suppressWarnings(as.numeric(r$time_sec %||% 0))
+    se <- suppressWarnings(as.numeric(r$submitted_epoch %||% NA_real_))
+    if (is.na(se) || !is.finite(se) || is.na(ts) || ts <= 0) NA_real_ else se + ts
+  }, numeric(1))
+  unknown <- sum(is.na(lim))
+  if (unknown == n) {
+    return(list(n = n, eta = NA_real_, earliest_job = "", unknown_limit = TRUE,
+                detail = sprintf("当前 %d 个本地作业在运行, 均未设时限, 结束时间未知", n)))
+  }
+  k <- which.min(replace(lim, is.na(lim), Inf))
+  eta <- unname(lim[k])
+  mins <- max(0, round((eta - as.numeric(now)) / 60))
+  job <- tryCatch(as.character(run[[k]]$jobid), error = function(e) "")
+  detail <- if (mins <= 0) {
+    sprintf("最早作业 (ID %s) 已到/超过时限, 预计即将结束", job)
+  } else {
+    sprintf("最早作业 (ID %s) 预计 %s 前结束 (约 %d 分钟)", job,
+            format(as.POSIXct(eta, origin = "1970-01-01"), "%H:%M"), mins)
+  }
+  if (unknown > 0) detail <- paste0(detail, sprintf("; 另有 %d 个未设时限", unknown))
+  list(n = n, eta = eta, earliest_job = job, unknown_limit = FALSE, detail = detail)
 }
 
 local_running_count <- function() {
