@@ -4,9 +4,11 @@ English | [简体中文](README.zh-CN.md)
 
 A Shiny application, packaged as an R package, that puts
 [DIA-NN](https://github.com/vdemichev/DiaNN) behind a browser: build commands,
-submit them as Slurm batch jobs running the official DIA-NN container image
-(Apptainer/Singularity `.sif`), and monitor queues, logs and results — from your
-own R session, with your own account.
+submit them as Slurm batch jobs **or run them directly on the local Linux host**
+(always through the official DIA-NN container image Apptainer/Singularity
+`.sif`), and monitor queues, logs and results — from your own R session, with
+your own account. Slurm is optional since v1.12: the execution backend is
+auto-detected, or can be pinned to `slurm` or `local`.
 
 > The web UI and the bundled documentation are in Chinese. Configuration and
 > this README are in English.
@@ -22,7 +24,7 @@ shared queue identity, no admin ACL work.
 # 1) install into your user library — pick one
 install.packages("diann.gui", repos = c(SITE = "<site drat/miniCRAN>", getOption("repos")))
 # air-gapped cluster (admin stages the tarball on shared storage):
-install.packages("/share/app/tools/R/diann.gui_1.11.0.tar.gz", repos = NULL, type = "source")
+install.packages("/share/app/tools/R/diann.gui_1.12.0.tar.gz", repos = NULL, type = "source")
 # with internet access:
 remotes::install_github("zhangdong360/diann-gui")
 
@@ -50,9 +52,11 @@ system-wide installation. The app is just an R package: everything it needs
 - **Embedding / legacy shiny-server**: `run_app(app_only = TRUE)` returns the
   app object without starting a server.
 - **Per-user settings**: `diann.gui::init_config()` writes
-  `~/.diann_gui/config.R` (it can auto-detect Slurm partitions, apptainer
-  candidates and common `diann*.sif` directories). A file pointed to by the
-  `DIANN_GUI_CONFIG` env var is honored. Mail credentials live in
+  `~/.diann_gui/config.R` (it auto-detects the execution backend — `slurm` or
+  `local` — as well as Slurm partitions, apptainer candidates and common
+  `diann*.sif` directories). A file pointed to by the `DIANN_GUI_CONFIG` env var
+  is honored; `DIANN_GUI_EXEC_BACKEND` overrides `EXEC_BACKEND` for a single
+  launch without editing the file. Mail credentials live in
   `~/.diann_gui/mail_config.txt` (`DIANN_GUI_MAIL_CONF` is also supported).
 - **One-time admin setup**: place the `diann*.sif` images in a world-readable
   shared directory (e.g. `/share/app/tools/diann`). That is all — the R package
@@ -60,14 +64,24 @@ system-wide installation. The app is just an R package: everything it needs
 
 State is per user: `~/diann_gui_notify_state.rds`,
 `~/diann_gui_jobs_registry.rds`, the watcher pid/log, and the apptainer probe
-cache under `~/.diann_gui/`.
+cache under `~/.diann_gui/`. Local-mode jobs additionally keep their job records
+and ID sequence in `~/diann_gui_local_jobs.rds` and `~/diann_gui_local_seq`
+(next to the notify state file), keeping the 300 most recent records.
 
 ## Features
 
 - **No command line for end users** — lab members pick a DIA-NN container
   version, the apptainer runtime, RAW/FASTA/library files, output directory and
-  80+ grouped DIA-NN parameters from a web form; the exact `sbatch` script is
-  generated and submitted for them.
+  80+ grouped DIA-NN parameters from a web form; the exact job script is
+  generated and submitted for them — as a Slurm batch job or as a local process.
+- **Optional execution backend (v1.12)** — `EXEC_BACKEND` = `auto` (default) |
+  `slurm` | `local`, overridable with the `DIANN_GUI_EXEC_BACKEND` environment
+  variable. `auto` uses Slurm when `sbatch` is on `PATH` (behaviour identical to
+  v1.11) and runs locally otherwise. Both backends use the **same** generated
+  DIA-NN command and the **same** `.sif` image — only the executor differs.
+  Safety valves: `auto` refuses to fall back to local execution when Slurm
+  traces are present but `sbatch` is missing (login-node protection), and legacy
+  central shiny-server deployments deny local execution by default.
 - **apptainer runtime selection** — the GUI auto-detects `apptainer` /
   `singularity` binaries (PATH, `APPTAINER_PATHS`, common install locations,
   conda envs), resolves each version and lists them as candidates, like the
@@ -84,18 +98,23 @@ cache under `~/.diann_gui/`.
   hints catch common mistakes (missing RAW files, flag combinations,
   leftover bare flags from pasted commands, unwritable output dir, invisible
   apptainer) before a job is submitted.
-- **Live command preview** — see the exact DIA-NN arguments and the full
-  Slurm script before submitting.
-- **Job dashboard** — auto-refreshing `squeue` view, `sacct` history (when
-  Slurm accounting is on), `scancel`, and a log viewer that automatically
-  locates `slurm-<jobid>.out/.err`.
-- **Four-layer job status** — Slurm state → program exit code (`.rc` file) →
-  artifact check → display label (`成功/失败/待核实/未知`), used by both the
-  dashboard and the completion e-mail.
+- **Live command preview** — see the exact DIA-NN arguments and the full job
+  script (Slurm header + shared body, or the local execution script) before
+  submitting.
+- **Job dashboard** — auto-refreshing `squeue` view in Slurm mode (or the local
+  job list in local mode), `sacct` history (when Slurm accounting is on),
+  `scancel` / local process-group cancel, and a log viewer that automatically
+  locates `slurm-<jobid>.out/.err` or `local-<jobid>.out/.err` according to the
+  job's backend.
+- **Four-layer job status** — scheduler state (Slurm, or the local process
+  state mapped to the same names) → program exit code (`.rc` file) → artifact
+  check → display label (`成功/失败/待核实/未知`), used by both the dashboard
+  and the completion e-mail.
 - **Email notifications (optional)** — a per-user watcher daemon
-  (`diann.gui::watch_daemon()`, spawned automatically) polls the queue and
-  sends completion emails via `mail_notify.py` when jobs leave the queue;
-  works on clusters where compute nodes have no outbound network.
+  (`diann.gui::watch_daemon()`, spawned automatically) polls the execution
+  backend (Slurm queue or local job state file) and sends completion emails via
+  `mail_notify.py` when jobs finish; works on clusters where compute nodes have
+  no outbound network.
 - **Parameter reference** — an in-app searchable DIA-NN flag reference.
 
 ## Architecture
@@ -103,17 +122,23 @@ cache under `~/.diann_gui/`.
 ```mermaid
 flowchart LR
     B[Browser] --> SS["Shiny app (run_app(), your R session)"]
-    SS -->|"sbatch"| Q[Slurm queue]
+    SS --> AD["Execution backend adapter<br/>EXEC_BACKEND = auto | slurm | local"]
+    AD -->|"slurm: sbatch"| Q[Slurm queue]
     Q --> CN["Compute nodes<br/>apptainer/singularity exec --bind ... diann.sif diann-linux ..."]
-    SS -->|"enqueue + spawn"| W["diann.gui::watch_daemon()"]
-    W -->|"poll squeue, parse slurm-&lt;id&gt;.out"| M["mail_notify.py → SMTP"]
+    AD -->|"local: setsid + nohup"| LP["Local process on the GUI host<br/>same .sif, same DIA-NN command"]
+    CN --> DN["DIA-NN analysis<br/>→ output directory"]
+    LP --> DN
+    SS -->|"auto-spawn"| W["diann.gui::watch_daemon()"]
+    W -->|"poll queue / local state; parse slurm-&lt;id&gt;.out / local-&lt;id&gt;.out"| M["mail_notify.py → SMTP"]
 ```
 
 ## Requirements
 
 | Component | Notes |
 |---|---|
-| Linux with **Slurm** | the app submits via `sbatch`/`squeue`/`sacct`/`scancel`/`scontrol` |
+| **Linux** | any x86_64 Linux host for per-user self-hosted runs (no admin) |
+| **Slurm** | *optional* — needed only for the `slurm` backend (`sbatch`/`squeue`/`sacct`/`scancel`/`scontrol`). With `EXEC_BACKEND=auto` the app uses Slurm when `sbatch` is on `PATH`, and otherwise runs jobs locally on the GUI host |
+| Local-mode tools | `bash`, `nohup`, `timeout` are required for local execution; `setsid` is recommended (without it cancellation falls back to killing the process tree), `/proc` must be readable |
 | **R** ≥ 4.1 | per-user library; dependencies install with the package |
 | **Apptainer or Singularity** | plus a DIA-NN `.sif` container image (login node may not have apptainer — the GUI accepts a compute-node-only path). **`.sif` requires apptainer ≥ 1.0 or singularity ≥ 3.0**; 2.x only reads `.simg` |
 | **python3** | optional, only for email notifications (standard library only) |
@@ -122,6 +147,9 @@ flowchart LR
 
 All variables are optional; sensible defaults are used when unset.
 `diann.gui::init_config()` creates the file from the bundled template.
+`SLURM_*` keys are only used by the Slurm backend and the `LOCAL_*` keys only by
+the local backend. `EXEC_BACKEND` can be overridden per launch with the
+`DIANN_GUI_EXEC_BACKEND` environment variable.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -137,6 +165,13 @@ All variables are optional; sensible defaults are used when unset.
 | `APPTAINER_MODULE_FALLBACK` | Environment module loaded as a fallback | *(empty — no module)* |
 | `BIND_PATHS` | Host paths bind-mounted into the container (`--bind`) | *(empty)* |
 | `SHARED_GROUP` | Legacy shared-output group repair (multi-account shared instance) | *(empty — disabled)* |
+| `EXEC_BACKEND` | Execution backend: `"auto"` (detect), `"slurm"` or `"local"` | `"auto"` |
+| `LOCAL_REQUIRE_EXCLUSIVE_HOST` | `auto`-mode safety valve: refuse to fall back to local execution when Slurm traces are detected but `sbatch` is missing (HPC login-node protection) | `TRUE` |
+| `LOCAL_ALLOW_SHARED` | Allow local execution in legacy central shiny-server deployments (shared run account) | `FALSE` |
+| `LOCAL_NICE` | `nice` value applied to local job processes | `10` |
+| `LOCAL_TIMEOUT_GRACE` | Seconds between SIGTERM and SIGKILL when a local job reaches its time limit | `30` |
+| `LOCAL_MAX_JOBS` | Local concurrency cap: `0` = unlimited; `>0` rejects new submissions once reached (no queueing) | `0` |
+| `LOCAL_MEM_ADVISORY` | Compare requested memory with `/proc/meminfo` before submitting (warning only — memory cannot be enforced locally) | `TRUE` |
 | `MAIL_PYTHON` | python3 used for email notifications | `python3` from `PATH` |
 
 ## apptainer runtime
@@ -160,6 +195,62 @@ with `Unknown image format/type`. The dropdown, self-check panel, both
 verification modes and the pre-submit check flag such candidates as
 «⚠ 不支持 SIF» and block submission.
 
+## Running without Slurm (local mode)
+
+Since v1.12 the app does not require Slurm. With the default
+`EXEC_BACKEND = "auto"`:
+
+- if `sbatch` is on `PATH`, jobs go to the Slurm cluster exactly as in v1.11;
+- if it is not, jobs run as **local processes on the GUI host** — no scheduler,
+  no queue, no `sbatch`. The app header shows `执行后端: 本地单机`.
+
+Local mode still uses Apptainer/Singularity and the same `diann*.sif` image, so
+the DIA-NN command and container setup are identical to Slurm mode. What
+changes:
+
+| Aspect | Local mode |
+|---|---|
+| Where it runs | the Linux host that runs `run_app()` |
+| Job identity | integer IDs starting at `1000001` (persisted per user) |
+| Logs | `<output dir>/local-<JobID>.out` / `.err` (Slurm mode keeps `slurm-<JobID>.out` / `.err`) |
+| Script | still saved under `<output dir>/diann_gui_scripts/`; exit code in `<script>.rc` |
+| Lifetime | detached via `setsid` + `nohup`; closing the browser does not stop the job |
+| Time limit | enforced by `timeout` (`rc=124` → `超时`); `LOCAL_TIMEOUT_GRACE` controls the TERM→KILL grace period |
+| Memory | advisory only: checked against `/proc/meminfo` before submit, never enforced |
+| CPU | `--threads`; no scheduler bookkeeping |
+| Queueing | none; `LOCAL_MAX_JOBS` can cap concurrency (submission is rejected when reached) |
+| Cancelling | kills the local process group (same-UID check); status becomes `已取消` |
+| Status / e-mail / monthly report | same four-layer status synthesis, notification watcher and `usage_report()` as Slurm mode |
+
+UI differences in local mode: the header shows `执行后端: 本地单机`; the resource
+box is titled `6. 运行资源 (本地)` and offers no partition; the submit button
+reads `提交本地任务`; the monitor page hides the `sinfo` node box and titles its
+blocks `本地运行任务` / `近期历史 (本地作业)`; the log viewer targets
+`local-<ID>.out`. The Slurm-mode UI is unchanged from v1.11, so existing
+screenshots remain valid.
+
+**HPC login nodes are protected.** If the host looks like a Slurm node
+(`squeue`/`sacct`/`scontrol`/`sinfo` on `PATH`, `/etc/slurm*`, or `SLURM_CONF`)
+but `sbatch` is missing, `auto` refuses to silently run locally and `run_app()`
+stops with an explanatory error. Either load the Slurm module / fix `PATH`
+(recommended), or — only if this really is a standalone Linux server — pin the
+backend explicitly:
+
+```r
+# ~/.diann_gui/config.R
+EXEC_BACKEND <- "local"
+# or for one launch, before run_app():
+# Sys.setenv(DIANN_GUI_EXEC_BACKEND = "local")
+```
+
+Legacy central shiny-server deployments deny local execution by default (all
+jobs would run as the shared server account); set `LOCAL_ALLOW_SHARED <- TRUE`
+only if you understand that trade-off.
+
+Out of scope in this version: native DIA-NN binaries (no container), cloud
+execution, Windows, and PBS/LSF. Local mode is Linux-only and still requires
+Apptainer/Singularity plus a `.sif` image, exactly like Slurm mode.
+
 ## Email notifications (optional)
 
 ```bash
@@ -176,6 +267,40 @@ chmod 600 ~/.diann_gui/mail_config.txt
 - Self-test: `python3 mail_notify.py --check` / `--self-test` (the script path is
   `system.file("python", "mail_notify.py", package = "diann.gui")`);
   `Rscript -e 'diann.gui::watch_daemon(once = TRUE)'` runs one watcher tick.
+
+## Troubleshooting
+
+**`run_app()` stops with `auto` mode refusing local execution.**
+The host shows Slurm traces (client commands or `/etc/slurm*`) but `sbatch` is
+not on `PATH`. The app refuses to silently run compute tasks on what is probably
+an HPC login node. Fix `PATH` / load the Slurm module and restart; only if the
+machine is a genuine standalone Linux server, set `EXEC_BACKEND <- "local"` (or
+`DIANN_GUI_EXEC_BACKEND=local`) to override.
+
+**Local mode: submission is blocked because apptainer cannot be verified.**
+In local mode jobs run on the GUI host, so the apptainer runtime must really
+work there — the pre-submit check is a real `--version`/SIF check and a failure
+blocks submission (unlike Slurm mode, where a compute-node-only path is accepted
+with a warning). Pick and verify a runnable apptainer/singularity in panel
+`1. apptainer 运行环境`, or submit to a Slurm cluster instead.
+
+**Where is my local job log?**
+Local jobs write `<output dir>/local-<JobID>.out` and `.err` — not
+`slurm-<JobID>.out`. The log viewer resolves the right file name from the job's
+backend automatically; local JobIDs start at `1000001`. The generated script,
+the `.rc` exit code and the `_desc.txt` project note live under
+`<output dir>/diann_gui_scripts/`.
+
+**A local job shows `超时` (timeout) although DIA-NN was still working.**
+Local time limits are enforced by `timeout` (exit code 124 → `超时`), so a tight
+`time_h` kills the process. Leave the time limit empty for unlimited, or raise
+it.
+
+**Can Slurm and local jobs coexist?**
+Each submission is recorded with its backend in the job registry (schema v3);
+the dashboard, e-mail watcher and `usage_report(month=...)` handle records from
+both backends (local job history keeps the 300 most recent local records). Old
+v1.11-and-earlier registries are read as Slurm records.
 
 ## Documentation
 
@@ -206,6 +331,13 @@ Windows-GUI predicted-library command and a directory-mode command,
 `test-consistency.R` adds class-level invariants between the flag maps, UI
 widgets and import-reset lists.
 
+`test-backend.R` covers both execution backends offline (fake apptainer and a
+fake DIA-NN payload, no real Slurm/container/RAW data): backend resolution and
+auto-detection, the log-name contract, the script body shared by both backends,
+local submit → success/failure/timeout/cancel, PID-reuse protection, and
+"submitting without `sbatch` returns an error instead of crashing the Shiny
+session". CI exercises this local-submission path on a runner that has no Slurm.
+
 **Regression policy**: every production incident must be pinned as a fixture or
 contract test in the same commit that fixes it.
 
@@ -229,6 +361,9 @@ Requires selenium + geckodriver + Firefox.
 Rscript -e 'diann.gui::usage_report(month = "2026-10", out_dir = "/path/to/reports")'
 ```
 
+The report breaks usage down per job with a backend column (`Slurm` / `本地`),
+so mixed Slurm + local records are counted separately.
+
 Cron example (first day of each month, for the previous month):
 
 ```
@@ -239,7 +374,9 @@ Cron example (first day of each month, for the previous month):
 
 One shared instance, all jobs running as the server's `run_as` user — there is
 **no per-user isolation**, and everyone can see the shared notification records.
-Use it only if per-user installs are impossible. Entry point:
+Local execution is denied by default in this deployment (every job would run as
+the shared account); `LOCAL_ALLOW_SHARED <- TRUE` overrides that and prints a
+warning. Use it only if per-user installs are impossible. Entry point:
 
 ```r
 # app.R in the site directory (needs config.R next to it)

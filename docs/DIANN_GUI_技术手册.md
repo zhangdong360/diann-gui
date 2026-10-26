@@ -2,7 +2,8 @@
 
 | 项目 | 说明 |
 |---|---|
-| 适用版本 | GUI v1.11（2026-10-20）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
+| 适用版本 | GUI v1.12（2026-10-26）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
+| 执行后端 | Slurm 集群 或 本地单机（v1.12 起 Slurm 为可选后端，见 §1.1 / §1.2） |
 | 面向读者 | 质谱平台工作人员、数据分析人员、集群管理员 |
 | 配套文档 | 《DIANN_GUI_新手指南.html》（图文入门版）；GUI 内「参数速查」「更新说明」页 |
 | 文档性质 | 技术参考手册——功能、参数、命令构建规则、工作流与故障排查的完整说明 |
@@ -16,7 +17,7 @@
 1. [概述与运行架构](#1-概述与运行架构)
 2. [快速上手](#2-快速上手)
 3. [页面与控件详解](#3-页面与控件详解)
-4. [命令构建与 Slurm 脚本规则](#4-命令构建与-slurm-脚本规则)
+4. [命令构建与作业脚本规则](#4-命令构建与作业脚本规则)
 5. [标准工作流详解](#5-标准工作流详解)
 6. [邮件通知机制](#6-邮件通知机制)
 7. [命令导入功能](#7-命令导入功能)
@@ -30,30 +31,38 @@
 
 ## 1. 概述与运行架构
 
-DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的 Shiny Web 应用，把 DIA-NN 命令行的常用参数做成图形界面，负责「选文件 → 配参数 → 预览命令 → 提交 Slurm 作业 → 监控/收邮件」的完整流程。它本身不执行数据分析，所有计算都通过 Slurm 作业在计算节点上以 Apptainer 容器完成。
+DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在 Linux 主机（集群登录节点或单机服务器）上的 Shiny Web 应用，把 DIA-NN 命令行的常用参数做成图形界面，负责「选文件 → 配参数 → 预览命令 → 提交作业 → 监控/收邮件」的完整流程。它本身不执行数据分析，所有计算都在 Apptainer 容器内完成。
+
+v1.12 起执行后端可选（`EXEC_BACKEND`）：默认 `auto` 在 PATH 上有 `sbatch` 时把作业提交到 Slurm 集群（与 v1.11 一致），没有 Slurm 时改为在 GUI 所在主机以本地进程执行（本地单机模式）。两种后端共用同一套命令构建、同一个 `.sif` 镜像，以及同一套四层状态/日志/邮件/月报语义，区别只在「作业由谁执行」。
 
 ### 1.1 调用链路
 
 本应用以 **R 包**形式分发：每位用户把 `diann.gui` 装进自己的 R 库，在自己的 R 会话里
-`diann.gui::run_app()` 启动。Shiny 进程就是该用户自己的进程，因此 `sbatch` 提交的
-作业、写出的文件都归属于本人——用户之间天然隔离。
+`diann.gui::run_app()` 启动。Shiny 进程就是该用户自己的进程，因此提交的作业、写出的
+文件都归属于本人——用户之间天然隔离。
 
 ```
 浏览器
   └─ run_app()（你的 R 会话, 127.0.0.1:<随机端口>）
-       └─ 生成 Slurm 脚本并 sbatch 提交（以你本人身份）
-            └─ Slurm 作业（compute 分区）
-                 └─ apptainer/singularity exec --bind ... <diann-x.y.z.sif> diann-linux <参数>
-                      └─ DIA-NN 分析，结果写入你指定的输出目录
+       └─ 执行后端适配层（EXEC_BACKEND = auto|slurm|local；环境变量 DIANN_GUI_EXEC_BACKEND 覆盖）
+            ├─ slurm 后端: 生成作业脚本 + sbatch 提交（以你本人身份）
+            │    └─ Slurm 作业（compute 分区）
+            │         └─ apptainer/singularity exec --bind ... <diann-x.y.z.sif> diann-linux <参数>
+            │              └─ DIA-NN 分析，结果写入你指定的输出目录
+            └─ local 后端: 在本机以 setsid+nohup 派生本地运行器（脱离浏览器会话）
+                 └─ timeout/nice 包装同一个 job_body（同一个 .sif + 同一套 DIA-NN 命令）
+                      └─ DIA-NN 分析，日志 local-<作业ID>.out/.err，结果写入输出目录
 ```
 
-旁路：作业完成后，由同一用户会话拉起的守护进程 `diann.gui::watch_daemon()`
-（每 60 s）调用 `mail_notify.py` 发送完成/失败邮件（计算节点无出网，邮件由登录节点代发）。
+后端解析由 `detect_exec_backend()`（`R/backend.R`）完成：`auto` 在 PATH 上有 `sbatch`
+时用 Slurm，否则用本地；安全阀见 §1.2。无论哪种后端，作业完成后由同一用户会话拉起的
+守护进程 `diann.gui::watch_daemon()`（每 60 s）经 `mail_notify.py` 发送完成/失败邮件
+（计算节点无出网，邮件由登录节点代发）。
 
 ### 1.2 关键配置（`~/.diann_gui/config.R`）
 
-用 `diann.gui::init_config()` 生成（可自动探测 Slurm 分区、apptainer 候选与 SIF 目录），
-或手动编辑模板 `inst/config/config.example.R`。
+用 `diann.gui::init_config()` 生成（自动探测执行后端并写回 `EXEC_BACKEND`，同时探测
+Slurm 分区、apptainer 候选与 SIF 目录），或手动编辑模板 `inst/config/config.example.R`。
 
 | 常量 | 示例 | 说明 |
 |---|---|---|
@@ -70,20 +79,33 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | `CON_FASTA` | `.../cRAP_contaminants.fasta` | 内置 cRAP 污染物库 |
 | `SHARED_GROUP` | `""` | 仅 legacy 共享部署使用；自托管保持为空 |
 | `RETENTION_DAYS` | `90` | 输出目录脚本/旧归档的保留天数（0=不清理） |
+| `EXEC_BACKEND` | `"auto"` | 执行后端：`"auto"` 自动检测 / `"slurm"` / `"local"`；环境变量 `DIANN_GUI_EXEC_BACKEND` 覆盖 |
+| `LOCAL_REQUIRE_EXCLUSIVE_HOST` | `TRUE` | auto 安全阀：检测到 Slurm 痕迹但无 `sbatch` 时拒绝回退本地（防 HPC 登录节点误跑） |
+| `LOCAL_ALLOW_SHARED` | `FALSE` | legacy 中央 shiny-server 部署下是否允许本地执行（共享账号） |
+| `LOCAL_NICE` | `10` | 本地进程 nice 值 |
+| `LOCAL_TIMEOUT_GRACE` | `30` | 本地作业到时限后 SIGTERM→SIGKILL 等待秒数 |
+| `LOCAL_MAX_JOBS` | `0` | 本地并发上限：0=不限，>0 达到即阻断提交（不排队） |
+| `LOCAL_MEM_ADVISORY` | `TRUE` | 提交前按 `/proc/meminfo` 比对内存（仅警告，本地不可强制） |
 
 配置发现顺序：`DIANN_GUI_CONFIG` 环境变量 → `~/.diann_gui/config.R` →
 `<工作目录>/diann_gui_config.R` →（仅历史 shiny-server 部署，目录内有 `app.R` 时）
 `<工作目录>/config.R`。**不再无条件下读取工作目录的 `config.R`**，避免项目目录里的
 同名文件劫持配置（v1.11 起）。
 
+`SLURM_*` 常量仅 slurm 后端使用，`LOCAL_*` 常量仅 local 后端使用；换机器时把
+`EXEC_BACKEND` 改回 `"auto"` 即可重新自动检测。`run_app()` 启动时会打印当前执行
+后端与判定来源（自动检测/配置指定）。
+
 ### 1.3 账号与权限模型
 
-- **默认（推荐）：每用户自托管**。应用运行在你的账号下，`sbatch` 以你本人提交，
-  产物归你所有；配置、通知状态、注册表、watcher 都在你自己的 `$HOME`。
-  同事之间不需要共享组或 ACL。
+- **默认（推荐）：每用户自托管**。应用运行在你的账号下，Slurm 作业以你本人提交、
+  本地模式的进程也以你本人身份运行，产物归你所有；配置、通知状态、注册表、watcher
+  都在你自己的 `$HOME`。同事之间不需要共享组或 ACL。
 - **legacy：中央 shiny-server 部署**（不推荐）。所有作业以 `run_as` 用户运行，
   需要 `SHARED_GROUP` + setgid + ACL 才能让其他账号读取产出；且所有用户共享
-  同一份通知记录。仅在无法每用户安装时使用，见 README 附录。
+  同一份通知记录。该部署下 local 后端默认被拒绝（所有作业都会以共享运行账号执行），
+  只有显式 `LOCAL_ALLOW_SHARED <- TRUE` 才放行并给出警告。仅在无法每用户安装时
+  使用，见 README 附录。
 
 ---
 
@@ -96,10 +118,10 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 3. **选文件**：「3. 文件与数据库」中选 RAW 文件（可多选）或 RAW 目录；选光谱库（`.speclib` 等）；如无光谱库则改为选 FASTA 并勾选 `--fasta-search`。
 4. **设输出**：「4. 输出设置」选输出目录；主报告文件名默认 `report`（自动加 `.tsv`）。
 5. **参数**：「5. 分析参数」默认即可（MBR、RT-profiling、peptidoforms、matrices 默认开启）。
-6. **资源**：「6. Slurm 资源」默认 16 CPU / 64 GB；大队列按第 5.4 节估算调整。
-7. **提交**：「7. 命令预览与提交」中确认校验提示无红色 ✗ 项、预览脚本符合预期，点「提交 Slurm 任务」。可选填邮箱接收完成通知。
+6. **资源**：「6. Slurm 资源」默认 16 CPU / 64 GB；大队列按第 5.4 节估算调整。本地模式下该盒标题为「6. 运行资源 (本地)」，无分区选择，内存仅作建议检查。
+7. **提交**：「7. 命令预览与提交」中确认校验提示无红色 ✗ 项、预览脚本符合预期，点「提交 Slurm 任务」（本地模式为「提交本地任务」）。可选填邮箱接收完成通知。
 
-提交后：作业脚本保存到 `<输出目录>/diann_gui_scripts/`，日志为 `<输出目录>/slurm-<JobID>.out/.err`；「任务队列」页监控进度、查看日志；填了邮箱则作业结束后自动收到邮件。
+提交后：作业脚本保存到 `<输出目录>/diann_gui_scripts/`；Slurm 模式日志为 `<输出目录>/slurm-<JobID>.out/.err`，本地模式为 `<输出目录>/local-<作业ID>.out/.err`；「任务队列」页监控进度、查看日志；填了邮箱则作业结束后自动收到邮件。
 
 ---
 
@@ -156,7 +178,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 | 控件 | 默认 | 说明 / 对应命令行 |
 |---|---|---|
-| 选择输出目录 `out_dir` | — | 结果全部写入该目录 → Slurm 日志 `-o/-e` 也在此目录 |
+| 选择输出目录 `out_dir` | — | 结果全部写入该目录；Slurm 日志 `-o/-e` 与本地日志 `local-<ID>.out/.err` 也在此目录 |
 | 主报告文件名 `report_name` | `report` | → `--out <输出目录>/report.tsv`（自动补 `.tsv`） |
 | 选择临时目录 `temp_dir` | — | 可选 → `--temp` |
 | 仅执行 RAW→DIA 转换 `convert_only` | 否 | 勾选后忽略全部分析参数，命令仅含文件 + `--convert`（见 5.1） |
@@ -169,7 +191,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 | 控件 | 默认 | 命令行 |
 |---|---|---|
-| 线程数 `threads` | 16 | `--threads`（同时决定 Slurm `--cpus-per-task`） |
+| 线程数 `threads` | 16 | `--threads`（Slurm 模式同时决定 `--cpus-per-task`；本地模式超过本机核数时会警告） |
 | 前体 q-value 阈值 `qvalue` | 0.01 | `--qvalue` |
 | 日志详细度 `verbose` | 1 | `--verbose`（0–4） |
 | MBR 跨 run 匹配 `mbr` | ✔ | `--reanalyse` |
@@ -233,17 +255,35 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 ### 3.6 「命令导入」盒
 
-粘贴 DIA-NN 命令（Windows GUI 生成的、本页预览的 Slurm 脚本均可），点「解析并填充参数」。详见第 7 节。
+粘贴 DIA-NN 命令（Windows GUI 生成的、本页预览的作业脚本——Slurm 或本地均可），点「解析并填充参数」。详见第 7 节。
 
-### 3.7 「6. Slurm 资源」
+### 3.7 「6. Slurm 资源」/「6. 运行资源 (本地)」
+
+同一位置的功能盒按执行后端改名与裁剪（`R/ui.R` 条件渲染）：
+
+**Slurm 模式（标题「6. Slurm 资源」）**
 
 | 控件 | 默认 | 对应 sbatch 指令 |
 |---|---|---|
 | 任务名称 `job_name` | `DIANN_Task` | `#SBATCH -J` |
 | 计算分区 `partition` | `compute` | `#SBATCH -p` |
-| CPUs `cpus` | 16 | `#SBATCH --cpus-per-task`（与 `--threads` 联动，保持一致即可） |
 | 内存 (GB) `mem_gb` | 64 | `#SBATCH --mem` |
 | 时限(小时) `time_h` | 空=不限 | `#SBATCH -t <N>:00:00` |
+
+CPU 核数不在本盒设置：Slurm 的 `--cpus-per-task` 与 DIA-NN 的 `--threads` 同源，
+由「5. 分析参数 → 常规 → 线程数」决定。
+
+**本地模式（标题「6. 运行资源 (本地)」）**
+
+| 控件 | 默认 | 说明 |
+|---|---|---|
+| 任务名称 `job_name` | `DIANN_Task` | 显示在本地任务表与完成邮件里 |
+| 内存建议 (GB) `mem_gb` | 64 | 仅提示：提交前与 `/proc/meminfo` 可用内存比对，不足只警告（`LOCAL_MEM_ADVISORY`），**不可强制** |
+| 超时时限 (小时) `time_h` | 空=不限 | 到点由本地运行器的 `timeout` 强制终止（`rc=124` → 超时） |
+
+本地模式没有分区、没有调度器记账；没有排队机制（`LOCAL_MAX_JOBS` 可做简单并发
+上限，达到后直接阻断提交），同时跑多个 DIA-NN 会争抢本机 CPU/内存（线程数超过
+本机核数时 GUI 会警告）。
 
 ### 3.8 「7. 命令预览与提交」
 
@@ -252,19 +292,24 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 邮箱通知 `notify_email` | 可选；作业结束自动发邮件；多邮箱英文逗号分隔（格式错误会 ✗ 阻断） |
 | 项目简介 `project_desc` | 可选；写入 `<脚本同名>_desc.txt` 随完成邮件发送 |
 | 校验区 `validation_msgs` | 实时三级校验（✗ 红色阻断 / ⚠ 金色警告 / ℹ 蓝色说明），全空且无提示时显示「✔ 校验通过, 可提交」 |
-| 命令预览 `preview` | 完整 Slurm 脚本实时预览 |
-| 提交 Slurm 任务 `submit_job` | 校验通过后 sbatch 提交；成功弹窗显示 JobID |
+| 命令预览 `preview` | 完整作业脚本实时预览：Slurm 模式为「`#SBATCH` 头 + 共享程序体」，本地模式为无 `#SBATCH` 头的本地执行脚本（程序体相同） |
+| 提交按钮 `submit_job` | Slurm 模式「提交 Slurm 任务」→ `sbatch`；本地模式「提交本地任务」→ 派生本地进程。成功弹窗分别显示「✔ 提交成功, Slurm JobID: …」/「✔ 提交成功, 本地 JobID: …」 |
+
+本地模式在提交前还会真实校验 apptainer 运行时（`--version`/SIF 能力），失败直接
+阻断——因为作业就在本机跑；Slurm 模式仍保留「计算节点专用路径只警告」的策略。
 
 ### 3.9 「任务队列」页
 
-| 区块 | 说明 |
-|---|---|
-| 集群节点资源 (sinfo) | 各节点 CPU 分配/空闲/总、状态、总/空闲内存、CPU 负载（含省电关机节点） |
-| 运行队列 (squeue) | 本人作业队列；默认 10 秒自动刷新，可手动刷新 |
-| 近期历史 (sacct, 最近一天) | 作业号/名称/状态/时长/结束时间；状态中文映射（已完成/运行中/排队中/失败/超时/已取消等） |
-| 取消作业 | 输入作业 ID → scancel（弹窗二次确认） |
-| 运行日志查看 | 输入作业 ID 显示 `slurm-<ID>.out` 尾部 120 行 + `.err` 尾部 30 行（程序报错通常在 .err）；可手动指定日志目录，否则按五级链自动定位（见 10.4） |
-| 本会话提交记录 | 本次会话提交的作业（JobID/任务名/版本/输出目录/提交时间/邮箱），及其下方的「邮件通知队列」状态面板（最近 100 条） |
+区块按后端条件渲染（本地模式无 sinfo 盒）：
+
+| 区块 | Slurm 模式 | 本地模式 |
+|---|---|---|
+| 集群节点资源 (sinfo) | 各节点 CPU 分配/空闲/总、状态、总/空闲内存、CPU 负载（含省电关机节点） | 不显示 |
+| 运行队列 | 「运行队列 (squeue)」本人作业队列，10 秒自动刷新，可手动刷新 | 「本地运行任务」，10 秒自动刷新（读本地作业状态文件） |
+| 近期历史 | 「近期历史 (sacct, 最近一天)」，状态中文映射（已完成/运行中/排队中/失败/超时/已取消等） | 「近期历史 (本地作业, 最近 300 条)」，状态同样中文映射 |
+| 取消作业 | 输入作业 ID → `scancel`（弹窗二次确认） | 输入作业 ID → 终止本地进程组（弹窗二次确认，先 TERM 后 KILL） |
+| 运行日志查看 | `slurm-<ID>.out` 尾部 120 行 + `.err` 尾部 30 行（程序报错通常在 .err）；可手动指定日志目录，否则自动定位（见 10.4） | 标题为「运行日志查看 (local-<ID>.out 尾部)」，读同一命名规则；自动定位链见 10.4 |
+| 本会话提交记录 | 本次会话提交的作业（JobID/任务名/版本/输出目录/提交时间/邮箱/后端），及其下方的「邮件通知队列」状态面板（最近 100 条） | 同左（后端列为「本地」） |
 
 ### 3.10 「参数速查」「更新说明」页
 
@@ -273,7 +318,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 ---
 
-## 4. 命令构建与 Slurm 脚本规则
+## 4. 命令构建与作业脚本规则
 
 ### 4.1 命令组装顺序（`build_diann_chunks`）
 
@@ -320,7 +365,7 @@ diann-linux --f 'a.raw' --f 'b.raw' … --convert --threads 16 --verbose 1
 
 **刻意不使用 `--out-dir`**（DIA-NN 存在以反斜杠拼接产生畸形文件名的 bug，v1.3 修复规避），`.dia` 文件保存在 RAW 文件所在目录。
 
-### 4.3 生成的 Slurm 脚本（`make_slurm_script`）
+### 4.3 生成的作业脚本（`make_job_script`：Slurm 头 + 共享程序体 / 本地脚本）
 
 ```bash
 #!/bin/bash
@@ -378,12 +423,55 @@ exit $rc
 - 脚本保存到 `<输出目录>/diann_gui_scripts/diann_<时间戳>_<任务名>.sh`；任务名中的
   `/`、`\`、换行会被替换；填写了项目简介时另存 `<同名>_desc.txt`。
 
-### 4.4 提交流程（`submit_job`）
+**两种后端共用同一段程序体。** `make_job_script(p, backend)` 按后端分派：
+`backend = "slurm"` 时生成 `#SBATCH` 头 + `job_body(p, "slurm")`（即
+`make_slurm_script`）；`backend = "local"` 时生成 `make_local_script`——去掉
+`#SBATCH` 头与 `SLURM_EXTRA_ARGS`，其余 apptainer 回退链、`diann-linux` 参数、
+`.rc` 落盘与 `DIANN_GUI_START/END_EPOCH` 标记与 Slurm 版逐字相同。stdout/stderr
+重定向、`timeout`、`nice`、pidfile 以及 `.cancelled`/`.timeout` 标记由
+`inst/scripts/local_runner.sh` 接管：
+
+```bash
+# diann.gui 本地执行脚本 (无 Slurm) — 由 inst/scripts/local_runner.sh 启动
+# 程序退出码写入: <脚本路径>.rc; 日志由运行器重定向为 local-<作业ID>.out/.err
+# 时限: <N> 分钟 (由运行器 timeout 强制执行)
+APPTAINER_BIN='<所选路径>'
+...（与 Slurm 模式完全相同的 apptainer 回退链与 job_body）...
+echo "DIA-NN analysis start: $(date)"
+echo "DIANN_GUI_START_EPOCH $(date +%s)"
+"$APPTAINER_BIN" exec --bind /share <sif路径> diann-linux <全部参数>
+rc=$?
+printf '%s' "$rc" > '<脚本路径>.rc'
+echo "DIA-NN analysis done: $(date), exit code: $rc"
+echo "DIANN_GUI_END_EPOCH $(date +%s)"
+exit $rc
+```
+
+本地脚本的头部注释按分钟展示时限（与 Slurm 的 `-t` 同源，1.9 h → 114 分钟），
+但实际强制由运行器 `timeout` 完成，`time_h` 留空则不套 `timeout`。
+
+### 4.4 提交流程
+
+Slurm 与本地共用同一入口 `submit_job`，脚本生成后交给后端门面 `backend_submit()`：
 
 1. 校验存在 ✗ 阻断项 → 弹错误通知，拒绝提交。
-2. 创建 `<输出目录>/diann_gui_scripts/`，`fix_shared_dirs()` 修复目录链组权限（2770 + diann 组）。
-3. 写入脚本（+ 可选 `_desc.txt`），`sbatch` 提交。
-4. 成功：JobID 写入本会话提交记录 + 持久注册表（跨会话，保留 300 条）；自动把「任务队列 → 运行日志查看」的作业 ID 填为新 JobID；若填了邮箱则通知入队并确保 watcher 存活；弹「✔ 提交成功, JobID: …」。
+2. 创建 `<输出目录>/diann_gui_scripts/`，`fix_shared_dirs()` 修复目录链组权限
+   （2770 + diann 组；仅站点配置了 `SHARED_GROUP` 时生效）；归档上次运行的遗留
+   report/矩阵文件，并按 `RETENTION_DAYS` 清理过期脚本/归档。
+3. 按当前后端写入脚本（+ 可选 `_desc.txt`）。
+4. **Slurm 后端**：`sbatch` 提交，解析 `Submitted batch job N`；失败信息原样返回
+   （不抛错）。
+5. **本地后端**（`local_submit()`）：分配持久化整数 JobID（从 `1000001` 起）→ 写
+   本地作业记录 → `setsid+nohup` 派生 `local_runner.sh` → 最多等 3 秒拿到 pidfile
+   （记录 `/proc` starttime 防 PID 复用）。运行器先写 pidfile，再用 `nice + timeout`
+   运行作业体，日志写 `local-<ID>.out/.err`，退出码写 `<脚本>.rc`，结束清理 pidfile。
+   状态目录不可写等失败会回滚记录并以错误通知返回，**不会让 Shiny 会话断连**
+   （v1.11 无 Slurm 点提交断连事故的回归防护）。
+6. 成功：JobID 写入本会话提交记录 + 持久注册表（跨会话，保留 300 条；v1.12
+   schema v3 追加 `backend`/`pid` 列）；自动把「任务队列 → 运行日志查看」的作业 ID
+   填为新 JobID；若填了邮箱则通知入队（记录含 `backend`）并确保 watcher 存活；
+   弹「✔ 提交成功, <后端> JobID: …」。
+
 
 ---
 
@@ -440,7 +528,9 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 起校验按此�
 - 线程数 = Slurm CPUs；node1–node4 每节点 56 逻辑核，单作业 16–32 线程较均衡，过高会与同节点其他作业争抢。
 - 可不设时限（默认不限）；保守起见可按预估时长 ×2 设置。
 
-**分批与并行**：GUI 一次提交是一个 Slurm 作业（内含本次所选全部 RAW）。大队列可按批多次提交（如每批 20–50 个 run），多作业在队列中自动排队/并行；也可一整目录一次提交（内存够时 DIA-NN 内部按 run 串行处理）。
+**分批与并行**：GUI 一次提交是一个作业（内含本次所选全部 RAW）。大队列可按批多次提交（如每批 20–50 个 run）：Slurm 模式下多作业在队列中自动排队/并行；本地模式没有排队，先提交的作业直接开始，后续作业会与本机其他任务争抢 CPU/内存（可用 `LOCAL_MAX_JOBS` 限制并发）。也可一整目录一次提交（内存够时 DIA-NN 内部按 run 串行处理）。
+
+**本地单机的额外注意**：本机可用的核数与内存就是上限——GUI 在提交前会提示线程数超过本机核数、申请内存超过当前可用内存；内存不足时 Linux OOM killer 可能直接杀进程，建议按「内存 - 可用余量」保守估算。
 
 **强烈建议**：大队列务必填**邮箱通知**——跑数小时至数天的作业结束后（或失败时）自动收邮件，含退出码、耗时、结果文件清单。
 
@@ -454,16 +544,18 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 起校验按此�
 
 ```
 提交时(填了邮箱)
-  ├─ worker 把 {jobid, 邮箱, 任务, 输出目录, 脚本路径, 简介…} 写入状态文件
+  ├─ worker 把 {jobid, backend, 邮箱, 任务, 输出目录, 脚本路径, 简介…} 写入状态文件
   │    $HOME/diann_gui_notify_state.rds（mkdir 互斥锁 + 临时文件原子写，保留 100 条）
   └─ worker 确保 nohup Rscript -e 'diann.gui::watch_daemon()' 守护进程存活（pidfile 去重）
-       diann.gui::watch_daemon()（登录节点侧, 每 60s, 一次 squeue 快照）
-         └─ squeue 查询 → 作业离队 → 解析 slurm-<id>.out 退出码与耗时
-              └─ python3 mail_notify.py --strict --to <邮箱> --rc N …
-                   └─ SMTP 发信（失败重试 3 次: 5/10/15 分钟后）
+       diann.gui::watch_daemon()（登录节点侧, 每 60s, 一次后端快照）
+         └─ 按记录 backend 取状态: slurm → squeue/sacct; local → 本地作业状态文件
+              └─ 作业结束 → 解析 slurm-<id>.out / local-<id>.out 的退出码与耗时（.rc 优先）
+                   └─ python3 mail_notify.py --strict --to <邮箱> --rc N …
+                        └─ SMTP 发信（失败重试 3 次: 5/10/15 分钟后）
 ```
 
 - 计算节点无出网，邮件由 head-node 侧守护进程代发；watcher 脱离浏览器/worker 生命周期，**不打开网页也能收到邮件**（v1.5 重构）。
+- v1.12 起状态与日志来源由每条记录的后端决定：日志文件名经唯一契约 `backend_log_paths()` 生成（`slurm-<id>.out` / `local-<id>.out`），同一个通知队列里可以同时有 Slurm 与本地作业；四层状态合成语义不变。
 - watcher 空闲 24 小时自动退出；页面打开/提交成功时会自动按 pidfile 对账重拉。
 - 「任务队列 → 本会话提交记录」下方实时显示通知队列状态（已处理/等待完成/失败原因）。
 
@@ -511,7 +603,7 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 **已知陷阱（务必了解）**：
 1. **导入只置 TRUE、从不清除布尔旗标**：粘贴的命令里出现的每个布尔旗标都会被勾上；若之后在同页面上改做别的分析（例如拿旧建库命令导入后改为普通搜库），`--gen-spec-lib` 等开关会**静默保持勾选**。导入后请逐标签检查开关状态。
 2. `--fasta-search` 与 `--gen-spec-lib` 是两个独立开关，前者并不 gate 后者。
-3. 导入不改动「6. Slurm 资源」（任务名/分区/内存等仍需自行确认）。
+3. 导入不改动「6. Slurm 资源 / 运行资源 (本地)」（任务名/分区/内存等仍需自行确认）。
 
 ---
 
@@ -543,6 +635,7 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | 可变/固定修饰行填了一部分 | ✗ 可变修饰行不完整: … (需 名称,质量,位点) |
 | `--out-lib` 为 Windows 盘符路径 | ✗ --out-lib 是 Windows 盘符路径 (如 I:\…), 服务器上不可用, 请清空或改为服务器路径 |
 | 「额外参数」含缺取值的文件类旗标 | ✗ 额外参数中 --f/--fasta/… 缺少取值 (通常是命令导入时 Windows 路径被丢弃残留), 请清理「额外参数」 |
+| 本地并发已达 `LOCAL_MAX_JOBS` 上限 | ✗ 本地并发已达上限 LOCAL_MAX_JOBS=N; 请等当前本地作业结束后再提交 |
 
 ### ⚠ 警告（金色，可提交但请注意）
 
@@ -555,6 +648,8 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | 输入/输出路径不在 `$HOME`/当前目录/`BIND_PATHS` 内 | ⚠ 以下路径不在 … 容器里可能看不到（历史 v1.4 事故类别） |
 | 可变修饰行数 > `--var-mods` | ⚠ 可变修饰填了 N 行, 但每肽段最大可变修饰数为 M … |
 | 镜像文件 < 1 MB | ⚠ 镜像仅 … MB, 可疑 |
+| 本地模式线程数超过本机 CPU 核数 | ⚠ 线程数 N 超过本机 CPU 核数 M; 本地模式没有排队机制, 可能拖慢整机 |
+| 本地模式申请内存超过本机当前可用 | ⚠ 申请内存 N GB 超过本机当前可用 M GB; 本地模式只做建议检查, 不会强制限制 |
 
 ### ℹ 说明（蓝色，信息提示）
 
@@ -563,7 +658,9 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | 光谱库 + `--gen-spec-lib` + RAW（经验谱库工作流） | ℹ 经验谱库工作流: 以光谱库搜库, 并用本次鉴定精修输出谱库 (--out-lib); 该库可用于全部样本的后续搜索 |
 | 启用污染物扣除且生成谱库 | ℹ 污染物 cRAP 将编入输出谱库, 便于后续搜库时鉴定并经 --cont-quant-exclude 从定量矩阵扣除 |
 | 同时选光谱库与 FASTA | ℹ 已同时选择光谱库与 FASTA: FASTA 预测前体将并入搜索空间 (可扩充库覆盖; 若 FASTA 与库内容相同则为重复预测, 清除 FASTA 可提速) |
-| 设置了时限 | ℹ 时限按 N 分钟提交 (Slurm -t N) |
+| 设置了时限（Slurm 模式） | ℹ 时限按 N 分钟提交 (Slurm -t N) |
+| 设置了时限（本地模式） | ℹ 时限按 N 分钟执行 (本地模式到点由运行器终止) |
+| 本地模式已有作业在运行 | ℹ 当前已有 N 个本地作业在运行; 单机同时跑多个 DIA-NN 会争抢 CPU/内存 |
 | 填了 `--out-lib` 但未勾选「生成谱图库」 | ℹ 未勾选「生成谱图库」, --out-lib 不会写入命令 (填写值已忽略) |
 | 选中 `singularity` 可执行文件 | ℹ 当前使用 singularity 命令 (与 apptainer 等价) |
 | 可选镜像版本与文件名不一致（深度验证） | ℹ 容器内 DIA-NN 实际版本 … 注意: 文件名版本为 … |
@@ -583,8 +680,9 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | `library.speclib` / `library.predicted.speclib` | `--gen-spec-lib --out-lib` | 生成的谱库（预测库/经验库） |
 | `*.skyline.speclib` | 默认 | 供 Skyline 使用的谱库（`--no-skyline` 关闭） |
 | `report.stats.tsv` 等 | 默认 | 统计文件（`--no-stats` 关闭） |
-| `slurm-<JobID>.out / .err` | Slurm | stdout / stderr 日志；**程序报错通常在 .err** |
-| `diann_gui_scripts/diann_*.sh`、`*_desc.txt` | GUI | 提交脚本与项目简介 |
+| `slurm-<JobID>.out / .err` | Slurm | Slurm 模式的 stdout / stderr 日志；**程序报错通常在 .err** |
+| `local-<作业ID>.out / .err` | 本地运行器 | 本地模式的 stdout / stderr 日志；同样**先看 .err** |
+| `diann_gui_scripts/diann_*.sh`、`*_desc.txt`、`*.rc` | GUI | 提交脚本、项目简介与程序退出码；本地模式的 `.cancelled`/`.timeout` 标记也在该目录 |
 | `<RAW 同目录>/*.dia` | `--convert` | 转换产物（仅转换模式） |
 | `<RAW 同目录>/*.raw.quant` | DIA-NN | RAW 分析缓存（注意 10.2） |
 
@@ -594,7 +692,7 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 
 ### 10.1 作业显示 COMPLETED 但没有结果 / 疑似失败
 
-- **先看 `.err` 再看 `.out`**：Slurm 脚本没有 `set -e`，DIA-NN 秒退（如参数错误）时作业状态仍可能 COMPLETED；真实报错几乎总在 `slurm-<JobID>.err`。GUI「运行日志查看」已附带 .err 尾部 30 行。
+- **先看 `.err` 再看 `.out`**：作业脚本没有 `set -e`，DIA-NN 秒退（如参数错误）时作业状态仍可能 COMPLETED；真实报错几乎总在 `slurm-<JobID>.err`（本地模式为 `local-<ID>.err`）。GUI「运行日志查看」已附带 .err 尾部 30 行。
 - 反之，DIA-NN 实际成功但 apptainer 容器卸载阶段偶发 `Illegal instruction (core dumped)` 会造成**假失败**——v1.8 起由四层状态合成判为「待核实」（主报告为本次新写 + 退出码 ∈ {132,134,139}），不再伪造成功；看到「待核实」但 report.tsv 已生成且非空，通常结果可用。
 
 ### 10.2 library size mismatch / 混用版本后报错
@@ -607,12 +705,13 @@ DIA-NN 会在 RAW 目录生成 `*.raw.quant` 缓存并自动复用。同一目�
 
 ### 10.4 日志文件找不到（运行日志查看显示"未能自动定位"）
 
-GUI 按五级链自动定位 `slurm-<ID>.out`：
+GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式找 `local-<ID>.out`
+（文件名由 `backend_log_paths()` 按记录的后端生成）：
 
 ```
 手动指定目录 → 本会话提交记录 → GUI 持久提交注册表（跨会话）
-  → scontrol show job 的 StdOut=（运行中/排队中/刚结束的作业）
-  → sacct 工作目录
+  → 本地作业记录（local 后端；注册表滚动淘汰时兜底）
+  → [仅 Slurm] scontrol show job 的 StdOut=（运行中/排队中/刚结束的作业）→ sacct 工作目录
 ```
 
 早已结束且**不是**本 GUI 提交的作业，Slurm 20.11 记账库不保存日志路径，只能手动指定日志目录。本 GUI 提交的作业永久记录在注册表（保留 300 条），一般都能自动找到。
@@ -653,21 +752,46 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 5. `apptainer --version` 能跑但容器起不来：用「深度验证」看 `inspect`/容器内启动的具体报错；
    也可在登录节点直接 `apptainer exec <sif> diann-linux --version` 复现。
 
-### 10.9 每用户自托管：装包 / 运行 / 端口
+### 10.9 无 Slurm 主机：单机模式（本地执行）
+
+1. **`run_app()` 启动报错「检测到 Slurm 痕迹……但 PATH 上没有 sbatch」**：这是
+   `auto` 的安全阀（`LOCAL_REQUIRE_EXCLUSIVE_HOST=TRUE`）——本机像 HPC 登录节点，
+   应用拒绝静默本地跑计算任务。先加载 Slurm 模块/修正 `PATH` 后重启（推荐）；
+   确认本机是真正的单机服务器后，在 config.R 设 `EXEC_BACKEND <- "local"`，或
+   启动前 `export DIANN_GUI_EXEC_BACKEND=local`。
+2. **怎么确认当前是哪个后端**：标题栏显示「执行后端: Slurm 集群」或「执行后端:
+   本地单机」；`run_app()` 启动时打印 `执行后端: … (自动检测/配置指定)`；
+   `doctor()` 第一行给出同样的结论。
+3. **本地模式提交被拦：apptainer 未能验证**：本地作业在 GUI 主机上跑，所以
+   apptainer 必须真的可用——提交前会做真实校验并阻断（不像 Slurm 模式允许
+   计算节点专用路径）。到「1. apptainer 运行环境」选一个可执行的
+   apptainer/singularity 并「识别并验证」，或改用 Slurm 集群。
+4. **本地日志在哪**：`<输出目录>/local-<作业ID>.out/.err`（不是 `slurm-`），
+   脚本/`.rc`/`_desc.txt` 在 `<输出目录>/diann_gui_scripts/`；本地作业 ID 从
+   `1000001` 起。日志查看器按记录的后端自动选文件名。
+5. **本地作业显示「超时」**：时限由 `timeout` 强制（`rc=124`）；`time_h` 太小时
+   作业会在到点被杀。留空 = 不限，或调大；`LOCAL_TIMEOUT_GRACE` 控制 TERM→KILL
+   的等待秒数。
+6. **内存/并发**：本地模式内存只做建议检查（提交前比对 `/proc/meminfo`，仅警告），
+   不做强制；没有排队机制，可用 `LOCAL_MAX_JOBS` 限制同时运行的本地作业数。
+7. **legacy 中央 shiny-server 部署报「不支持本地执行」**：共享运行账号会破坏
+   每用户隔离，默认拒绝；确需启用才设 `LOCAL_ALLOW_SHARED <- TRUE`（应用会警告）。
+
+### 10.10 每用户自托管：装包 / 运行 / 端口
 
 1. 装包：`install.packages("diann.gui", repos = c(SITE = "<站点仓库>", getOption("repos")))`，
-   无外网时 `install.packages("/path/diann.gui_1.11.0.tar.gz", repos = NULL, type = "source")`。
-2. 自检：`diann.gui::doctor()` 一次列出缺依赖/缺 Slurm 命令/找不到 apptainer/SIF_DIRS 未配/状态目录不可写。
+   无外网时 `install.packages("/path/diann.gui_1.12.0.tar.gz", repos = NULL, type = "source")`。
+2. 自检：`diann.gui::doctor()` 一次列出缺依赖/执行后端与当前模式要求的命令（Slurm 命令或本地原语 setsid/nohup/timeout/bash 与 /proc）/找不到 apptainer/SIF_DIRS 未配/状态目录不可写；不适用项标记为 `na`。
 3. 启动：`diann.gui::run_app()`（自动选空闲端口并打印 URL/隧道命令）；固定端口 `run_app(port = 3838)`。
 4. 端口被占用：`run_app()` 会自动换端口；也可显式指定。
 5. 找不到包（watcher 子进程）：watcher 启动命令显式传入当前 `.libPaths()` 与配置文件（v1.11 起）；
    仍有问题先跑 `doctor()`。
 
-### 10.10 其他
+### 10.11 其他
 
-- **分区选择**：`compute` 为主计算分区；`head-node` 仅用于小测试（与管理服务混部，勿跑大作业）。
-- **取消作业**：「任务队列 → 取消作业」输入 JobID 确认即 scancel；排队中与运行中的作业都可取消。
-- **时间戳/时限**：`#SBATCH -t` 留空为不限时；设置了时限的作业超时会被 Slurm 杀掉（sacct 状态「超时」）。
+- **分区选择（仅 Slurm 模式）**：`compute` 为主计算分区；`head-node` 仅用于小测试（与管理服务混部，勿跑大作业）。本地模式没有分区。
+- **取消作业**：「任务队列 → 取消作业」输入 JobID 确认即取消：Slurm 模式 `scancel`，本地模式终止本地进程组（先 TERM、约 5 秒后 KILL）；排队中与运行中的作业都可取消。
+- **时间戳/时限**：Slurm 模式 `#SBATCH -t` 留空为不限时，超时作业被 Slurm 杀掉（sacct 状态「超时」）；本地模式时限由运行器 `timeout` 强制，到点同样记为「超时」。
 
 ---
 
@@ -786,4 +910,4 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 
 ---
 
-*手册基于 GUI v1.11 源码（R 包 diann.gui）、DIA-NN 官方文档与集群实测记录整理；2026-10-20。*
+*手册基于 GUI v1.12 源码（R 包 diann.gui）、DIA-NN 官方文档与集群实测记录整理；2026-10-26。*
