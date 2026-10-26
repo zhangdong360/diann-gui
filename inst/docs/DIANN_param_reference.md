@@ -1,3 +1,13 @@
+<!--
+Vendored DIA-NN parameter/output reference (documentation snapshot).
+Source: https://github.com/vdemichev/DiaNN (Command-line reference / Main output reference)
+Retrieved: 2026-10-13; upstream documentation checked: 2026-10-26.
+Copyright (c) DIA-NN authors (Vadim Demichev et al.).
+This snapshot is included for offline reference only and is NOT relicensed
+under diann.gui's MIT license; see the DIA-NN repository for upstream terms.
+Do not redistribute DIA-NN binaries or container images; build your own
+.sif locally (see README "Building the DIA-NN container image").
+-->
 ### Command-line reference
 
 

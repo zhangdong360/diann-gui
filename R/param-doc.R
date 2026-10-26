@@ -22,7 +22,9 @@ html_unescape <- function(x) {
   gsub("&amp;", "&", x, fixed = TRUE)
 }
 parse_param_doc <- function(path) {
-  txt <- readLines(path, n = 6, warn = FALSE)
+  # v1.13: 文件头有 attribution HTML 注释, 固定 n=6 可能整个落在注释里;
+  # 读足够多行, 找到首个 <li> 行即停 (参数速查是单行超长 HTML)。
+  txt <- readLines(path, n = 40, warn = FALSE)
   idx <- which(grepl("<li", txt))[1]
   if (is.na(idx)) return(NULL)
   line <- txt[idx]

@@ -44,6 +44,8 @@ imported_var_mods_max <- diann.gui:::imported_var_mods_max
 vm_default <- diann.gui:::vm_default
 local_next_slot_info <- diann.gui:::local_next_slot_info
 local_jobs_save <- diann.gui:::local_jobs_save
+parse_param_doc <- diann.gui:::parse_param_doc
+param_doc_path <- diann.gui:::param_doc_path
 local_jobs_status <- diann.gui:::local_jobs_status
 local_jobs_file <- diann.gui:::local_jobs_file
 local_seq_file <- diann.gui:::local_seq_file

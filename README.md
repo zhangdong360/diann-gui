@@ -152,7 +152,7 @@ the local backend. `EXEC_BACKEND` can be overridden per launch with the
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SIF_DIRS` | Directories scanned recursively for `diann*.sif` | *(none — set it, or type a SIF path in the GUI)* |
+| `SIF_DIRS` | Directories scanned recursively for **all `*.sif`** (any file name) | *(none — set it, or type a SIF path in the GUI)* |
 | `DEFAULT_SIF` | Image preselected in the dropdown | first scanned image |
 | `DATA_HOME` | Root of the browsable data tree (FASTA/RAW/output) | home directory |
 | `BASE_VOLUMES` | Named roots exposed to the file browser (import path guard) | `c(Data = DATA_HOME)` |
@@ -191,6 +191,81 @@ has been the image format since Singularity 3.0). `singularity 2.x` answers
 with `Unknown image format/type`. The dropdown, self-check panel, both
 verification modes and the pre-submit check flag such candidates as
 «⚠ 不支持 SIF» and block submission.
+
+## Building the DIA-NN container image (`.sif`)
+
+The GUI never ships DIA-NN binaries or images — **each user builds their own
+`.sif`** from the official release, per DIA-NN's licensing (free for academic
+use; redistribution of binaries/images is not permitted — see the maintainer's
+note in [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202)).
+
+**Why a container**: DIA-NN ≥ 1.9 needs a modern C++ runtime and often dies on
+HPC compute nodes with `Illegal instruction` / `GLIBCXX_3.4.30 not found`;
+Docker needs root, apptainer/singularity does not; a `.sif` is reproducible and
+travels with the exact version.
+
+### Route A (recommended): official `make-docker.sh` → apptainer build
+
+On any machine with Docker (a workstation is fine — the cluster usually has no
+daemon):
+
+```bash
+# 1) official release zip for your version (NOT a third-party mirror)
+#    https://github.com/vdemichev/DiaNN/releases
+unzip DIA-NN-<ver>.Linux.zip -d diann-<ver> && cd diann-<ver>
+bash ./make-docker.sh                       # builds the docker image
+docker images                               # note the image/tag
+
+# 2a) with a local Docker daemon:
+apptainer build diann-<ver>.sif docker-daemon://<image>:<tag>
+# 2b) without a daemon (typical HPC workflow): save on the Docker machine,
+#     copy the tar over, then:
+apptainer build diann-<ver>.sif docker-archive://diann-<ver>.tar
+```
+
+### Route B: minimal Dockerfile (adapted from issue #1202)
+
+When you need a custom image and no `make-docker.sh` is available —
+ubuntu:22.04 + official Linux zip + **`ENV PATH` including the DIA-NN binary
+directory** (the GUI invokes `diann-linux` without an absolute path, so PATH is
+required):
+
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y --no-install-recommends         wget unzip libgomp1 locales && rm -rf /var/lib/apt/lists/*
+ARG DIANN_VER=2.3.2
+RUN wget -q https://github.com/vdemichev/DiaNN/releases/download/<rel>/DIA-NN-${DIANN_VER}.Linux.zip     && unzip DIA-NN-${DIANN_VER}.Linux.zip -d /opt/diann     && rm DIA-NN-${DIANN_VER}.Linux.zip
+ENV PATH=/opt/diann/DIA-NN-${DIANN_VER}.Linux:$PATH
+```
+
+```bash
+docker build -t diann:<ver> . && docker save -o diann-<ver>.tar diann:<ver>
+apptainer build diann-<ver>.sif docker-archive://diann-<ver>.tar
+```
+
+### Verify, place, and let the GUI identify it
+
+```bash
+apptainer exec diann-<ver>.sif diann-linux --version   # must print DIA-NN <ver> …
+```
+
+Put the `.sif` on storage visible to the compute nodes (shared filesystem,
+absolute paths), add its directory to `SIF_DIRS` — **any file name works**
+(`image.sif`, `diann_latest.sif`, …): since v1.13 the GUI scans all `*.sif`
+and reads the real version from inside the container (cached per
+size+mtime). Multiple versions coexist side by side; the dropdown sorts them
+numerically (2.10.0 before 2.9.1) and preselects the highest identified one.
+
+Runtime notes: apptainer must be installed setuid-root (`.deb`) or provided as
+an admin-built conda env; the GUI node and the compute nodes must both see it.
+If the compute nodes cannot, point `APPTAINER_PATHS` at them — the generated
+job script already falls back `APPTAINER_PATHS` → `PATH` → `module load` →
+`singularity`. Version discipline: when you upgrade DIA-NN, build a new `.sif`
+and re-run a small-sample regression before switching production data.
+
+Do **not** redistribute the built `.sif` (or any DIA-NN binary); each user
+builds their own. The Dockerfiles/scripts above are instructions only and
+contain no DIA-NN code.
 
 ## Running without Slurm (local mode)
 
@@ -304,7 +379,9 @@ v1.11-and-earlier registries are read as Slurm records.
   manual: architecture, every control, workflows, notification internals,
   troubleshooting.
 - [`inst/docs/DIANN_param_reference.md`](inst/docs/DIANN_param_reference.md) —
-  the in-app parameter reference data source.
+  the in-app parameter reference data source. This is a **vendored documentation
+  snapshot from the DIA-NN repository** (copyright DIA-NN authors); included
+  for offline reference only and not relicensed under diann.gui's MIT license.
 
 *(Documentation is in Chinese.)*
 

@@ -124,7 +124,7 @@ flowchart LR
 
 | 配置项 | 用途 | 默认值 |
 |---|---|---|
-| `SIF_DIRS` | 递归扫描 `diann*.sif` 的目录 | *(未设置——需配置，或在 GUI 里手输镜像路径)* |
+| `SIF_DIRS` | 递归扫描**全部 `*.sif`**（文件名无关）的目录 | *(未设置——需配置，或在 GUI 里手输镜像路径)* |
 | `DEFAULT_SIF` | 下拉框默认选中的镜像 | 扫描到的第一个 |
 | `DATA_HOME` | 文件浏览器可见的数据树根目录 | 家目录 |
 | `BASE_VOLUMES` | 文件浏览器暴露的命名根（也是导入路径的安全边界） | `c(Data = DATA_HOME)` |
@@ -158,6 +158,72 @@ GUI 第一个面板「1. apptainer 运行环境」启动时自动填充：
 起）。`singularity 2.x` 能执行 `--version`，但只认 squashfs/ext3 的 `.simg`，对 `.sif`
 会报 `Unknown image format/type`；候选下拉/自检面板/验证/提交前校验都会标注
 「⚠ 不支持 SIF」，提交时直接阻断。
+
+## 构建 DIA-NN 容器镜像（`.sif`）
+
+GUI 不分发 DIA-NN 二进制或镜像——**每个使用者用官方 release 自行构建 `.sif`**
+（学术使用免费；二进制/镜像不允许再分发——见维护者在
+[DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) 的说明）。
+
+**为什么用容器**：DIA-NN ≥ 1.9 依赖新版 C++ 运行时，在 HPC 计算节点直接跑常报
+`Illegal instruction` / `GLIBCXX_3.4.30 not found`；Docker 需要 root 而
+apptainer/singularity 不需要；`.sif` 随版本走、可复现。
+
+### 路线 A（推荐）：官方 `make-docker.sh` → apptainer build
+
+在任何有 Docker 的机器上（工作站即可——集群通常没有 daemon）：
+
+```bash
+# 1) 官方 release zip（勿用第三方镜像）
+#    https://github.com/vdemichev/DiaNN/releases
+unzip DIA-NN-<版本>.Linux.zip -d diann-<版本> && cd diann-<版本>
+bash ./make-docker.sh                       # 构建 docker 镜像
+docker images                               # 记下镜像名/tag
+
+# 2a) 本机有 Docker daemon:
+apptainer build diann-<版本>.sif docker-daemon://<镜像>:<tag>
+# 2b) 无 daemon（HPC 常见）: 在 Docker 机器上 docker save, 拷贝 tar 后:
+apptainer build diann-<版本>.sif docker-archive://diann-<版本>.tar
+```
+
+### 路线 B：精简 Dockerfile（改自 issue #1202）
+
+需要自定义镜像且没有 `make-docker.sh` 时使用——ubuntu:22.04 + 官方 Linux zip +
+**`ENV PATH` 包含 DIA-NN 二进制目录**（GUI 以不带绝对路径的方式调用
+`diann-linux`，PATH 必须配置）：
+
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y --no-install-recommends         wget unzip libgomp1 locales && rm -rf /var/lib/apt/lists/*
+ARG DIANN_VER=2.3.2
+RUN wget -q https://github.com/vdemichev/DiaNN/releases/download/<rel>/DIA-NN-${DIANN_VER}.Linux.zip     && unzip DIA-NN-${DIANN_VER}.Linux.zip -d /opt/diann     && rm DIA-NN-${DIANN_VER}.Linux.zip
+ENV PATH=/opt/diann/DIA-NN-${DIANN_VER}.Linux:$PATH
+```
+
+```bash
+docker build -t diann:<版本> . && docker save -o diann-<版本>.tar diann:<版本>
+apptainer build diann-<版本>.sif docker-archive://diann-<版本>.tar
+```
+
+### 验证、放置、交给 GUI 识别
+
+```bash
+apptainer exec diann-<版本>.sif diann-linux --version   # 必须输出 DIA-NN <版本> …
+```
+
+把 `.sif` 放到计算节点可见的共享存储（用绝对路径），将其目录加入 `SIF_DIRS`——
+**文件名任意**（`image.sif`、`diann_latest.sif` 都行）：v1.13 起 GUI 扫描全部
+`*.sif` 并在容器内实测真实版本（按 size+mtime 缓存）。多版本并存时下拉按数值
+排序（2.10.0 在 2.9.1 之前）并默认选中已识别的最高版本。
+
+运行时注意：apptainer 需以 root 安装（`.deb`）或使用管理员构建的 conda 环境；
+GUI 节点与计算节点都要能看到运行时。计算节点看不到时把路径配进
+`APPTAINER_PATHS`——生成的作业脚本已内置 `APPTAINER_PATHS` → `PATH` →
+`module load` → `singularity` 回退链。版本纪律：升级 DIA-NN 时重新构建新的
+`.sif`，先跑小样本回归再切换生产数据。
+
+**不要分发**构建出的 `.sif`（或任何 DIA-NN 二进制）；每人自行构建。上面的
+Dockerfile/脚本只是说明性内容，不含 DIA-NN 代码。
 
 ## 单机模式（无 Slurm）
 
@@ -257,7 +323,8 @@ v1.11 及更早的旧注册表按 Slurm 记录读取。
 - [`docs/DIANN_GUI_技术手册.md`](docs/DIANN_GUI_技术手册.md) ——
   完整技术手册：架构、控件详解、标准工作流、通知机制、故障排查。
 - [`inst/docs/DIANN_param_reference.md`](inst/docs/DIANN_param_reference.md) ——
-  应用内参数速查页的数据源。
+  应用内参数速查页的数据源。该文件是 **DIA-NN 官方仓库文档的快照**（版权归
+  DIA-NN 作者），仅为离线速查随包携带，不随 diann.gui 的 MIT 许可再发布。
 
 ## 测试
 

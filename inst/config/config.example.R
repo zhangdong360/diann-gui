@@ -18,6 +18,8 @@
 
 # 递归扫描 diann*.sif 的目录 (建议: 管理员把镜像统一放在 /share/app/tools/diann/
 # 这类全员可读的共享位)。GUI 的版本下拉由扫描结果生成。
+# v1.13: 扫描目录下全部 *.sif (文件名无关), 版本由容器内实测识别;
+# 构建方法见 README「构建 DIA-NN 容器镜像」章节。
 # SIF_DIRS <- c("/share/app/tools/diann")
 
 # 默认选中的镜像。留空 = 扫描到的第一个。

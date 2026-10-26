@@ -2,7 +2,7 @@
 
 | 项目 | 说明 |
 |---|---|
-| 适用版本 | GUI v1.12（2026-10-26）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
+| 适用版本 | GUI v1.13（2026-10-26）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
 | 执行后端 | Slurm 集群 或 本地单机（v1.12 起 Slurm 为可选后端，见 §1.1 / §1.2） |
 | 面向读者 | 质谱平台工作人员、数据分析人员、集群管理员 |
 | 配套文档 | 《DIANN_GUI_新手指南.html》（图文入门版）；GUI 内「参数速查」「更新说明」页 |
@@ -66,7 +66,7 @@ Slurm 分区、apptainer 候选与 SIF 目录），或手动编辑模板 `inst/c
 
 | 常量 | 示例 | 说明 |
 |---|---|---|
-| `SIF_DIRS` | `/share/app/tools/diann` | 递归扫描 `diann*.sif`，按数值版本排序后生成下拉 |
+| `SIF_DIRS` | `/share/app/tools/diann` | 递归扫描**全部 `*.sif`（文件名无关，v1.13 起）**，按数值版本排序后生成下拉 |
 | `DEFAULT_SIF` | `/share/app/tools/diann/diann-2.7.0.sif` | 默认镜像（不存在时取扫描到的最高版本） |
 | `DATA_HOME` / `BASE_VOLUMES` | `~/data` | 文件浏览器根目录，也是导入路径的安全边界 |
 | `SLURM_PARTITIONS` | `c("compute")` | 可选计算分区（第一个为默认） |
@@ -152,9 +152,19 @@ legacy 中央部署删除后彻底移除），避免项目目录里的同名文�
 
 | 控件 | 默认 | 说明 / 对应命令行 |
 |---|---|---|
-| 版本下拉 `sif_version` | v2.7.0 | 自动扫描 `/share/home/demo` 下 `diann*.sif`，选项格式 `v{版本} · {路径}` |
+| 版本下拉 `sif_version` | v2.7.0 | 自动扫描 SIF_DIRS 下**全部 `*.sif`（文件名无关）**；已识别选项格式 `v{版本} · {路径}`，未识别为 `未识别 · {路径}` |
 | 使用自定义镜像路径 `use_custom_sif`/`custom_sif` | 否 | 勾选后手填 sif 完整路径（仍在 /share 下可用） |
-| 当前生效镜像 `sif_display` | — | 回显最终使用的 sif 路径 |
+| 版本信息 `sif_version_info` | — | 回显「已识别（缓存）/ 未识别」及上次失败原因 |
+| 当前生效镜像 `sif_display` | — | 回显最终使用的 sif 路径（带已识别版本） |
+| 识别所有未识别镜像 `sif_identify_all` | — | 逐个在容器内跑 `diann-linux --version`（带进度），结果落缓存 |
+
+**镜像来源/命名/识别（v1.13）**：GUI 不分发 DIA-NN 二进制或镜像——每人用官方
+release 自行构建 `.sif`（流程与许可说明见 README「构建 DIA-NN 容器镜像」章节）。
+文件名**任意**：版本不来自文件名，而是选中镜像后在容器内实测（`apptainer/singularity
+exec <sif> diann-linux --version`），结果按 size+mtime 缓存到
+`~/.diann_gui/sif_probe.rds`（文件变化自动失效；「识别版本并深度验证」成功后同样
+写缓存）。启动不跑容器（HPC 登录节点常无 apptainer）；「版本未识别」不阻断提交。
+默认选中：`DEFAULT_SIF` 命中优先 → 已识别的最高数值版本 → 首个路径。
 
 ### 3.3 「3. 文件与数据库」
 
@@ -723,7 +733,7 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 - 「额外参数」中的裸旗标（如 `--f` 后没有取值）会让 DIA-NN 直接退出——多为命令导入残留，校验会 ✗ 提示。
 - 版本行为差异见第 11 节；改用其他 sif 版本对比是快速定位手段。
 
-### 10.6 apptainer 识别不到 / 版本不对
+### 10.7 apptainer 识别不到 / 版本不对
 
 1. 先看「1. apptainer 运行环境 → 运行环境自检」：列出每个候选的来源、版本与 module 回退状态。
 2. 登录节点没有 apptainer 是常见且可接受的：手动填写计算节点可见的路径（如
@@ -736,7 +746,7 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 5. `apptainer --version` 能跑但容器起不来：用「深度验证」看 `inspect`/容器内启动的具体报错；
    也可在登录节点直接 `apptainer exec <sif> diann-linux --version` 复现。
 
-### 10.6 无 Slurm 主机：单机模式（本地执行）
+### 10.8 无 Slurm 主机：单机模式（本地执行）
 
 1. **`run_app()` 启动报错「检测到 Slurm 痕迹……但 PATH 上没有 sbatch」**：这是
    `auto` 的安全阀（`LOCAL_REQUIRE_EXCLUSIVE_HOST=TRUE`）——本机像 HPC 登录节点，
@@ -760,6 +770,20 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
    不做强制；没有排队机制，可用 `LOCAL_MAX_JOBS` 限制同时运行的本地作业数。
 7. **同事读不了你的输出目录**：自托管产物属你本人；请用标准 Unix 组/ACL 授权
    （`chmod -R g+rX` 或 `setfacl`）——v1.13 起 GUI 不再代做组修复。
+
+### 10.9 镜像构建 / 容器内无 diann-linux / 计算节点无 apptainer / 版本未识别
+
+- **怎么构建 .sif**：见 README「构建 DIA-NN 容器镜像」章节（官方 make-docker.sh
+  或 issue #1202 Dockerfile → docker → apptainer build；文件名任意，构建后放入
+  SIF_DIRS，GUI 会自动识别版本）。
+- **识别报「容器内找不到 diann-linux」**：镜像没把 DIA-NN 二进制目录加进 PATH
+  （Dockerfile 缺 `ENV PATH=/opt/diann/...:$PATH`）——按 README 路线 B 补上 PATH
+  重新构建。
+- **计算节点看不到 apptainer**：作业脚本自带回退链 `APPTAINER_PATHS` → `PATH` →
+  `module load` → `singularity`；把计算节点可见的运行时路径配进 `APPTAINER_PATHS`。
+- **版本未识别（不影响提交）**：GUI 节点没有可用 apptainer 时无法在容器内实测
+  版本；在「1. apptainer 运行环境」选好运行时后点「识别所有未识别镜像」，或换到
+  有运行时的节点再识别。Slurm 计算节点能跑容器时作业不受影响。
 
 ### 10.10 每用户自托管：装包 / 运行 / 端口
 
