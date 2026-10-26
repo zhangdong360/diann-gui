@@ -64,7 +64,8 @@ local_jobs_load <- function(recover = TRUE) {
   }
   # 逐条校验: 无 jobid 的坏记录丢弃 (计数告警, 不静默)
   ok_rec <- vapply(x$recs, function(r) is.list(r) && !is.null(r$jobid) &&
-                     nzchar(as.character(r$jobid)[1]), logical(1))
+                     !is.na(as.character(r$jobid)[1]) && nzchar(as.character(r$jobid)[1]),
+                   logical(1))
   if (!all(ok_rec)) {
     n_bad <- sum(!ok_rec)
     x$recs <- x$recs[ok_rec]
@@ -123,8 +124,12 @@ local_seq_next <- function() {
     mx <- if (length(existing)) max(existing) else 0L
     if (is.na(cur) || cur <= mx) {
       if (file.exists(f)) {
+        # 同一秒内二次损坏也各留一份 (精确到秒的重名用 .N 后缀, 审查 P2)
         stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        try(file.rename(f, sprintf("%s.corrupt-%s", f, stamp)), silent = TRUE)
+        bak <- sprintf("%s.corrupt-%s", f, stamp)
+        n <- 0L
+        while (file.exists(bak)) { bak <- sprintf("%s.%d", bak, n); n <- n + 1L }
+        try(file.rename(f, bak), silent = TRUE)
       }
       cur <- mx
     }

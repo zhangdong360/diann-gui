@@ -26,7 +26,7 @@ doctor(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
 [4] SIF 镜像 (目录/数量/容器识别状态, 只读缓存)、[5] 其他环境 (DATA_HOME/
 数据根/配置/邮件/状态目录/运行身份/本地作业状态文件)、[6] Slurm 依赖
 (最后; 本地模式合并为一行不适用)。输出带组标题、状态符号 (✓/⚠/✗/–) 与汇总。}
-\details{只读操作, 不修改任何文件。status 取值: ok / warn / fail / na
+\details{只读操作, 不修改用户的任何数据/状态文件 (apptainer 候选探测可能刷新其自身的版本缓存)。status 取值: ok / warn / fail / na
 (na = 当前执行后端不需要该项)。}
 \value{data.frame(group, check, status, detail) (invisible)}
 \examples{

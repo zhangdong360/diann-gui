@@ -132,7 +132,10 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   }
 
   # ---- [4] SIF 镜像: 目录 + 数量 + 识别状态 (只读缓存, 不跑容器) ----
-  if (is.null(sif_dirs)) sif_dirs <- tryCatch(detect_sif_dirs(), error = function(e) character(0))
+  if (is.null(sif_dirs)) {
+    sif_dirs <- tryCatch(unname(cfg_get("SIF_DIRS") %||% character(0)), error = function(e) character(0))
+    if (!length(sif_dirs)) sif_dirs <- tryCatch(detect_sif_dirs(), error = function(e) character(0))
+  }
   if (is.null(sif_probe)) sif_probe <- tryCatch(sif_probe_load(), error = function(e) NULL)
   if (is.null(sif_probe) || !is.list(sif_probe$entries)) sif_probe <- list(entries = list())
   sif_scan <- tryCatch(sif_merge_probe(scan_sif_images(sif_dirs), sif_probe),
@@ -149,7 +152,7 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     un_id <- sif_scan[!sif_scan$verified, , drop = FALSE]
     fail_info <- un_id[nzchar(un_id$probe_message), , drop = FALSE]
     add(groups[5], "SIF 版本识别",
-        if (n_ver == n_all) "ok" else if (nrow(fail_info)) "warn" else "ok",
+        if (n_ver == n_all) "ok" else "warn",   # 未识别 0/N 也提示 (GUI 里点按钮识别)
         if (n_ver == n_all) sprintf("已识别 %d/%d (容器内实测)", n_ver, n_all)
         else sprintf("已识别 %d/%d; 未识别 %d 个%s", n_ver, n_all, nrow(un_id),
                      if (nrow(fail_info))
@@ -226,13 +229,25 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
                                                            status = r$status, detail = r$detail,
                                                            stringsAsFactors = FALSE)))
   sym <- c(ok = "✓", warn = "⚠", fail = "✗", na = "–")
-  w <- max(nchar(df$check, type = "width"), na.rm = TRUE)
+  # 显示宽度: CJK/全角按 2 计 (nchar(type="width") 随 locale 变化, 在 C locale 下
+  # 中文按 1 计导致列错位 — 审查 P2)
+  disp_w <- function(s) {
+    n <- nchar(s)
+    wide <- lengths(regmatches(s, gregexpr(
+      "[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]", s, perl = TRUE)))
+    n + wide
+  }
+  pad <- function(s, w) {
+    d <- disp_w(s)
+    if (d >= w) s else paste0(s, strrep(" ", w - d))
+  }
+  w <- max(disp_w(df$check), na.rm = TRUE)
   for (g in groups) {
     sub <- df[df$group == g, , drop = FALSE]
     if (!nrow(sub)) next
     cat(sprintf("── [%d] %s ──\n", match(g, groups) - 1L, g))
     for (i in seq_len(nrow(sub))) {
-      cat(sprintf("  %s %-*s  %s\n", sym[[sub$status[i]]], w, sub$check[i], sub$detail[i]))
+      cat(sprintf("  %s %s  %s\n", sym[[sub$status[i]]], pad(sub$check[i], w), sub$detail[i]))
     }
   }
   n_ok <- sum(df$status == "ok"); n_warn <- sum(df$status == "warn")
