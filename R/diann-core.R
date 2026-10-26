@@ -203,14 +203,14 @@ build_diann_chunks <- function(p) {
 
   ch
 }
-make_slurm_script <- function(p) {
+# ---- 共享作业体与脚本头 (v1.12: Slurm 可选 / 本地执行) ----------------------
+# job_body() 是两种后端共用的程序体: apptainer 运行时定位回退链 → 容器内
+# diann-linux → .rc 退出码 → DIANN_GUI_START/END_EPOCH → exit $rc。
+# 四层状态判定的层 2/3 依赖 .rc 与 epoch 标记, 因此两种后端必须共用同一程序体
+# (仅末尾注释里的"调度态"措辞不同)。Slurm 脚本输出保持 v1.11 原样。
+job_body <- function(p, backend = "slurm") {
   args <- paste(build_diann_chunks(p), collapse = " \\\n    ")
   sc1 <- function(x) if (is.null(x) || length(x) == 0) "" else as.character(x)
-  # 时限按分钟提交: 1.9 h -> -t 114, 0.5 h -> -t 30。旧实现 as.integer(h) 会把 1.9 截成 1 h,
-  # 且 server 曾把 <1 h 转成 NA 变成"不限时"——用户明确限时却得到无限, 属资源安全问题。
-  time_line <- if (!is.null(p$time_h) && length(p$time_h) == 1 && !is.na(p$time_h)) {
-    sprintf("#SBATCH -t %d\n", max(1L, as.integer(ceiling(60 * p$time_h))))
-  } else ""
   # ---- apptainer 运行环境: GUI 选定路径优先, 不可见时按候选目录 → PATH → module 回退 ----
   # 选定路径放在脚本里 (同一个共享存储路径在计算节点通常也可见); 回退链保证
   # "只在计算节点安装"或"只配了 module"的集群仍能跑。找不到时不提前退出, 让
@@ -254,44 +254,54 @@ make_slurm_script <- function(p) {
     gsub('"', "'", ap_sel), ')" >&2'
   )
   bind_args <- if (length(cfg_get("BIND_PATHS"))) paste0("--bind ", shQuote(cfg_get("BIND_PATHS")), collapse = " ") else ""
+  # 程序层退出码落盘 (四层状态判定的第二层来源): apptainer exec 的返回码;
+  # 容器卸载阶段偶发 SIGILL 会把 rc 污染为 132, 由 GUI 状态合成判为"待核实"而非失败
+  rc_file <- sub("\\.sh$", ".rc", sc1(p$script_path %||% "diann_gui_preview.sh"))
+  state_word <- if (identical(backend, "local")) "本地进程态" else "Slurm 终态"
+  sprintf("%s\n\necho \"DIA-NN analysis start: $(date)\"\necho \"DIANN_GUI_START_EPOCH $(date +%%s)\"\n\n\"$APPTAINER_BIN\" exec %s %s diann-linux %s\nrc=$?\nprintf '%%s' \"$rc\" > %s\necho \"DIA-NN analysis done: $(date), exit code: $rc\"\necho \"DIANN_GUI_END_EPOCH $(date +%%s)\"\n\n# 如实退出, 成败由 GUI 的四层状态合成判定 (%s + 程序退出码 + 产物验证)\nexit $rc\n",
+    apptainer_init_str, bind_args, shQuote(sc1(p$sif)), args, shQuote(rc_file), state_word)
+}
+
+# Slurm 服务器脚本头 (-J/-p/资源/时限/-o/-e/站点额外 #SBATCH)
+slurm_script_header <- function(p) {
+  sc1 <- function(x) if (is.null(x) || length(x) == 0) "" else as.character(x)
+  # 时限按分钟提交: 1.9 h -> -t 114, 0.5 h -> -t 30。旧实现 as.integer(h) 会把 1.9 截成 1 h,
+  # 且 server 曾把 <1 h 转成 NA 变成"不限时"——用户明确限时却得到无限, 属资源安全问题。
+  time_line <- if (!is.null(p$time_h) && length(p$time_h) == 1 && !is.na(p$time_h)) {
+    sprintf("#SBATCH -t %d\n", max(1L, as.integer(ceiling(60 * p$time_h))))
+  } else ""
   # 站点额外 #SBATCH 选项 (--account/--qos/--reservation 等), 逐行写入
   slurm_extra <- cfg_get("SLURM_EXTRA_ARGS") %||% character(0)
   slurm_extra <- trimws(slurm_extra[!is.na(slurm_extra) & nzchar(slurm_extra)])
   slurm_extra_lines <- if (length(slurm_extra)) paste0(paste0("#SBATCH ", slurm_extra), collapse = "\n") else ""
   # 空字符串时保留一个空行, 避免把下面的 #SBATCH -o 粘到 -e 后
   if (!nzchar(slurm_extra_lines)) slurm_extra_lines <- ""
-  # 程序层退出码落盘 (四层状态判定的第二层来源): apptainer exec 的返回码;
-  # 容器卸载阶段偶发 SIGILL 会把 rc 污染为 132, 由 GUI 状态合成判为"待核实"而非失败
+  sprintf("#!/bin/bash\n#SBATCH -J %s\n#SBATCH -p %s\n#SBATCH --nodes=1\n#SBATCH --cpus-per-task=%s\n#SBATCH --mem=%sG\n%s#SBATCH -o %s\n#SBATCH -e %s\n%s\n\n",
+          shQuote(sc1(p$job_name)), sc1(p$partition), sc1(as.integer(p$threads)), sc1(as.integer(p$mem_gb)),
+          time_line, shQuote(sc1(p$slurm_out)), shQuote(sc1(p$slurm_err)), slurm_extra_lines)
+}
+
+make_slurm_script <- function(p) paste0(slurm_script_header(p), job_body(p, "slurm"))
+
+# 本地模式脚本: 共用同一个 job_body, 只去掉 #SBATCH 头。stdout/stderr 重定向、
+# 时限 timeout、退出码补写与 .cancelled/.timeout 标记由 inst/scripts/local_runner.sh 接管。
+make_local_script <- function(p) {
+  sc1 <- function(x) if (is.null(x) || length(x) == 0) "" else as.character(x)
+  mins <- if (!is.null(p$time_h) && length(p$time_h) == 1 && !is.na(p$time_h)) {
+    max(1L, as.integer(ceiling(60 * p$time_h)))
+  } else 0L
   rc_file <- sub("\\.sh$", ".rc", sc1(p$script_path %||% "diann_gui_preview.sh"))
-  sprintf("#!/bin/bash
-#SBATCH -J %s
-#SBATCH -p %s
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=%s
-#SBATCH --mem=%sG
-%s#SBATCH -o %s
-#SBATCH -e %s
-%s
+  paste0(
+    "#!/bin/bash\n",
+    "# diann.gui 本地执行脚本 (无 Slurm) — 由 inst/scripts/local_runner.sh 启动\n",
+    sprintf("# 程序退出码写入: %s; 日志由运行器重定向为 local-<ID>.out/.err\n", rc_file),
+    sprintf("# 时限: %s\n\n", if (mins > 0L) sprintf("%d 分钟 (由运行器 timeout 强制执行)", mins) else "不限"),
+    job_body(p, "local"))
+}
 
-%s
-
-echo \"DIA-NN analysis start: $(date)\"
-echo \"DIANN_GUI_START_EPOCH $(date +%%s)\"
-
-\"$APPTAINER_BIN\" exec %s %s diann-linux %s
-rc=$?
-printf '%%s' \"$rc\" > %s
-echo \"DIA-NN analysis done: $(date), exit code: $rc\"
-echo \"DIANN_GUI_END_EPOCH $(date +%%s)\"
-
-# 如实退出, 成败由 GUI 的四层状态合成判定 (Slurm 终态 + 程序退出码 + 产物验证)
-exit $rc
-",
-    shQuote(sc1(p$job_name)), sc1(p$partition), sc1(as.integer(p$threads)), sc1(as.integer(p$mem_gb)),
-    time_line,
-    shQuote(sc1(p$slurm_out)), shQuote(sc1(p$slurm_err)), slurm_extra_lines,
-    apptainer_init_str, bind_args, shQuote(sc1(p$sif)), args,
-    shQuote(rc_file))
+# 预览与提交统一入口: 按执行后端生成脚本
+make_job_script <- function(p, backend = "slurm") {
+  if (identical(backend, "local")) make_local_script(p) else make_slurm_script(p)
 }
 # 命令导入解析（纯函数）：识别 DIA-NN 命令并映射到 GUI 控件
 # ============================================================

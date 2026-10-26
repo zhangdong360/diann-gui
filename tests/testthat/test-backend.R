@@ -1,0 +1,194 @@
+# v1.12 执行后端: 解析 / 日志契约 / 脚本分派 / 本地提交-状态-取消-超时
+# 全部离线: 假 apptainer + 假 DIA-NN 负载, 不依赖真实 Slurm / 容器 / RAW 数据。
+
+# ---------- 后端解析 ----------
+
+cmds_all <- c(sbatch = "/usr/bin/sbatch", squeue = "/usr/bin/squeue", sacct = "/usr/bin/sacct",
+              scancel = "/usr/bin/scancel", scontrol = "/usr/bin/scontrol", sinfo = "/usr/bin/sinfo")
+cmds_none <- stats::setNames(rep("", length(cmds_all)), names(cmds_all))
+
+test_that("detect_exec_backend: auto + sbatch -> slurm; 无 Slurm -> local", {
+  d <- detect_exec_backend(request = "auto", cmds = cmds_all, slurm_traces = FALSE, legacy_central = FALSE)
+  expect_equal(d$backend, "slurm")
+  expect_true(d$auto)
+  expect_length(d$error, 0)
+  d2 <- detect_exec_backend(request = "auto", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  expect_equal(d2$backend, "local")
+  expect_length(d2$error, 0)
+})
+
+test_that("detect_exec_backend: auto + Slurm 痕迹但 sbatch 缺失 -> 默认拒绝 (HPC 登录节点保护)", {
+  cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
+  d <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  expect_equal(d$backend, "local")
+  expect_true(length(d$error) >= 1)
+  expect_match(d$error[1], "拒绝", fixed = TRUE)
+  d2 <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE,
+                            legacy_central = FALSE, require_exclusive = FALSE)
+  expect_length(d2$error, 0)
+  expect_true(length(d2$warn) >= 1)
+})
+
+test_that("detect_exec_backend: 显式 local 放行但 warn; legacy 中央部署默认拒绝", {
+  cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
+  d <- detect_exec_backend(request = "local", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  expect_equal(d$backend, "local")
+  expect_length(d$error, 0)
+  expect_true(length(d$warn) >= 1)
+  dl <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE, legacy_central = TRUE)
+  expect_true(length(dl$error) >= 1)
+  dl2 <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE,
+                             legacy_central = TRUE, allow_shared = TRUE)
+  expect_length(dl2$error, 0)
+  expect_true(length(dl2$warn) >= 1)
+})
+
+test_that("detect_exec_backend: 显式 slurm 但无 sbatch -> 保留 slurm 并 warn", {
+  d <- detect_exec_backend(request = "slurm", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  expect_equal(d$backend, "slurm")
+  expect_true(length(d$warn) >= 1)
+  expect_length(d$error, 0)
+})
+
+test_that("detect_exec_backend: 非法请求值报错", {
+  expect_error(detect_exec_backend(request = "cloud"), "EXEC_BACKEND")
+})
+
+test_that("backend_log_paths: slurm/local 命名与 rc 规则 (唯一日志契约)", {
+  expect_equal(backend_log_paths(42, "/o", "slurm")$out, "/o/slurm-42.out")
+  expect_equal(backend_log_paths(42, "/o", "slurm")$err, "/o/slurm-42.err")
+  expect_equal(backend_log_paths(1000042, "/o", "local")$out, "/o/local-1000042.out")
+  expect_equal(backend_log_paths("1000042", "/o", "local")$err, "/o/local-1000042.err")
+  expect_equal(backend_log_paths(1000042, "/o", "local", "/o/j.sh")$rc, "/o/j.rc")
+  expect_equal(backend_log_paths(7, "", "slurm")$out, "")
+})
+
+# ---------- 脚本分派 / 程序体共用 ----------
+
+test_that("make_local_script: 共用 job_body、无 #SBATCH、忽略 SLURM_EXTRA_ARGS", {
+  old <- diann.gui::cfg_get("SLURM_EXTRA_ARGS")
+  on.exit(diann.gui::set_core_const("SLURM_EXTRA_ARGS", old), add = TRUE)
+  diann.gui::set_core_const("SLURM_EXTRA_ARGS", c("--account=lab"))
+  p <- base_params(list(time_h = 1.9))
+  loc <- make_local_script(p)
+  expect_false(grepl("#SBATCH", loc, fixed = TRUE))
+  expect_false(grepl("--account=lab", loc, fixed = TRUE))
+  expect_match(loc, "DIANN_GUI_START_EPOCH", fixed = TRUE)
+  expect_match(loc, "exit $rc", fixed = TRUE)
+  expect_match(loc, "114 分钟", fixed = TRUE)
+  expect_identical(make_job_script(p, "local"), loc)
+  expect_identical(make_job_script(p, "slurm"), make_slurm_script(p))
+})
+
+test_that("本地脚本与 Slurm 脚本共用同一段程序体 (仅头部与末尾注释措辞不同)", {
+  p <- base_params()
+  body_lines <- function(s) {
+    l <- strsplit(s, "\n", fixed = TRUE)[[1]]
+    i <- grep("^APPTAINER_BIN=", l)[1]
+    body <- l[i:length(l)]
+    # 四层状态注释里的"调度态"措辞按后端标注 (Slurm 终态 / 本地进程态), 属唯一差异
+    body[!grepl("^# 如实退出", body)]
+  }
+  expect_identical(body_lines(make_local_script(p)), body_lines(make_slurm_script(p)))
+})
+
+# ---------- 提交失败不抛错 (v1.11 无 Slurm 点提交断连事故的回归) ----------
+
+test_that("backend_submit: sbatch 缺失时返回 ok=FALSE 且不抛错", {
+  old_path <- Sys.getenv("PATH")
+  td <- tempfile("empty_path"); dir.create(td, showWarnings = FALSE)
+  Sys.setenv(PATH = td)
+  on.exit(Sys.setenv(PATH = old_path), add = TRUE)
+  p <- base_params(list(out_dir = tempdir(), script_path = file.path(tempdir(), "job.sh")))
+  res <- tryCatch(backend_submit(p, p$script_path, backend = "slurm"), error = function(e) e)
+  expect_false(inherits(res, "error"))
+  expect_false(isTRUE(res$ok))
+  expect_true(nzchar(res$message))
+})
+
+# ---------- 本地提交 / 状态 / 取消 / 超时 (假 apptainer) ----------
+
+test_that("local: 提交成功 -> 成功标签, 日志/rc/epoch 落盘", {
+  td <- tempfile("local_ok"); dir.create(td, showWarnings = FALSE)
+  apt <- fake_apptainer()
+  Sys.unsetenv(c("FAKE_DIANN_SLEEP", "FAKE_DIANN_RC", "FAKE_DIANN_CTL"))
+  p <- make_local_params(td, apt)
+  writeLines(make_local_script(p), p$script_path)
+  res <- backend_submit(p, p$script_path, backend = "local")
+  expect_true(isTRUE(res$ok))
+  expect_equal(res$backend, "local")
+  expect_match(res$job_id, "^[0-9]+$")
+  expect_equal(poll_local_status(p, res$job_id), "成功")
+  lp <- backend_log_paths(res$job_id, td, "local", p$script_path)
+  expect_true(file.exists(lp$out))
+  expect_true(file.exists(lp$rc))
+  expect_equal(trimws(readLines(lp$rc, warn = FALSE)[1]), "0")
+  log_lines <- readLines(lp$out, warn = FALSE)
+  expect_true(any(grepl("^DIANN_GUI_START_EPOCH", log_lines)))
+  expect_true(any(grepl("^DIANN_GUI_END_EPOCH", log_lines)))
+})
+
+test_that("local: 非零退出码 -> 失败", {
+  td <- tempfile("local_fail"); dir.create(td, showWarnings = FALSE)
+  apt <- fake_apptainer()
+  Sys.setenv(FAKE_DIANN_RC = "3")
+  on.exit(Sys.unsetenv("FAKE_DIANN_RC"), add = TRUE)
+  p <- make_local_params(td, apt)
+  writeLines(make_local_script(p), p$script_path)
+  res <- backend_submit(p, p$script_path, backend = "local")
+  expect_true(isTRUE(res$ok))
+  expect_equal(poll_local_status(p, res$job_id), "失败")
+  lp <- backend_log_paths(res$job_id, td, "local", p$script_path)
+  expect_equal(trimws(readLines(lp$rc, warn = FALSE)[1]), "3")
+})
+
+test_that("local: 时限 -> 超时 (timeout 强制, 标记 .timeout, rc=124)", {
+  td <- tempfile("local_timeout"); dir.create(td, showWarnings = FALSE)
+  apt <- fake_apptainer()
+  Sys.setenv(FAKE_DIANN_SLEEP = "20")
+  on.exit(Sys.unsetenv("FAKE_DIANN_SLEEP"), add = TRUE)
+  p <- make_local_params(td, apt, time_h = 1 / 3600)  # 1 秒
+  writeLines(make_local_script(p), p$script_path)
+  res <- backend_submit(p, p$script_path, backend = "local")
+  expect_true(isTRUE(res$ok))
+  expect_equal(poll_local_status(p, res$job_id), "超时")
+  expect_true(file.exists(paste0(p$script_path, ".timeout")))
+  lp <- backend_log_paths(res$job_id, td, "local", p$script_path)
+  expect_equal(trimws(readLines(lp$rc, warn = FALSE)[1]), "124")
+})
+
+test_that("local: 取消 -> 已取消 (标记 + 进程组 kill, 无残留进程)", {
+  td <- tempfile("local_cancel"); dir.create(td, showWarnings = FALSE)
+  apt <- fake_apptainer()
+  ctl <- file.path(td, "sleep.txt"); writeLines("60", ctl)
+  Sys.setenv(FAKE_DIANN_CTL = ctl)
+  on.exit(Sys.unsetenv("FAKE_DIANN_CTL"), add = TRUE)
+  p <- make_local_params(td, apt)
+  writeLines(make_local_script(p), p$script_path)
+  res <- backend_submit(p, p$script_path, backend = "local")
+  expect_true(isTRUE(res$ok))
+  Sys.sleep(1.5)  # 等运行器进入 RUNNING
+  cres <- backend_cancel(res$job_id, backend = "local")
+  expect_true(isTRUE(cres$ok))
+  expect_equal(poll_local_status(p, res$job_id), "已取消")
+  expect_true(file.exists(paste0(p$script_path, ".cancelled")))
+  rec <- local_jobs_find(res$job_id)
+  expect_false(is.null(rec))
+  expect_false(local_job_alive(rec))
+})
+
+test_that("local: PID 复用防护 (starttime 不匹配 -> 判死)", {
+  td <- tempfile("local_reuse"); dir.create(td, showWarnings = FALSE)
+  apt <- fake_apptainer()
+  p <- make_local_params(td, apt)
+  writeLines(make_local_script(p), p$script_path)
+  res <- backend_submit(p, p$script_path, backend = "local")
+  expect_true(isTRUE(res$ok))
+  rec <- local_jobs_find(res$job_id)
+  expect_false(is.null(rec))
+  ps <- rec$pid_start
+  if (is.null(ps) || !is.finite(ps)) ps <- 0
+  rec$pid_start <- as.numeric(ps) + 12345
+  expect_false(local_job_alive(rec))
+  poll_local_status(p, res$job_id)  # 等真正结束, 避免遗留进程
+})

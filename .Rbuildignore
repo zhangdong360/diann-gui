@@ -15,4 +15,5 @@
 ^config\.R$
 ^mail_config\.txt$
 ^\.zcode$
+^\.assessment$
 .*\.log$

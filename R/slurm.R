@@ -70,3 +70,12 @@ slurm_snapshot_fns <- function(snap) {
 slurm_queue_states <- function(user = NULL, squeue_fun = NULL) {
   slurm_snapshot(user = user, squeue_fun = squeue_fun)$squeue_map
 }
+
+# Slurm 可用性: 提交三件套齐全才认为可用 (v1.12 后端检测/doctor 使用)
+slurm_available <- function(cmds = NULL) {
+  if (is.null(cmds)) {
+    nm <- c("sbatch", "squeue", "scancel")
+    cmds <- stats::setNames(vapply(nm, function(x) unname(Sys.which(x)), ""), nm)
+  }
+  all(nzchar(as.character(cmds)))
+}
