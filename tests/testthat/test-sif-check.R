@@ -78,6 +78,13 @@ test_that("sif_identify: 成功/静态失败/无运行时/超时/无 diann-linux
   r3 <- sif_identify(f, fake_ap, runner = mk_runner(out = "command timed out"))
   expect_false(r3$ok); expect_equal(r3$reason, "timeout")
 
+  # 真实 system2(timeout=) 超时形态: character(0) + attr status 124 (无 "timed out" 文本);
+  # 此前会误归 no_version 并落失败缓存 (审查 P1-C1)
+  r3b <- sif_identify(f, fake_ap, runner = function(bin, args, timeout = 30) {
+    out <- character(0); attr(out, "status") <- 124L; out
+  })
+  expect_false(r3b$ok); expect_equal(r3b$reason, "timeout")
+
   r4 <- sif_identify(f, fake_ap,
                      runner = mk_runner(out = "exec: diann-linux: not found"))
   expect_false(r4$ok); expect_equal(r4$reason, "no_diann_linux")
@@ -103,6 +110,10 @@ test_that("probe 缓存: size+mtime 命中、变化失效、no_apptainer 不落�
   expect_equal(p2$entries[[f]]$ver, "2.7.0")     # 原成功条目不受影响
   p3 <- sif_probe_record(probe, f2, 1, 1, ok = FALSE, message = "no apt", reason = "no_apptainer")
   expect_identical(p3, probe)                    # no_apptainer 完全不落缓存
+  # timeout 同为瞬时原因: 不落缓存 (失败记录会挡住之后的自动重试, 审查 P1-C1)
+  p4 <- sif_probe_record(probe, f2, 1, 1, ok = FALSE, message = "slow", reason = "timeout")
+  expect_identical(p4, probe)
+  expect_true(is.null(sif_probe_record(probe, f2, 1, 1, ok = FALSE, reason = "timeout")$entries[[f2]]))
   # 保存/加载往返 + 损坏回退
   tf <- file.path(tempdir(), sprintf("probe_%d.rds", Sys.getpid()))
   expect_true(sif_probe_save(p2, tf))
@@ -145,6 +156,9 @@ test_that("sif_version_key / sif_ver_sort_string: 非法版本归未知且不崩
   expect_true(sif_version_key("2.10.0") > sif_version_key("2.9.1"))
   expect_equal(sif_ver_sort_string(c("2.10.0", "latest", NA_character_))[2:3], c("~", "~"))
   expect_true(sif_ver_sort_string("2.10.0") > sif_ver_sort_string("2.9.1"))
+  # 大分量不反序 (纯字符串零填充在分量 >=100000 时会排反, 审查 P1-C4)
+  expect_true(sif_ver_sort_string("2.1000000") > sif_ver_sort_string("2.999999"))
+  expect_true(sif_ver_sort_string("2.10.1") > sif_ver_sort_string("2.9.9"))
 })
 
 test_that("端到端排序 (磁盘): 后创建的 2.10 默认选中, 不受创建顺序影响", {

@@ -447,13 +447,16 @@ def run_browser(fx, url):
         check("提交页模式提示条为「当前执行后端：本地单机（无 Slurm）」",
               "当前执行后端：本地单机（无 Slurm）" in elem_text("backend_banner"),
               elem_text("backend_banner")[:160], failures)
-        # v1.13: 任意文件名可见; 默认选中镜像在启动时即自动识别 (选中未识别 → 容器实测)
-        # 注: observeEvent(input$sif_version) 在客户端首次上报初始值时触发, 故无需点击;
-        # 「识别所有未识别镜像」按钮路径由单测与文档截图脚本覆盖。
+        # v1.13: 任意文件名可见; ignoreInit — 页面加载不跑容器 (回显"未识别"),
+        # 点「识别所有未识别镜像」后才在容器内实测并回显 v2.7.0 (审查 P1-C3)
+        check("页面加载不跑容器: 默认选中镜像回显为 未识别",
+              "未识别" in elem_text("sif_display") and "image.sif" in elem_text("sif_display"),
+              elem_text("sif_display")[:160], failures)
+        click_js(By.ID, "sif_identify_all")
         id_ok = wait_until(lambda: "v2.7.0" in elem_text("sif_version_info")
                            and "已识别" in elem_text("sif_version_info")
                            and "v2.7.0" in elem_text("sif_display"), 90)
-        check("默认选中 image.sif (任意文件名) 启动后自动识别 v2.7.0 且回显已识别(缓存)", id_ok,
+        check("「识别所有未识别镜像」后 image.sif 识别为 v2.7.0 且回显已识别(缓存)", id_ok,
               "info=%s | display=%s" % (elem_text("sif_version_info")[:100],
                                         elem_text("sif_display")[:120]), failures)
         apt_opts = [o.text for o in drv.find_elements(By.CSS_SELECTOR, "#apptainer_version option")]

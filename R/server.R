@@ -65,9 +65,18 @@ server <- function(input, output, session) {
     else as.character(input$sif_version %||% "")
   })
 
-  # 本地作业状态文件告警 (v1.13: RDS/seq 损坏时一次性提示; 监控页 banner 托管)
-  output$local_state_note <- renderUI({
+  # 本地作业状态文件告警 (v1.13: RDS/seq 损坏时一次性提示; 监控页 banner 托管)。
+  # 损坏发生在后端深处的 local_jobs_load(), 告警写入 .cfg 后 UI 无从感知 —
+  # 借监控页 10s 自动刷新轮询一次 (审查 P2: 静态 renderUI 告警可能晚到不显示)
+  local_warn <- reactiveVal(cfg_get("LOCAL_JOBS_WARN") %||% "")
+  observe({
+    if (isTRUE(input$auto_refresh)) invalidateLater(10000)
+    input$refresh_q
     w <- cfg_get("LOCAL_JOBS_WARN") %||% ""
+    if (!identical(w, local_warn())) local_warn(w)
+  })
+  output$local_state_note <- renderUI({
+    w <- local_warn()
     if (!nzchar(w)) return(NULL)
     tags$div(class = "alert alert-warning", style = "margin: 0 0 10px 0; padding: 8px 12px;",
              HTML(htmltools::htmlEscape(w)))
@@ -75,6 +84,10 @@ server <- function(input, output, session) {
 
   # ---------- SIF 版本识别 (v1.13: 版本只来自容器内实测, 结果懒缓存) ----------
   sif_rows <- reactiveVal(cfg_get("sif_df"))
+  # 识别缓存落盘计数: sif_display/sif_version_info 借它获得 reactive 依赖 —
+  # 否则深度验证写缓存后 (尤其 SIF_DIRS 外的自定义路径, sif_rows 合并结果不变),
+  # ReactiveVal 去重不触发失效, 回显停留在"版本未识别" (审查 P1-C2)
+  sif_probe_bump <- reactiveVal(0L)
 
   # 识别用 apptainer: 当前生效路径优先, 否则候选默认 (apptainer_default 已按 可执行+支持SIF 排序)
   sif_pick_apptainer <- function() {
@@ -110,12 +123,15 @@ server <- function(input, output, session) {
                               message = res$message, reason = res$reason)
     sif_probe_save(probe)
     sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+    sif_probe_bump(sif_probe_bump() + 1L)
     sif_refresh_choices()
     res
   }
 
-  # 选中未识别镜像 → 自动识别; 有失败缓存不自动重试 (按钮可重试)
-  observeEvent(input$sif_version, {
+  # 选中未识别镜像 → 自动识别; 有失败缓存不自动重试 (按钮可重试)。
+  # ignoreInit = TRUE: 页面加载不触发识别 (兑现"启动不跑容器"承诺, 也避免首个会话
+  # 同步阻塞); 用户切换下拉 / 点「识别所有未识别镜像」时才跑容器 (审查 P1-C3)。
+  observeEvent(input$sif_version, ignoreInit = TRUE, {
     if (isTRUE(input$use_custom_sif)) return(invisible(NULL))
     p <- effective_sif()
     if (!nz_str(p)) return(invisible(NULL))
@@ -160,6 +176,7 @@ server <- function(input, output, session) {
   })
 
   output$sif_version_info <- renderUI({
+    sif_probe_bump()   # 识别写缓存后立即重算 (P1-C2)
     p <- effective_sif()
     if (!nz_str(p)) return(NULL)
     r <- sif_rows()
@@ -214,6 +231,7 @@ server <- function(input, output, session) {
 
   # ---------- 路径回显 ----------
   output$sif_display <- renderText({
+    sif_probe_bump()   # 识别写缓存后立即重算 (P1-C2)
     p <- effective_sif()
     if (!nz_str(p)) {
       if (isTRUE(input$use_custom_sif)) "(未填写自定义路径)" else "未找到可用镜像"
@@ -477,6 +495,7 @@ server <- function(input, output, session) {
                                   message = sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
         sif_probe_save(probe)
         sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+        sif_probe_bump(sif_probe_bump() + 1L)
         sif_refresh_choices()
       }, silent = TRUE)
     } else {
@@ -1391,10 +1410,13 @@ server <- function(input, output, session) {
     r <- sif_rows()
     if (!nrow(r)) return(tags$p("未扫描到 sif 镜像, 请检查 config.R 中的 SIF_DIRS"))
     n_ok <- sum(r$verified)
+    # 只对有实测记录的版本宣称"三种模式实测" (任意新识别版本不自动获得该背书, 审查 P2)
+    tested <- names(DIANN_VERSION_NOTES)
+    n_tested <- sum(r$ver %in% tested, na.rm = TRUE)
     tags$div(
       tags$p(style = "color:#27ae60;",
-             sprintf("✔ 共 %d 个镜像, 已识别 %d 个; 已识别版本均通过 GUI 三种模式实测 (RAW→DIA 转换 / 直接搜库+MBR+污染物扣除 / FASTA 生成预测库), 全部命令行参数兼容。",
-                     nrow(r), n_ok)),
+             sprintf("✔ 共 %d 个镜像, 已识别 %d 个 (其中 %d 个在 GUI 三种模式实测通过: RAW→DIA 转换 / 直接搜库+MBR+污染物扣除 / FASTA 生成预测库); 其余已识别版本尚无实测记录, 升级生产数据前建议先跑小样本回归。",
+                     nrow(r), n_ok, n_tested)),
       tags$ul(lapply(seq_len(nrow(r)), function(i) {
         if (isTRUE(r$verified[i])) {
           note <- DIANN_VERSION_NOTES[[r$ver[i]]] %||% "暂无实测说明。"

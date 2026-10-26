@@ -38,11 +38,15 @@ scan_sif_images <- function(dirs, pattern = "(?i)\\.sif$") {
 }
 
 # "DIA-NN 2.7.0 Academia, build …" -> "2.7.0"; 识别不到返回 ""
+# 输出里可能有多个 DIA-NN 字样 (如回显的命令行), 优先取行首匹配, 无行首匹配才取第一个
 parse_diann_version <- function(txt) {
   txt <- paste(as.character(txt %||% ""), collapse = "\n")
-  hit <- regmatches(txt, gregexpr("(?i)DIA-NN[[:space:]]+[0-9]+(?:\\.[0-9]+)+", txt, perl = TRUE))[[1]]
+  pat <- "(?i)DIA-NN[[:space:]]+[0-9]+(?:\\.[0-9]+)+"
+  line_starts <- regmatches(txt, gregexpr(paste0("(?m)^[[:space:]]*", pat), txt, perl = TRUE))[[1]]
+  hit <- if (length(line_starts)) line_starts else
+    regmatches(txt, gregexpr(pat, txt, perl = TRUE))[[1]]
   if (!length(hit)) return("")
-  trimws(sub("(?i)^DIA-NN[[:space:]]+", "", hit[1]))
+  trimws(sub("(?i)^\\s*DIA-NN[[:space:]]+", "", hit[1]))
 }
 
 # 容器识别: 静态检查 → 运行时可用 → inspect (信息) → exec diann-linux --version。
@@ -85,9 +89,14 @@ sif_identify <- function(sif, apptainer_bin, timeout = 60, runner = apptainer_ru
                   error = function(e) paste("exec 出错:", conditionMessage(e)))
   exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
   raw <- if (is.character(exe)) exe[nzchar(exe)] else character(0)
-  if (grepl("timed out", exe_txt, fixed = TRUE)) {
+  # system2(timeout=) 超时返回 character(0) + attr(,"status")==124, 没有 "timed out" 文本;
+  # 必须按状态属性判定, 否则超时会被误归为 no_version 且落失败缓存 (不再自动重试)
+  tstat <- if (is.character(exe) && !length(exe)) attr(exe, "status") else NULL
+  timed_out <- (!is.null(tstat) && all(as.integer(tstat) == 124L)) ||
+    grepl("timed out", exe_txt, fixed = TRUE)
+  if (timed_out) {
     return(fail("version", "timeout",
-                sprintf("容器内执行超时 (%ss); 若计算节点正常, 可稍后重试", timeout),
+                sprintf("容器内执行超时 (%ss); 若计算节点正常, 可稍后重试 (超时不落缓存, 会自动重试)", timeout),
                 inspect = ins_txt, raw = raw))
   }
   ver <- parse_diann_version(exe_txt)
@@ -150,8 +159,9 @@ sif_probe_lookup <- function(probe, path, size = NULL, mtime = NULL) {
 
 sif_probe_record <- function(probe, path, size, mtime, ver = "", ok = FALSE,
                              message = "", reason = "") {
-  # "GUI 节点无 apptainer" 不是镜像的失败: 不落缓存, 之后有运行时自动重试
-  if (identical(reason, "no_apptainer")) return(invisible(probe))
+  # 瞬时原因不落缓存 (否则失败记录会挡住之后的自动重试):
+  #   no_apptainer = GUI 节点暂时没有运行时; timeout = 容器执行超时, 镜像本身可能没问题
+  if (identical(reason, "no_apptainer") || identical(reason, "timeout")) return(invisible(probe))
   probe$entries[[trimws(as.character(path))]] <-
     list(size = as.numeric(size), mtime = as.numeric(mtime),
          ver = as.character(ver)[1], ok = isTRUE(ok),
@@ -162,16 +172,19 @@ sif_probe_record <- function(probe, path, size, mtime, ver = "", ok = FALSE,
 
 # ---------- 合并 / 排序 / 标签 ----------
 
-# 批量排序键: 每个数字分量零填充成定宽 ("2.10.0" -> "002.010.000"), 字典序即版本序;
-# 未识别/非法 -> "~" (ASCII 大于数字, 排在已识别之后)。严禁 as.numeric(numeric_version):
+# 批量排序键: 先经 as.numeric_version 解析 (非法 -> NA -> "~", 排在已识别之后),
+# 每个数字分量按 %012d 定宽拼接 — 字典序即版本序, 且分量再大也不反序
+# (纯字符串零填充在分量 >=100000 时会排反)。同样严禁 as.numeric(numeric_version):
 # "2.10.0" 会塌缩成 2.1, 排到 2.9 之后 (v1.11 B9 事故类别)。
 sif_ver_sort_string <- function(ver) {
   vapply(ver, function(x) {
     x <- trimws(as.character(x %||% ""))
     if (is.na(x) || !nzchar(x)) return("~")
-    parts <- strsplit(x, ".", fixed = TRUE)[[1]]
-    if (!length(parts) || !all(grepl("^[0-9]+$", parts)) || length(parts) > 9L) return("~")
-    paste(sprintf("%05d", as.integer(parts)), collapse = ".")
+    nv <- tryCatch(suppressWarnings(as.numeric_version(x)), error = function(e) NULL)
+    if (is.null(nv) || length(nv) != 1 || is.na(nv)) return("~")
+    comps <- unlist(as.vector(nv), use.names = FALSE)
+    if (!length(comps) || !all(is.finite(comps))) return("~")
+    paste(sprintf("%012d", as.integer(comps)), collapse = ".")
   }, character(1), USE.NAMES = FALSE)
 }
 
