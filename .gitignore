@@ -12,12 +12,26 @@ mail_config.txt
 slurm-*.out
 slurm-*.err
 
+# Local execution outputs (v1.12+)
+local-*.out
+local-*.err
+
 # Site-specific ops scripts & authoring workspace (kept out of the public repo)
 local/
 docs_assets/
+
+# Build artifacts (R CMD build/check 产物, 不入库)
+*.Rcheck/
+*.tar.gz
 
 # Misc
 __pycache__/
 .zcode/
 *.log
+
+# Local analysis / planning workspace (not part of the package)
+.assessment/
+/diann.gui v1.12*.md
+
+# Tracked package config (explicit re-include must stay last)
 !R/config.R

@@ -1,0 +1,1 @@
+diann-linux --dir-all '/share/home/demo/data/raw/demo_batch_07' --lib '/share/home/demo/project/labuser/project_alpha/lib/demo_library.predicted.speclib' --out '/share/home/demo/project/labuser/project_alpha/result/dir_mode/report.tsv' --qvalue 0.01 --matrices --reanalyse --rt-profiling --threads 24 --verbose 1

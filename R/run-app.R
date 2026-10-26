@@ -3,33 +3,37 @@
 # ============================================================
 #' 启动 DIA-NN GUI
 #'
-#' @param port 端口; NULL = 返回 app 对象 (RStudio 中直接弹出/`shiny::runApp` 可用)
-#' @param host 监听地址, 默认仅本机 (远程经 SSH 隧道访问)
+#' 默认直接启动 Web 服务（未指定端口时自动选一个空闲端口），并在终端打印
+#' 访问地址与 SSH 隧道提示。需要拿 app 对象做嵌入/自定义启动时用
+#' `app_only = TRUE`。
+#'
+#' @param port 端口; NULL = 自动选择空闲端口 (30000–39999)
+#' @param host 监听地址, 默认仅本机 (远程经 SSH 隧道 / RStudio 代理访问)
 #' @param launch.browser 是否自动打开浏览器
 #' @param config_file 显式指定配置文件; NULL = 自动发现 (resolve_user_config)
+#' @param app_only TRUE = 只构建并返回 shiny.app 对象, 不启动服务
+#' @return 启动时返回 `invisible(app)`; `app_only = TRUE` 时返回 shiny.app 对象
 #' @examples
 #' \dontrun{
-#' run_app(port = 3838)          # 本机/隧道访问
-#' app <- run_app()              # 返回 shiny.app 对象
+#' run_app()                    # 启动 (随机端口)
+#' run_app(port = 3838)         # 固定端口
+#' app <- run_app(app_only = TRUE)
 #' }
 #' @export
 run_app <- function(port = NULL, host = "127.0.0.1",
                     launch.browser = getOption("shiny.launch.browser", interactive()),
-                    config_file = NULL) {
+                    config_file = NULL, app_only = FALSE) {
   diann_load_config(config_file)
 
-  # apptainer 探测 (启动时一次): 进程 PATH + 配置目录逐个核验, 结果写入配置环境供
-  # 版本选项卡的「运行环境自检」展示与提交前提示使用; 计算节点侧仍由 sbatch 脚本
-  # 自行回退 (PATH 候选 → module load), 探测失败不阻断提交。
-  # PATH 上命中的 apptainer 所在目录自动并入 APPTAINER_PATHS (make_slurm_script 经
-  # cfg_get 调用时读取), 作为站点漏配的兜底 —— 脚本运行时依旧逐条 -x 核验, 合并无副作用。
-  .cfg$APPTAINER_PROBE <- tryCatch(apptainer_probe(),
-    error = function(e) list(ok = FALSE, bins = character(0), src = character(0),
-                             vers = character(0), module = NULL,
-                             error = conditionMessage(e)))
-  if (length(.cfg$APPTAINER_PROBE$bins)) {
-    .cfg$APPTAINER_PATHS <- unique(c(dirname(.cfg$APPTAINER_PROBE$bins[1]), cfg_get("APPTAINER_PATHS")))
-  }
+  # apptainer 运行环境: 启动时发现候选并解析版本 (带缓存; 登录节点没有 apptainer 也正常,
+  # 只有"选择为空"才会在提交前被拦下)。结果供 UI 下拉/自检面板/提交前校验读取。
+  .cfg$APPTAINER_CANDS <- tryCatch(apptainer_candidates(),
+    error = function(e) data.frame(path = character(0), kind = character(0), source = character(0),
+                                   version = character(0), ok = logical(0), checked_at = numeric(0),
+                                   stringsAsFactors = FALSE))
+  .cfg$APPTAINER_CHOICES <- apptainer_choices(cfg_get("APPTAINER_CANDS"))
+  .cfg$APPTAINER_SELECTED <- apptainer_default(cfg_get("APPTAINER_CANDS"))
+  .cfg$APPTAINER_MODULE <- tryCatch(apptainer_module_probe(), error = function(e) NULL)
 
   # 启动期状态: 镜像扫描 / 参数速查 (ui 与 server 经 cfg_get 读取)
   .cfg$sif_df <- scan_sif_images(cfg_get("SIF_DIRS"))
@@ -41,11 +45,26 @@ run_app <- function(port = NULL, host = "127.0.0.1",
     cfg_get("DEFAULT_SIF")
   } else if (nrow(.cfg$sif_df)) .cfg$sif_df$path[1] else NULL
   pd <- param_doc_path()
+  .cfg$PARAM_DOC <- pd
   .cfg$param_ref <- if (nzchar(pd)) parse_param_doc(pd) else NULL
 
   try(ensure_diann_watcher(), silent = TRUE)
 
   app <- shinyApp(app_ui(), app_server())
-  if (is.null(port)) return(app)
+  if (isTRUE(app_only)) return(app)
+
+  if (is.null(port)) {
+    port <- tryCatch(httpuv::randomPort(min = 30000L, max = 39999L), error = function(e) NULL)
+  }
+  who <- Sys.info()[["user"]]
+  message(sprintf("DIA-NN GUI %s — 运行身份: %s (作业将以该身份提交)", GUI_VERSION, who))
+  message(sprintf("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)"))
+  message(sprintf("访问地址: http://%s:%s/", host, if (is.null(port)) "(随机)" else port))
+  if (!is.null(port) && nzchar(Sys.getenv("SSH_CONNECTION")) && identical(host, "127.0.0.1")) {
+    message(sprintf("远程集群: 先建隧道 ssh -L %d:127.0.0.1:%d <用户>@<集群>", port, port))
+  }
+  message("停止: Ctrl+C")
+
   shiny::runApp(app, port = port, host = host, launch.browser = launch.browser)
+  invisible(app)
 }

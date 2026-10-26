@@ -48,3 +48,14 @@ test_that("无读权限时 readable=FALSE 且不读魔数", {
   expect_false(r$readable)
   expect_true(is.na(r$sif_magic))   # 不可读 → 魔数保持 NA, 不误报
 })
+
+test_that("多版本按数值排序: 2.10.0 在 2.9.1 之前 (字符串排序会反)", {
+  d <- file.path(tempdir(), sprintf("sifs_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(d, showWarnings = FALSE)
+  for (v in c("2.3.2", "2.7.0", "2.10.0", "2.9.1")) {
+    file.create(file.path(d, sprintf("diann-%s.sif", v)))
+  }
+  df <- scan_sif_images(d)
+  expect_equal(df$ver, c("2.10.0", "2.9.1", "2.7.0", "2.3.2"))
+  expect_equal(basename(df$path[1]), "diann-2.10.0.sif")
+})

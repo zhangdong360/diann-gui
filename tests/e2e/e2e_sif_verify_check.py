@@ -91,19 +91,25 @@ def main():
         WebDriverWait(drv, 20).until(lambda d: "镜像不存在" in d.find_element(By.ID, "sif_verify_result").text)
         print("[2] 不存在路径正确报错 OK")
 
-        # ---- 3. 全绿路径: 手动输入真实可读 sif ----
+        # ---- 3. 全绿路径: 快速验证 → 深度验证 ----
         inp.clear()
         inp.send_keys(args.sif)
         WebDriverWait(drv, 10).until(
             lambda d: args.sif in d.find_element(By.ID, "sif_display").text)
         drv.find_element(By.ID, "verify_sif").click()
+        WebDriverWait(drv, 30).until(
+            lambda d: "快速验证通过" in d.find_element(By.ID, "sif_verify_result").text)
+        quick_txt = drv.find_element(By.ID, "sif_verify_result").text
+        for needle in ["文件存在", "可读取", "SIF 镜像格式有效", "apptainer 可用"]:
+            assert needle in quick_txt, f"快速验证缺步骤 {needle!r}: {quick_txt!r}"
+        drv.find_element(By.ID, "verify_sif_deep").click()
         WebDriverWait(drv, 90).until(
             lambda d: "容器内 DIA-NN 可执行" in d.find_element(By.ID, "sif_verify_result").text)
         txt = drv.find_element(By.ID, "sif_verify_result").text
         for needle in ["文件存在", "可读取", "SIF 镜像格式有效", "apptainer inspect 通过"]:
-            assert needle in txt, f"验证链缺步骤 {needle!r}: {txt!r}"
+            assert needle in txt, f"深度验证缺步骤 {needle!r}: {txt!r}"
         assert "✗" not in txt, f"全绿路径出现失败项: {txt!r}"
-        print("[3] 验证链全绿 OK:", txt.replace("\n", " | ")[:200])
+        print("[3] 快速 + 深度验证全绿 OK:", txt.replace("\n", " | ")[:200])
 
         # ---- 4. 浏览选择回填 + 验证 ----
         if args.volume and args.dirname:
@@ -114,6 +120,9 @@ def main():
             disp = drv.find_element(By.ID, "sif_display").text
             assert "v" in disp and args.sif in disp, f"回显异常: {disp!r}"
             drv.find_element(By.ID, "verify_sif").click()
+            WebDriverWait(drv, 30).until(
+                lambda d: "快速验证通过" in d.find_element(By.ID, "sif_verify_result").text)
+            drv.find_element(By.ID, "verify_sif_deep").click()
             WebDriverWait(drv, 90).until(
                 lambda d: "容器内 DIA-NN 可执行" in d.find_element(By.ID, "sif_verify_result").text)
             print("[4] 浏览选择回填 + 验证 OK")

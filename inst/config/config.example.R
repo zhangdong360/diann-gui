@@ -1,17 +1,18 @@
 # ============================================================
 # diann_gui 用户设置模板 (自托管模式)
 #
-# 生成/启用方式 (任选其一; R 包与依赖在安装期自动处理, 无需 EXTRA_LIB):
-#   bin/diann-gui --init          # 复制本模板到 ~/.diann_gui/config.R
+# 生成/启用方式 (任选其一; R 包与依赖在安装期自动处理):
+#   diann.gui::init_config()      # 在 R 内生成 ~/.diann_gui/config.R (可自动探测)
 #   或手动: mkdir -p ~/.diann_gui && cp config.example.R ~/.diann_gui/config.R
 #
-# 配置发现顺序 (app.R / notify_watch.R): 环境变量 DIANN_GUI_CONFIG 指定的文件
-# → ~/.diann_gui/config.R → 与 app.R 同目录的 config.R (中央部署变体)。
+# 配置发现顺序 (diann.gui::run_app()): 环境变量 DIANN_GUI_CONFIG 指定的文件
+# → ~/.diann_gui/config.R → <工作目录>/diann_gui_config.R
+# → (仅历史 shiny-server 部署, 工作目录有 app.R 时) <工作目录>/config.R。
 #
 # 默认即"用户家目录模式", 零配置可用: 数据/输出根 = 你的家目录,
 # 作业以当前用户提交, 文件权限与你自己跑命令行完全一致。
-# 下面各项全部注释着——取消注释并修改才生效; 未定义的项用 app.R 内置默认。
-# 模板中的 DIANN_GUI_USER_HOME 令牌会被 bin/diann-gui --init 替换为你的家目录。
+# 下面各项全部注释着——取消注释并修改才生效; 未定义的项用内置默认。
+# 模板中的 DIANN_GUI_USER_HOME 令牌会被 init_config() 替换为你的家目录。
 # ============================================================
 
 # ---- DIA-NN 容器镜像 ------------------------------------------------------
@@ -38,11 +39,29 @@
 # 提交表单提供的分区; 第一个是默认值。
 # SLURM_PARTITIONS <- c("compute")
 
+# 额外写入作业脚本的 #SBATCH 选项 (如 --account=lab / --qos=normal / --reservation=r1),
+# 每项一行, 原样追加为 "#SBATCH <选项>"。
+# SLURM_EXTRA_ARGS <- c("--account=lab")
+
+# 输出目录保留天数: 超过该天数的脚本/rc/项目简介/旧归档产物自动清理 (0 = 不清理)。
+# RETENTION_DAYS <- 90
+
 # ---- Apptainer / Singularity ----------------------------------------------
 
-# 生成的 sbatch 脚本中查找 apptainer 可执行文件的目录 (存在 <目录>/apptainer
-# 则加入 PATH)。按你集群的实际安装位置填写。
+# 版本要求: SIF 镜像需要 apptainer ≥ 1.0 或 singularity ≥ 3.0 (SIF 自 Singularity 3.0 起)。
+# singularity 2.x (含 conda-forge 的 2.4.6) 只能读 squashfs/ext3 的 .simg, 对 .sif 会报
+# "Unknown image format/type"; GUI 候选会标「⚠ 不支持 SIF」, 并在提交前直接拦下。
+# 运行时在「1. apptainer 运行环境」里选择 (自动识别 PATH 与下列目录, 解析版本后
+# 列入候选; 识别不到时可手动输入路径并验证)。这里的目录同时作为作业脚本的
+# 回退搜索目录 (存在 <目录>/apptainer 或 <目录>/singularity 即采用)。
 # APPTAINER_PATHS <- c("/share/app/conda/conda24/envs/apptainer/bin")
+
+# 预选的 apptainer 路径 (候选里存在时默认选中它, 否则选版本最高的可用项)。
+# DEFAULT_APPTAINER <- "/share/app/conda/conda24/envs/apptainer/bin/apptainer"
+
+# GUI 节点看不到/跑不动所选 apptainer 时: FALSE (默认) 只警告并继续, 作业按
+# 回退链查找; TRUE 则直接阻断提交 (适合 GUI 与计算节点环境一致的集群)。
+# APPTAINER_STRICT_CHECK <- FALSE
 
 # PATH 上找不到 apptainer 时的环境模块兜底。留空 = 关闭模块兜底。
 # APPTAINER_MODULE_FALLBACK <- "apptainer/1.4.5"
@@ -62,6 +81,7 @@
 
 # 发送完成邮件用的 python3。留空 = 自动探测 PATH 上的 python3。
 # 凭据文件搜索链: 环境变量 DIANN_GUI_MAIL_CONF → ~/.diann_gui/mail_config.txt
-# → 与 app.R 同目录的 mail_config.txt (模板见 mail_config.example.txt)。
-# 三处都不存在时邮件功能整体停用 (不影响其他功能)。
+# (历史 shiny-server 部署目录有 app.R 时才会读同目录 mail_config.txt;
+#  模板见 inst/config/mail_config.example.txt)。
+# 都不存在时邮件功能整体停用 (不影响其他功能)。
 # MAIL_PYTHON <- "/usr/bin/python3"

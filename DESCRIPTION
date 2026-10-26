@@ -1,7 +1,7 @@
 Package: diann.gui
 Type: Package
 Title: Web GUI for Submitting and Monitoring DIA-NN Jobs on Slurm Clusters
-Version: 1.10.0
+Version: 1.11.0
 Authors@R: person("Zhang Dong", email = "zhangdong_0121@foxmail.com", role = c("aut", "cre"))
 Description: A Shiny dashboard that puts DIA-NN behind a browser: build commands,
     submit them as Slurm batch jobs running the official DIA-NN container image
@@ -16,6 +16,8 @@ Imports:
     shinydashboard,
     shinyFiles,
     htmltools,
+    httpuv,
+    stats,
     tools,
     utils
 Suggests:

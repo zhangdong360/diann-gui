@@ -14,15 +14,24 @@
 
 .cfg <- new.env(parent = emptyenv())
 
-#' 解析配置文件路径 (env → 每用户 → 工作目录), 找不到返回 ""
+#' 解析配置文件路径 (env → 每用户 → 显式站点文件 → legacy), 找不到返回 ""
+#'
+#' 顺序: `DIANN_GUI_CONFIG` → `~/.diann_gui/config.R` → `<dir>/diann_gui_config.R`
+#' → 仅当 `<dir>/app.R` 存在 (历史 shiny-server 部署标记) 时 `<dir>/config.R`。
+#' 不再无条件下读工作目录的 `config.R`: 用户在 R / RStudio 里跑 `run_app()` 时,
+#' 项目目录里同名的 `config.R` 会静默劫持配置。
 #' @export
 resolve_user_config <- function(dir = getwd()) {
   env <- Sys.getenv("DIANN_GUI_CONFIG")
   if (nzchar(env) && file.exists(env)) return(normalizePath(env, mustWork = FALSE))
   user_cfg <- file.path(path.expand("~"), ".diann_gui", "config.R")
   if (file.exists(user_cfg)) return(user_cfg)
-  local_cfg <- file.path(dir, "config.R")
-  if (file.exists(local_cfg)) return(local_cfg)
+  explicit <- file.path(dir, "diann_gui_config.R")
+  if (file.exists(explicit)) return(normalizePath(explicit, mustWork = FALSE))
+  legacy <- file.path(dir, "config.R")
+  if (file.exists(file.path(dir, "app.R")) && file.exists(legacy)) {
+    return(normalizePath(legacy, mustWork = FALSE))
+  }
   ""
 }
 
@@ -50,8 +59,9 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     scratch <- new.env(parent = baseenv())
     source(file, local = scratch)
     for (k in c("SIF_DIRS", "DEFAULT_SIF", "DATA_HOME", "BASE_VOLUMES", "CON_FASTA",
-                "SHARED_GROUP", "SLURM_PARTITIONS", "APPTAINER_PATHS",
-                "APPTAINER_MODULE_FALLBACK", "BIND_PATHS", "MAIL_PYTHON")) {
+                "SHARED_GROUP", "SLURM_PARTITIONS", "SLURM_EXTRA_ARGS", "APPTAINER_PATHS",
+                "APPTAINER_MODULE_FALLBACK", "BIND_PATHS", "MAIL_PYTHON",
+                "DEFAULT_APPTAINER", "APPTAINER_STRICT_CHECK", "RETENTION_DAYS")) {
       if (exists(k, envir = scratch, inherits = FALSE)) {
         assign(k, get(k, envir = scratch, inherits = FALSE), envir = .cfg)
       }
@@ -75,6 +85,10 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   if (is.null(.cfg$APPTAINER_PATHS)) .cfg$APPTAINER_PATHS <- character(0)
   if (is.null(.cfg$APPTAINER_MODULE_FALLBACK)) .cfg$APPTAINER_MODULE_FALLBACK <- ""
   if (is.null(.cfg$BIND_PATHS)) .cfg$BIND_PATHS <- character(0)
+  if (is.null(.cfg$DEFAULT_APPTAINER)) .cfg$DEFAULT_APPTAINER <- ""
+  if (is.null(.cfg$APPTAINER_STRICT_CHECK)) .cfg$APPTAINER_STRICT_CHECK <- FALSE
+  if (is.null(.cfg$SLURM_EXTRA_ARGS)) .cfg$SLURM_EXTRA_ARGS <- character(0)
+  if (is.null(.cfg$RETENTION_DAYS) || !is.finite(.cfg$RETENTION_DAYS)) .cfg$RETENTION_DAYS <- 90
 
   # ---- 邮件 ----
   if (is.null(.cfg$MAIL_PYTHON)) .cfg$MAIL_PYTHON <- Sys.which("python3")
@@ -84,21 +98,43 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
     if (nzchar(env) && file.exists(env)) return(env)
     user_mc <- file.path(path.expand("~"), ".diann_gui", "mail_config.txt")
     if (file.exists(user_mc)) return(user_mc)
-    file.path(getwd(), "mail_config.txt")
+    # legacy: 仅历史 shiny-server 部署目录 (有 app.R 标记) 才读同目录 mail_config.txt
+    legacy <- file.path(getwd(), "mail_config.txt")
+    if (file.exists(file.path(getwd(), "app.R")) && file.exists(legacy)) return(legacy)
+    user_mc  # 默认返回每用户路径 (用于"未找到"提示)
   })
   .cfg$MAIL_ENABLED <- nzchar(.cfg$MAIL_PYTHON) && file.exists(.cfg$MAIL_CONF)
 
-  # ---- 通知状态文件 (HOME 相对, 每用户独立; 不可写回退 /tmp) ----
-  if (is.null(.cfg$NOTIFY_STATE)) {
-    cand <- file.path(Sys.getenv("HOME"), "diann_gui_notify_state.rds")
-    if (!dir.exists(dirname(cand)) || file.access(dirname(cand), 2) != 0) {
-      cand <- file.path("/tmp", "diann_gui_notify_state.rds")
-    }
-    .cfg$NOTIFY_STATE <- cand
-  }
+  # ---- 通知状态文件 (HOME 相对, 每用户独立) ----
+  # HOME 不可写时回退到 <TMPDIR>/diann_gui-<user> (0700)。不再使用固定的
+  # /tmp/diann_gui_notify_state.rds: 多用户会互相覆盖, 且他人可预置符号链接
+  # (状态文件中含收件邮箱)。
+  if (is.null(.cfg$NOTIFY_STATE)) .cfg$NOTIFY_STATE <- notify_state_default()
   .cfg$NOTIFY_LOCK_DIR <- paste0(.cfg$NOTIFY_STATE, ".lock")
   .cfg$NOTIFY_PIDFILE <- file.path(dirname(.cfg$NOTIFY_STATE), "diann_gui_notify_watch.pid")
   .cfg$NOTIFY_WATCH_LOG <- file.path(dirname(.cfg$NOTIFY_STATE), "diann_gui_notify_watch.log")
 
   invisible(.cfg)
+}
+
+# 默认状态文件位置: 优先 $HOME; 不可写时用 per-user 临时目录 (稳定路径 + 0700)。
+notify_state_default <- function() {
+  home <- Sys.getenv("HOME")
+  if (nzchar(home) && dir.exists(home) && file.access(home, 2) == 0) {
+    return(file.path(home, "diann_gui_notify_state.rds"))
+  }
+  user <- Sys.info()[["user"]]
+  tag <- if (nzchar(user)) gsub("[^A-Za-z0-9_.-]", "_", user) else as.character(Sys.getpid())
+  base <- file.path(Sys.getenv("TMPDIR", unset = "/tmp"), paste0("diann_gui-", tag))
+  ok <- dir.exists(base) || dir.create(base, showWarnings = FALSE, recursive = TRUE, mode = "0700")
+  if (ok) {
+    own <- file.info(base)$uname
+    if (!is.na(own) && nzchar(user) && !identical(own, user)) ok <- FALSE
+  }
+  if (ok) {
+    Sys.chmod(base, "0700")
+    return(file.path(base, "diann_gui_notify_state.rds"))
+  }
+  # 最后兜底: 本会话 tempdir (至少不会跨用户互相覆盖)
+  file.path(tempdir(), "diann_gui_notify_state.rds")
 }

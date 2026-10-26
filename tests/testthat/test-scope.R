@@ -67,3 +67,56 @@ test_that("DIANN_GUI_EXTRA_VOLUMES 追加路径守卫根 (e2e/CI 钩子)", {
   set_core_const("BASE_VOLUMES", bv)
   expect_true(path_in_scope("/share/home/demo/lib/demo.speclib"))
 })
+
+test_that("notify_state_default: HOME 不可写时回退 per-user 目录 (非固定 /tmp 文件)", {
+  old_home <- Sys.getenv("HOME")
+  Sys.setenv(HOME = "/nonexistent_home_for_state_test")
+  on.exit(Sys.setenv(HOME = old_home), add = TRUE)
+  p <- diann.gui:::notify_state_default()
+  expect_false(identical(p, "/tmp/diann_gui_notify_state.rds"))
+  d <- dirname(p)
+  expect_true(dir.exists(d))
+  expect_true(grepl("diann_gui-", basename(d), fixed = TRUE) || grepl("Rtmp", d, fixed = TRUE))
+})
+
+test_that("container_visible: $HOME/cwd/BIND_PATHS 之外的路径被报告", {
+  home <- file.path(tempdir(), sprintf("cv_home_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  share <- file.path(tempdir(), sprintf("cv_share_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(home, showWarnings = FALSE, recursive = TRUE)
+  dir.create(share, showWarnings = FALSE, recursive = TRUE)
+  inside <- file.path(home, "a.raw")
+  outside <- file.path(share, "b.raw")
+  expect_equal(container_visible(c(inside, outside), home), outside)
+  expect_equal(container_visible(inside, home), character(0))
+  expect_equal(container_visible(character(0), home), character(0))
+  expect_equal(container_visible(outside, character(0)), outside)
+  # 前缀边界: 同级目录不得误判为 home 之内
+  expect_equal(container_visible(paste0(home, "X/a.raw"), home), paste0(home, "X/a.raw"))
+})
+
+test_that("resolve_user_config: 工作目录 config.R 仅在 app.R (legacy 标记) 存在时生效", {
+  old_home <- Sys.getenv("HOME")
+  old_env <- Sys.getenv("DIANN_GUI_CONFIG")
+  empty_home <- file.path(tempdir(), sprintf("cfgdisc_home_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(empty_home, showWarnings = FALSE, recursive = TRUE)
+  Sys.setenv(HOME = empty_home)
+  Sys.unsetenv("DIANN_GUI_CONFIG")
+  on.exit({ Sys.setenv(HOME = old_home, DIANN_GUI_CONFIG = old_env) }, add = TRUE)
+
+  d <- file.path(tempdir(), sprintf("cfgdisc_%d_%d", Sys.getpid(), as.integer(runif(1, 1, 1e9))))
+  dir.create(d, showWarnings = FALSE, recursive = TRUE)
+  cfg <- file.path(d, "config.R")
+  writeLines('DATA_HOME <- "/from/cwd"', cfg)
+
+  # 无 app.R: 工作目录 config.R 不得劫持用户在 R 里跑的应用
+  expect_equal(resolve_user_config(d), "")
+  # 有 app.R (历史 shiny-server 入口): 认可
+  file.create(file.path(d, "app.R"))
+  expect_equal(normalizePath(resolve_user_config(d), mustWork = FALSE),
+               normalizePath(cfg, mustWork = FALSE))
+  # 显式命名的 diann_gui_config.R 优先于 legacy config.R
+  explicit <- file.path(d, "diann_gui_config.R")
+  writeLines('DATA_HOME <- "/from/explicit"', explicit)
+  expect_equal(normalizePath(resolve_user_config(d), mustWork = FALSE),
+               normalizePath(explicit, mustWork = FALSE))
+})

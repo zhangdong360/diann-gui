@@ -16,6 +16,12 @@
 DIANN_NOTIFY_MAX_ATTEMPTS <- 3L
 DIANN_NOTIFY_RETRY_WAIT <- 300
 
+# "未知"状态不算最终结果: sacct 记账滞后 (刚出队) 或产物尚未落盘时先等几轮再发信,
+# 否则用户会收到"状态未知"的完成邮件且记录被置 done, 不再重试 (四层状态形同虚设)。
+notify_defer_unknown <- function(st, waits, max_wait = 3L) {
+  !is.null(st) && identical(st$label, "未知") && as.integer(waits) < as.integer(max_wait)
+}
+
 notify_lock_acquire <- function(timeout = 10) {
   t0 <- as.numeric(Sys.time())
   repeat {
@@ -40,6 +46,28 @@ notify_lock_acquire <- function(timeout = 10) {
 }
 notify_lock_release <- function() invisible(try(unlink(cfg_get("NOTIFY_LOCK_DIR"), recursive = TRUE, force = TRUE), silent = TRUE))
 
+# 拿不到锁时把待通知记录落到 sidecar 目录, 由下一轮 tick 补写 (不静默丢邮件)
+notify_pending_dir <- function() paste0(cfg_get("NOTIFY_STATE"), ".pending")
+notify_pending_put <- function(rec) {
+  d <- notify_pending_dir()
+  if (!dir.exists(d) && !dir.create(d, showWarnings = FALSE, recursive = TRUE)) return(invisible(FALSE))
+  f <- file.path(d, sprintf("%d_%s.rds", Sys.getpid(), format(Sys.time(), "%Y%m%d%H%M%OS6")))
+  ok <- tryCatch({ saveRDS(rec, f); TRUE }, error = function(e) FALSE)
+  invisible(isTRUE(ok))
+}
+notify_pending_drain <- function() {
+  d <- notify_pending_dir()
+  if (!dir.exists(d)) return(list())
+  files <- list.files(d, pattern = "\\.rds$", full.names = TRUE)
+  out <- list()
+  for (f in files) {
+    r <- tryCatch(readRDS(f), error = function(e) NULL)
+    if (is.list(r) && !is.null(r$jobid)) out[[length(out) + 1L]] <- r
+    try(unlink(f), silent = TRUE)
+  }
+  out
+}
+
 diann_notify_load <- function() {
   if (!file.exists(cfg_get("NOTIFY_STATE"))) return(list(recs = list()))
   tryCatch(readRDS(cfg_get("NOTIFY_STATE")), error = function(e) list(recs = list()))
@@ -55,11 +83,15 @@ diann_notify_save <- function(state) {
 
 diann_notify_add <- function(rec) {
   if (!isTRUE(cfg_get("MAIL_ENABLED"))) return(invisible(FALSE))
-  if (!notify_lock_acquire()) return(invisible(FALSE))
-  on.exit(notify_lock_release(), add = TRUE)
-  state <- diann_notify_load()
   rec$done <- FALSE; rec$attempts <- 0L; rec$last_result <- ""; rec$last_try <- 0
   rec$submitted <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  if (!notify_lock_acquire()) {
+    # 锁被 watcher 长时间持有 (大量待处理记录) 时不再丢记录: 落 sidecar, 下轮补写
+    notify_pending_put(rec)
+    return(invisible(FALSE))
+  }
+  on.exit(notify_lock_release(), add = TRUE)
+  state <- diann_notify_load()
   state$recs <- head(c(list(rec), state$recs), 100)  # 只保留最近 100 条
   diann_notify_save(state)
   invisible(TRUE)
@@ -234,10 +266,15 @@ diann_job_status <- function(jobid, out_dir, out_file, script_path = "",
 # ② 无锁发送 (慢操作, 中途被杀则记录仍待发, 下轮重试) ③ 持锁按 jobid+submitted 合并结果
 diann_notify_tick <- function() {
   if (!isTRUE(cfg_get("MAIL_ENABLED"))) return(invisible(FALSE))
+  # 锁外先取一次队列快照 (一次 squeue -u), 避免持锁期间为每条记录起子进程
+  snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
+  qmap <- if (is.null(snap)) list() else snap$squeue_map
   # ---- 阶段 1: 认领 ----
   if (!notify_lock_acquire()) return(invisible(FALSE))
   on.exit(notify_lock_release(), add = TRUE)  # 异常兜底 (重复释放无害)
   state <- diann_notify_load()
+  pend <- notify_pending_drain()
+  if (length(pend)) state$recs <- head(c(pend, state$recs), 100)
   now <- as.numeric(Sys.time())
   cand <- list()
   if (length(state$recs)) for (i in seq_along(state$recs)) {
@@ -246,23 +283,35 @@ diann_notify_tick <- function() {
     att <- if (is.null(r$attempts)) 0L else as.integer(r$attempts)
     lt <- if (is.null(r$last_try)) 0 else as.numeric(r$last_try)
     if (now - lt < DIANN_NOTIFY_RETRY_WAIT * max(att, 1L)) next  # 失败重试间隔未到
-    q <- suppressWarnings(system(sprintf("squeue -h -j %s 2>/dev/null", r$jobid), intern = TRUE))
-    if (length(q) > 0) next  # 仍在排队/运行
+    if (!is.null(qmap[[as.character(r$jobid)]])) next  # 仍在排队/运行
     state$recs[[i]]$last_try <- now
     cand[[length(cand) + 1L]] <- list(rec = state$recs[[i]])
   }
-  if (length(cand)) diann_notify_save(state)
+  if (length(cand) || length(pend)) diann_notify_save(state)
   notify_lock_release()
   if (!length(cand)) return(invisible(FALSE))
   # ---- 阶段 2: 发送 ----
+  fns <- if (is.null(snap)) list(squeue_fn = NULL, sacct_fn = NULL) else slurm_snapshot_fns(snap)
   for (k in seq_along(cand)) {
     r <- cand[[k]]$rec
     logf <- file.path(r$out_dir, sprintf("slurm-%d.out", as.integer(r$jobid)))
     st <- tryCatch(
       diann_job_status(r$jobid, r$out_dir, r$out_file,
-                       script_path = r$script_path, submitted = r$submitted),
+                       script_path = r$script_path, submitted = r$submitted,
+                       squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn),
       error = function(e) NULL)
     rc <- if (is.null(st)) NA_integer_ else st$rc
+    # 状态"未知"通常是 sacct 记账滞后 (刚出队) 或产物尚未落盘: 此时发信会把
+    # "未知"当成最终结果并置 done。改为最多等 3 轮 (每轮 5 分钟) 再退化为未知。
+    waits <- if (is.null(r$unknown_waits)) 0L else as.integer(r$unknown_waits)
+    if (notify_defer_unknown(st, waits)) {
+      cand[[k]]$deferred <- TRUE
+      cand[[k]]$st <- st
+      cand[[k]]$rc <- rc
+      cand[[k]]$result <- "状态未知, 等待 sacct/产物就绪后再发送"
+      cand[[k]]$status <- 0L
+      next
+    }
     elapsed <- diann_notify_elapsed(logf, r$jobid)
     args <- c(cfg_get("MAIL_PY"), "--to", shQuote(r$to), "--job-id", as.character(r$jobid),
               "--task", shQuote(r$task), "--out-dir", shQuote(r$out_dir),
@@ -297,6 +346,19 @@ diann_notify_tick <- function() {
     }, logical(1)))
     if (!length(idx)) next
     i <- idx[1]
+    if (isTRUE(cand[[k]]$deferred)) {
+      uw <- if (is.null(state$recs[[i]]$unknown_waits)) 0L else as.integer(state$recs[[i]]$unknown_waits)
+      state$recs[[i]]$unknown_waits <- uw + 1L
+      state$recs[[i]]$last_result <- paste0(format(Sys.time(), "%m-%d %H:%M:%S "), cand[[k]]$result)
+      state$recs[[i]]$status_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+      if (!is.null(cand[[k]]$st)) {
+        state$recs[[i]]$state <- cand[[k]]$st$state
+        state$recs[[i]]$rc <- cand[[k]]$st$rc
+        state$recs[[i]]$status_label <- cand[[k]]$st$label
+        state$recs[[i]]$status_reason <- cand[[k]]$st$reason
+      }
+      next
+    }
     att <- if (is.null(state$recs[[i]]$attempts)) 0L else as.integer(state$recs[[i]]$attempts)
     state$recs[[i]]$attempts <- att + 1L
     state$recs[[i]]$last_result <- paste0(format(Sys.time(), "%m-%d %H:%M:%S "), cand[[k]]$result)

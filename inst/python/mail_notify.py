@@ -23,6 +23,7 @@ DIANN GUI 作业完成邮件通知助手。
 约定：作为作业的一部分运行时，任何失败都只打 WARNING、以 0 退出，绝不影响作业状态。
 """
 import argparse
+import html
 import os
 import re
 import smtplib
@@ -90,32 +91,43 @@ def count_lines(path, cap_mb=200):
         return None, None
 
 
-def summarize_out_dir(out_dir, max_files=25):
-    """返回 (文件行HTML列表, 指标行HTML列表)。"""
+def summarize_out_dir(out_dir, report_path=None, max_files=25):
+    """返回 (文件行HTML列表, 指标行HTML列表)。
+
+    report_path 是 GUI 的主报告路径 (报告名用户可自定义, 由 --out-file 传入);
+    未提供或不存在时才回退到 report.tsv。
+    """
     rows, metrics = [], []
     try:
         entries = [e for e in os.scandir(out_dir) if e.is_file()]
     except OSError as e:
-        return ["<li>无法读取输出目录: %s</li>" % e], metrics
+        return ["<li>无法读取输出目录: %s</li>" % html.escape(str(e))], metrics
     entries.sort(key=lambda e: -e.stat().st_size)
     total = sum(e.stat().st_size for e in entries)
     metrics.append("输出目录共 %d 个文件, 合计 %s" % (len(entries), human_size(total)))
     for e in entries[:max_files]:
-        rows.append("<li><code>%s</code> — %s</li>" % (e.name, human_size(e.stat().st_size)))
+        rows.append("<li><code>%s</code> — %s</li>" % (html.escape(e.name), human_size(e.stat().st_size)))
     if len(entries) > max_files:
         rows.append("<li>… 其余 %d 个文件从略</li>" % (len(entries) - max_files))
-    # 关键结果指标
-    for name in ("report.tsv",):
-        p = os.path.join(out_dir, name)
+    # 关键结果指标: 主报告行数
+    candidates = []
+    if report_path:
+        candidates.append(report_path)
+    candidates.append(os.path.join(out_dir, "report.tsv"))
+    for p in candidates:
+        if not p or not os.path.isfile(p):
+            continue
         data_rows, _ = count_lines(p)
         if data_rows is not None:
-            metrics.append("<b>%s</b> 数据行数: %d (前体/蛋白组识别)" % (name, data_rows))
+            metrics.append("<b>%s</b> 数据行数: %d (前体/蛋白组识别)"
+                           % (html.escape(os.path.basename(p)), data_rows))
+        break
     try:
         for e in entries:
             if "matrix" in e.name.lower() and e.name.lower().endswith((".csv", ".tsv")):
                 data_rows, _ = count_lines(e.path)
                 if data_rows is not None:
-                    metrics.append("<b>%s</b> 行数: %d" % (e.name, data_rows))
+                    metrics.append("<b>%s</b> 行数: %d" % (html.escape(e.name), data_rows))
     except OSError:
         pass
     return rows, metrics
@@ -198,7 +210,7 @@ def build_html(a, out_files_html, metrics_html, inputs, project_desc):
     for label in ("RAW 文件", "FASTA", "光谱库"):
         if label in inputs:
             items = inputs[label]
-            shown = "".join("<div><code>%s</code></div>" % i for i in items[:12])
+            shown = "".join("<div><code>%s</code></div>" % html.escape(i) for i in items[:12])
             if len(items) > 12:
                 shown += "<div>… 共 %d 个</div>" % len(items)
             inputs_rows.append('<tr><td style="background:#f5f5f5;"><b>%s</b></td><td>%s</td></tr>'
@@ -207,16 +219,16 @@ def build_html(a, out_files_html, metrics_html, inputs, project_desc):
     return HTML_TMPL.format(
         status_icon=icon,
         status_word=word,
-        task=a.task or "-",
-        job_id=a.job_id or "-",
-        status_line=status_line,
+        task=html.escape(str(a.task or "-")),
+        job_id=html.escape(str(a.job_id or "-")),
+        status_line=html.escape(status_line),
         elapsed_row=("" if a.elapsed is None else
                      '<tr><td style="background:#f5f5f5;"><b>耗时</b></td><td>%s</td></tr>'
                      % fmt_elapsed(a.elapsed)),
-        diann_ver=os.path.basename(a.sif) if a.sif else "-",
+        diann_ver=html.escape(os.path.basename(a.sif)) if a.sif else "-",
         inputs_rows="".join(inputs_rows),
-        out_dir=a.out_dir or "-",
-        project_desc=(project_desc or "(未填写)"),
+        out_dir=html.escape(str(a.out_dir or "-")),
+        project_desc=html.escape(project_desc or "(未填写)"),
         metrics="".join("<li>%s</li>" % m for m in metrics_html) or "<li>(无)</li>",
         files="".join(out_files_html),
     )
@@ -233,8 +245,13 @@ def smtp_send(cfg, to_list, subject, html, timeout=30):
         smtp = smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"], timeout=timeout)
         try:
             smtp.starttls()
-        except smtplib.SMTPException:
-            pass
+        except smtplib.SMTPException as e:
+            # 不回退明文: 否则用户名/授权码会以明文（或可降级连接）发出
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+            raise smtplib.SMTPException("STARTTLS 不可用, 拒绝以明文发送凭据: %s" % e)
     try:
         smtp.login(cfg["smtp_user"], cfg["smtp_pass"])
         smtp.sendmail(cfg["mail_from"], to_list, msg.as_string())
@@ -306,7 +323,7 @@ def main():
                     project_desc = fh.read().strip() or "(未填写)"
             except OSError:
                 project_desc = "(简介文件不可读)"
-        out_files_html, metrics_html = (summarize_out_dir(a.out_dir) if a.out_dir else ([], []))
+        out_files_html, metrics_html = (summarize_out_dir(a.out_dir, a.out_file) if a.out_dir else ([], []))
         html = build_html(a, out_files_html, metrics_html, extract_inputs(a.script), project_desc)
         _icon, word, _line, _ok = status_view(a)
         subject = "【DIA-NN GUI】%s (Job %s) 分析%s" % (

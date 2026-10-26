@@ -82,3 +82,23 @@ test_that("PATH_VALUE_FLAGS 全部可作为裸旗标被识别记录", {
   expect_setequal(r$bare, PATH_VALUE_FLAGS)
   expect_length(r$unknown, 0)
 })
+
+test_that("apptainer/覆盖层的新 inputId 在 ui.R 与 server.R 中成对出现", {
+  ui_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "ui.R"), warn = FALSE), collapse = "\n")
+  srv_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
+  ids <- c("apptainer_version", "refresh_apptainer", "use_custom_apptainer",
+           "custom_apptainer", "verify_apptainer", "apptainer_display",
+           "apptainer_verify_result", "use_imported_raw_dir")
+  for (id in ids) {
+    expect_true(grepl(id, ui_src, fixed = TRUE), info = paste("ui.R 缺少", id))
+    expect_true(grepl(id, srv_src, fixed = TRUE), info = paste("server.R 缺少", id))
+  }
+})
+
+test_that("apptainer 选项写入 params_ready 与脚本模板", {
+  srv_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
+  core_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "diann-core.R"), warn = FALSE), collapse = "\n")
+  expect_match(srv_src, "apptainer_bin = effective_apptainer()", fixed = TRUE)
+  expect_match(core_src, "APPTAINER_BIN", fixed = TRUE)
+  expect_match(core_src, "\"$APPTAINER_BIN\" exec", fixed = TRUE)
+})

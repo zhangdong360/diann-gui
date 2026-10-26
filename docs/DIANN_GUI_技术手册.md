@@ -2,7 +2,7 @@
 
 | 项目 | 说明 |
 |---|---|
-| 适用版本 | GUI v1.6（2026-10-06）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
+| 适用版本 | GUI v1.11（2026-10-20）· DIA-NN 2.3.0–2.7.0（sif 容器镜像） |
 | 面向读者 | 质谱平台工作人员、数据分析人员、集群管理员 |
 | 配套文档 | 《DIANN_GUI_新手指南.html》（图文入门版）；GUI 内「参数速查」「更新说明」页 |
 | 文档性质 | 技术参考手册——功能、参数、命令构建规则、工作流与故障排查的完整说明 |
@@ -34,34 +34,56 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 ### 1.1 调用链路
 
+本应用以 **R 包**形式分发：每位用户把 `diann.gui` 装进自己的 R 库，在自己的 R 会话里
+`diann.gui::run_app()` 启动。Shiny 进程就是该用户自己的进程，因此 `sbatch` 提交的
+作业、写出的文件都归属于本人——用户之间天然隔离。
+
 ```
 浏览器
-  └─ shiny-server (head-node 节点 :3838 /diann_gui/，以 shiny 用户运行)
-       └─ app.R 生成 Slurm 脚本并 sbatch 提交
-            └─ Slurm 作业（compute/head-node 分区，node1–node4 计算节点）
-                 └─ apptainer exec --bind /share <diann-x.y.z.sif> diann-linux <参数>
-                      └─ DIA-NN 分析，结果写入用户指定的输出目录
+  └─ run_app()（你的 R 会话, 127.0.0.1:<随机端口>）
+       └─ 生成 Slurm 脚本并 sbatch 提交（以你本人身份）
+            └─ Slurm 作业（compute 分区）
+                 └─ apptainer/singularity exec --bind ... <diann-x.y.z.sif> diann-linux <参数>
+                      └─ DIA-NN 分析，结果写入你指定的输出目录
 ```
 
-旁路：作业完成后，由 head-node 侧守护进程 `notify_watch.R` 检测作业退出并调用 `mail_notify.py` 发送完成/失败邮件（计算节点无出网，邮件必须由 head-node 代发，详见第 6 节）。
+旁路：作业完成后，由同一用户会话拉起的守护进程 `diann.gui::watch_daemon()`
+（每 60 s）调用 `mail_notify.py` 发送完成/失败邮件（计算节点无出网，邮件由登录节点代发）。
 
-### 1.2 关键配置（app.R 配置区）
+### 1.2 关键配置（`~/.diann_gui/config.R`）
 
-| 常量 | 值 | 说明 |
+用 `diann.gui::init_config()` 生成（可自动探测 Slurm 分区、apptainer 候选与 SIF 目录），
+或手动编辑模板 `inst/config/config.example.R`。
+
+| 常量 | 示例 | 说明 |
 |---|---|---|
-| `SIF_DIRS` | `/share/home/demo` | 递归扫描 `diann*.sif` 镜像，按版本号去重后生成下拉选项 |
-| `DEFAULT_SIF` | `/share/home/demo/tools/diann-2.7.0.sif` | 默认镜像（v1.6 起） |
-| `DATA_HOME` / `BASE_VOLUMES` | `/share/home/demo`（显示名 DataHome） | 文件选择器根目录，所有输入/输出路径必须位于其下 |
-| `SLURM_PARTITIONS` | `compute`、`head-node` | 可选计算分区 |
-| `CON_FASTA` | `/share/home/demo/data/fasta/cRAP_contaminants.fasta` | 内置 cRAP 污染物库（125 条），启用污染物扣除时自动附加 |
-| `PARAM_DOC` | `DIANN参数说明.md` | 「参数速查」页数据源（运行时解析其中的官方命令行参考） |
-| `JOBS_REGISTRY` | `/home/shiny/diann_gui_jobs_registry.rds` | GUI 持久提交注册表（跨会话定位日志，保留 300 条） |
+| `SIF_DIRS` | `/share/app/tools/diann` | 递归扫描 `diann*.sif`，按数值版本排序后生成下拉 |
+| `DEFAULT_SIF` | `/share/app/tools/diann/diann-2.7.0.sif` | 默认镜像（不存在时取扫描到的最高版本） |
+| `DATA_HOME` / `BASE_VOLUMES` | `~/data` | 文件浏览器根目录，也是导入路径的安全边界 |
+| `SLURM_PARTITIONS` | `c("compute")` | 可选计算分区（第一个为默认） |
+| `SLURM_EXTRA_ARGS` | `c("--account=lab")` | 额外 `#SBATCH` 选项（v1.11 起） |
+| `APPTAINER_PATHS` | `c("/opt/apptainer/bin")` | 扫描 apptainer/singularity 的目录，同时作为作业脚本回退目录 |
+| `DEFAULT_APPTAINER` | `/opt/apptainer/bin/apptainer` | apptainer 下拉的默认选中项 |
+| `APPTAINER_STRICT_CHECK` | `FALSE` | TRUE = GUI 节点跑不动所选 apptainer 时阻断提交 |
+| `APPTAINER_MODULE_FALLBACK` | `apptainer/1.4.5` | 脚本里 PATH 也找不到时的 module 回退 |
+| `BIND_PATHS` | `c("/share")` | 绑定进容器的宿主路径（不配则容器内看不到 /share） |
+| `CON_FASTA` | `.../cRAP_contaminants.fasta` | 内置 cRAP 污染物库 |
+| `SHARED_GROUP` | `""` | 仅 legacy 共享部署使用；自托管保持为空 |
+| `RETENTION_DAYS` | `90` | 输出目录脚本/旧归档的保留天数（0=不清理） |
+
+配置发现顺序：`DIANN_GUI_CONFIG` 环境变量 → `~/.diann_gui/config.R` →
+`<工作目录>/diann_gui_config.R` →（仅历史 shiny-server 部署，目录内有 `app.R` 时）
+`<工作目录>/config.R`。**不再无条件下读取工作目录的 `config.R`**，避免项目目录里的
+同名文件劫持配置（v1.11 起）。
 
 ### 1.3 账号与权限模型
 
-- GUI 以 `shiny` 用户运行，Slurm 作业同样以 `shiny` 身份提交。
-- 数据共享区 `/share/home/demo` 依赖 `diann` 组（成员含 shiny、lab）+ setgid + 默认 ACL 实现组内读写；GUI 每次提交前会自动对输出目录链执行 `fix_shared_dirs()`（逐层 `chmod 2770` + `chgrp diann`），保证 **lab 用户可以读写 GUI 产出的结果**。
-- 「lab 无权限」问题的排查顺序见第 10.6 节。
+- **默认（推荐）：每用户自托管**。应用运行在你的账号下，`sbatch` 以你本人提交，
+  产物归你所有；配置、通知状态、注册表、watcher 都在你自己的 `$HOME`。
+  同事之间不需要共享组或 ACL。
+- **legacy：中央 shiny-server 部署**（不推荐）。所有作业以 `run_as` 用户运行，
+  需要 `SHARED_GROUP` + setgid + ACL 才能让其他账号读取产出；且所有用户共享
+  同一份通知记录。仅在无法每用户安装时使用，见 README 附录。
 
 ---
 
@@ -69,12 +91,13 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 一次最小可用的搜库分析（默认参数、经验谱库模式）：
 
-1. **选版本**：「1. DIA-NN 版本」下拉默认 v2.7.0，一般不用改。
-2. **选文件**：「2. 文件与数据库」中选 RAW 文件（可多选）或 RAW 目录；选光谱库（`.speclib` 等）；如无光谱库则改为选 FASTA 并勾选 `--fasta-search`。
-3. **设输出**：「3. 输出设置」选输出目录；主报告文件名默认 `report`（自动加 `.tsv`）。
-4. **参数**：「4. 分析参数」默认即可（MBR、RT-profiling、peptidoforms、matrices 默认开启）。
-5. **资源**：「5. Slurm 资源」默认 16 CPU / 64 GB；大队列按第 5.4 节估算调整。
-6. **提交**：「6. 命令预览与提交」中确认校验提示无红色 ✗ 项、预览脚本符合预期，点「提交 Slurm 任务」。可选填邮箱接收完成通知。
+1. **选运行环境**：「1. apptainer 运行环境」默认已自动识别；未识别到时手动填路径并点「识别并验证」。
+2. **选版本**：「2. DIA-NN 版本」下拉默认最高版本，一般不用改。
+3. **选文件**：「3. 文件与数据库」中选 RAW 文件（可多选）或 RAW 目录；选光谱库（`.speclib` 等）；如无光谱库则改为选 FASTA 并勾选 `--fasta-search`。
+4. **设输出**：「4. 输出设置」选输出目录；主报告文件名默认 `report`（自动加 `.tsv`）。
+5. **参数**：「5. 分析参数」默认即可（MBR、RT-profiling、peptidoforms、matrices 默认开启）。
+6. **资源**：「6. Slurm 资源」默认 16 CPU / 64 GB；大队列按第 5.4 节估算调整。
+7. **提交**：「7. 命令预览与提交」中确认校验提示无红色 ✗ 项、预览脚本符合预期，点「提交 Slurm 任务」。可选填邮箱接收完成通知。
 
 提交后：作业脚本保存到 `<输出目录>/diann_gui_scripts/`，日志为 `<输出目录>/slurm-<JobID>.out/.err`；「任务队列」页监控进度、查看日志；填了邮箱则作业结束后自动收到邮件。
 
@@ -84,7 +107,31 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 左侧边栏四个页面：**提交分析**（主页面）、**任务队列**（监控）、**参数速查**（DIA-NN 全部 196 个命令行参数）、**更新说明**（版本实测结论 + 官方 Release Notes + GUI 更新日志）。
 
-### 3.1 「1. DIA-NN 版本 (sif 镜像)」
+### 3.1 「1. apptainer 运行环境」
+
+| 控件 | 默认 | 说明 |
+|---|---|---|
+| 候选下拉 `apptainer_version` | 自动识别 | 扫描 PATH、`APPTAINER_PATHS`、`/usr/bin`、`/usr/local/bin`、`/opt/apptainer/bin`、conda 环境；每个候选解析 `--version`，标签形如 `apptainer 1.4.5 · /opt/.../apptainer`；读不了 SIF 的旧版本（singularity 2.x）追加 `⚠ 不支持 SIF`；多版本按版本降序 |
+| 重新扫描 `refresh_apptainer` | — | 强制重新探测（绕过 24 h 缓存） |
+| 手动指定 `use_custom_apptainer`/`custom_apptainer` | 否 | 识别不到时自动展开；可填文件或目录（目录会尝试 `apptainer`/`singularity`） |
+| 识别并验证 `verify_apptainer` | — | 真实执行 `--version`，显示 ✓ 版本或 ✗ 原因 |
+| 当前生效 `apptainer_display` | — | 回显最终使用路径与版本 |
+
+- 选定路径写入作业脚本 `APPTAINER_BIN=` 作为首选；计算节点不可见时按
+  `APPTAINER_PATHS` → `PATH` → `module load` → `singularity` 回退，日志里会打印
+  `DIANN_GUI_APPTAINER <实际使用的二进制>`。
+- **版本要求**：SIF 镜像需要 **apptainer ≥ 1.0 或 singularity ≥ 3.0**（SIF 自
+  Singularity 3.0 起）。`singularity 2.x`（含 conda-forge 的 2.4.6）能正常执行
+  `--version`，但只认 squashfs/ext3 的 `.simg`，对 `.sif` 会报
+  `Unknown image format/type` / `ABORT : Retval = 255`。GUI 的候选下拉、自检面板、
+  当前生效回显、「识别并验证」、快速/深度验证与提交前校验都会标注
+  **⚠ 不支持 SIF** 并给出该版本要求；提交时直接阻断（不受 `APPTAINER_STRICT_CHECK`
+  影响，因为 2.x 读 SIF 是必然失败而非节点差异）。
+- GUI 节点没有 apptainer（例如本集群登录节点）是正常情况：提交只警告不阻断
+  （`APPTAINER_STRICT_CHECK=TRUE` 才阻断）。
+- 自检面板同时显示运行身份、配置文件、每个候选的来源/版本、module 回退状态与状态目录。
+
+### 3.2 「2. DIA-NN 版本 (sif 镜像)」
 
 | 控件 | 默认 | 说明 / 对应命令行 |
 |---|---|---|
@@ -92,7 +139,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 使用自定义镜像路径 `use_custom_sif`/`custom_sif` | 否 | 勾选后手填 sif 完整路径（仍在 /share 下可用） |
 | 当前生效镜像 `sif_display` | — | 回显最终使用的 sif 路径 |
 
-### 3.2 「2. 文件与数据库」
+### 3.3 「3. 文件与数据库」
 
 | 控件 | 默认 | 说明 / 对应命令行 |
 |---|---|---|
@@ -105,7 +152,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 排除标签 `cont_tag` | `cRAP-` | 配合上一项；从归一化与定量矩阵中排除 cRAP 蛋白 |
 | 选择校准库 `ref_file` | — | 可选，专用校准小谱库 → `--ref` |
 
-### 3.3 「3. 输出设置」
+### 3.4 「4. 输出设置」
 
 | 控件 | 默认 | 说明 / 对应命令行 |
 |---|---|---|
@@ -114,7 +161,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 选择临时目录 `temp_dir` | — | 可选 → `--temp` |
 | 仅执行 RAW→DIA 转换 `convert_only` | 否 | 勾选后忽略全部分析参数，命令仅含文件 + `--convert`（见 5.1） |
 
-### 3.4 「4. 分析参数」（六个子标签）
+### 3.5 「5. 分析参数」（六个子标签）
 
 **预设按钮**：「预设: FASTA 生成预测库」一键勾选 `--fasta-search`、`--predictor`、`--gen-spec-lib`；「预设: RAW 转 DIA (仅转换)」一键勾选「仅执行转换」。预设只切换常用开关组合，其余参数仍可手动调整。
 
@@ -184,11 +231,11 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 
 自由文本 `extra_args`，按空格压缩为单行后**原样追加到命令尾部**，用于覆盖 GUI 未提供的参数（如 `--cfg`、`--min-fr 3`、`--loc-factor 40`、`--fwhm` 等）。完整参数见「参数速查」页或本手册附录。
 
-### 3.5 「命令导入」盒
+### 3.6 「命令导入」盒
 
 粘贴 DIA-NN 命令（Windows GUI 生成的、本页预览的 Slurm 脚本均可），点「解析并填充参数」。详见第 7 节。
 
-### 3.6 「5. Slurm 资源」
+### 3.7 「6. Slurm 资源」
 
 | 控件 | 默认 | 对应 sbatch 指令 |
 |---|---|---|
@@ -198,7 +245,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 内存 (GB) `mem_gb` | 64 | `#SBATCH --mem` |
 | 时限(小时) `time_h` | 空=不限 | `#SBATCH -t <N>:00:00` |
 
-### 3.7 「6. 命令预览与提交」
+### 3.8 「7. 命令预览与提交」
 
 | 控件 | 说明 |
 |---|---|
@@ -208,7 +255,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 命令预览 `preview` | 完整 Slurm 脚本实时预览 |
 | 提交 Slurm 任务 `submit_job` | 校验通过后 sbatch 提交；成功弹窗显示 JobID |
 
-### 3.8 「任务队列」页
+### 3.9 「任务队列」页
 
 | 区块 | 说明 |
 |---|---|
@@ -219,7 +266,7 @@ DIA-NN GUI（页面标题「DIA-NN 控制台」）是一个部署在集群上的
 | 运行日志查看 | 输入作业 ID 显示 `slurm-<ID>.out` 尾部 120 行 + `.err` 尾部 30 行（程序报错通常在 .err）；可手动指定日志目录，否则按五级链自动定位（见 10.4） |
 | 本会话提交记录 | 本次会话提交的作业（JobID/任务名/版本/输出目录/提交时间/邮箱），及其下方的「邮件通知队列」状态面板（最近 100 条） |
 
-### 3.9 「参数速查」「更新说明」页
+### 3.10 「参数速查」「更新说明」页
 
 - **参数速查**：运行时解析 `DIANN参数说明.md`，展示 DIA-NN 全部 196 个命令行参数的官方英文说明，附官方文档链接。
 - **更新说明**：① 各 sif 版本实测结论（三种模式全部实测通过）；② DIA-NN 2.0 系列官方 Release Notes 原文（2.3.0–2.7.0）；③ GUI 更新日志。
@@ -282,37 +329,54 @@ diann-linux --f 'a.raw' --f 'b.raw' … --convert --threads 16 --verbose 1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=<线程数>
 #SBATCH --mem=<内存>G
-#SBATCH -t <时限>:00:00          # 留空时限则无此行
+#SBATCH -t <分钟>                 # 小时 × 60 向上取整; 留空则无此行
 #SBATCH -o <输出目录>/slurm-%j.out
 #SBATCH -e <输出目录>/slurm-%j.err
+<SLURM_EXTRA_ARGS 逐行>
 
-# apptainer 调用: 依次尝试 PATH 列表, 最后回退 module load
-if [ -x "/share/home/demo/.conda/envs/singularity/bin/apptainer" ]; then export PATH="...:$PATH"; fi
-if [ -x "/opt/conda/bin/apptainer" ]; then export PATH="...:$PATH"; fi
-command -v apptainer >/dev/null 2>&1 || { source /usr/share/Modules/init/bash 2>/dev/null; module load apptainer/1.4.5 2>/dev/null; }
+# apptainer 运行环境: GUI 选定路径优先, 不可见时回退
+APPTAINER_BIN='<所选路径>'
+if [ ! -x "$APPTAINER_BIN" ]; then
+  for d in '<APPTAINER_PATHS 目录…>'; do
+    for n in apptainer singularity; do
+      if [ -x "$d/$n" ]; then APPTAINER_BIN="$d/$n"; break 2; fi
+    done
+  done
+fi
+if [ ! -x "$APPTAINER_BIN" ]; then
+  APPTAINER_BIN=$(command -v apptainer 2>/dev/null || true)
+fi
+if [ ! -x "$APPTAINER_BIN" ]; then
+  source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null
+  module load apptainer/1.4.5 2>/dev/null
+fi
+export PATH="$(dirname "${APPTAINER_BIN:-apptainer}"):$PATH"
+echo "DIANN_GUI_APPTAINER ${APPTAINER_BIN:-NOT-FOUND}"
 
 echo "DIA-NN analysis start: $(date)"
 echo "DIANN_GUI_START_EPOCH $(date +%s)"
 
-apptainer exec --bind /share <sif路径> diann-linux <全部参数(反斜杠续行)>
+"$APPTAINER_BIN" exec --bind /share <sif路径> diann-linux <全部参数(反斜杠续行)>
 rc=$?
+printf '%s' "$rc" > '<脚本路径>.rc'
 echo "DIA-NN analysis done: $(date), exit code: $rc"
 echo "DIANN_GUI_END_EPOCH $(date +%s)"
 
-# 主结果文件已生成则视为成功 (规避容器卸载阶段偶发 SIGILL 造成的假失败), 否则如实返回退出码
-final_rc=$rc
-if [ -s <输出目录>/<主报告>.tsv ]; then
-  final_rc=0
-fi
-exit $final_rc
+# 如实退出: 成败由 GUI 四层状态合成判定 (Slurm 终态 + 程序退出码 + 产物验证)
+exit $rc
 ```
 
 设计要点：
 
-- `--bind /share` 把共享目录挂进容器（rootless apptainer 默认只绑 $HOME/cwd/tmp，不绑则容器内看不到 /share，曾致全部 FASTA/RAW "Cannot load" 报错，v1.4 修复）。
-- epoch 时间戳用于邮件通知计算精确耗时（记账库 Elapsed 兜底）。
-- 退出码透传 + 主报告非空兜底判定：node1 上 apptainer 卸载阶段会偶发 `Illegal instruction (core dumped)` 造成假失败。
-- 脚本保存到 `<输出目录>/diann_gui_scripts/diann_<时间戳>_<任务名>.sh`；填写了项目简介时另存 `<同名>_desc.txt`。
+- **不再有 `final_rc`「报告非空即成功」覆盖**：v1.8 起改用四层状态合成
+  （Slurm 终态 → `.rc` 程序退出码 → 产物验证 → 展示标签），容器卸载阶段偶发
+  SIGILL 由「待核实」显式吸收，而不是伪造成功。
+- 退出码写入 `<脚本>.rc`，watcher 优先读它，日志解析仅作兜底。
+- `--bind` 来自 `BIND_PATHS`；GUI 提交前会警告不在 `$HOME` / 当前目录 /
+  `BIND_PATHS` 内的输入/输出路径（v1.4 事故类别）。
+- 时限按分钟提交：1.9 h → `-t 114`，0.5 h → `-t 30`（旧版会截成 1 h 或变成不限时）。
+- 脚本保存到 `<输出目录>/diann_gui_scripts/diann_<时间戳>_<任务名>.sh`；任务名中的
+  `/`、`\`、换行会被替换；填写了项目简介时另存 `<同名>_desc.txt`。
 
 ### 4.4 提交流程（`submit_job`）
 
@@ -329,7 +393,7 @@ exit $final_rc
 
 **用途**：把 Thermo `.raw`（也支持 `.wiff/.mzML`）转成 DIA-NN 原生 `.dia` 格式。`.dia` 读取更快，且转换是一次性开销，适合大队列先转换再反复分析。
 
-**操作**：勾选「3. 输出设置 → 仅执行 RAW→DIA 转换 (--convert)」，或点「4. 分析参数 → 预设: RAW 转 DIA (仅转换)」；选 RAW 文件或目录；提交。
+**操作**：勾选「4. 输出设置 → 仅执行 RAW→DIA 转换 (--convert)」，或点「5. 分析参数 → 预设: RAW 转 DIA (仅转换)」；选 RAW 文件或目录；提交。
 
 **行为**：
 - `.dia` 保存在 **RAW 文件所在目录**（不用 `--out-dir`，规避其畸形文件名 bug）。
@@ -353,7 +417,7 @@ exit $final_rc
 
 ### 5.3 经验谱库工作流（推荐的标准三步法）
 
-DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 校验按此分流，不再误报警告）：
+DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 起校验按此分流，不再误报警告）：
 
 ```
 ① FASTA ──(预设: FASTA 生成预测库, 不选 RAW)──▶ 预测库 library.predicted.speclib
@@ -392,8 +456,8 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 校验按此分�
 提交时(填了邮箱)
   ├─ worker 把 {jobid, 邮箱, 任务, 输出目录, 脚本路径, 简介…} 写入状态文件
   │    $HOME/diann_gui_notify_state.rds（mkdir 互斥锁 + 临时文件原子写，保留 100 条）
-  └─ worker 确保 nohup Rscript notify_watch.R 守护进程存活（pidfile 去重）
-       notify_watch.R（head-node 侧, 每 60s）
+  └─ worker 确保 nohup Rscript -e 'diann.gui::watch_daemon()' 守护进程存活（pidfile 去重）
+       diann.gui::watch_daemon()（登录节点侧, 每 60s, 一次 squeue 快照）
          └─ squeue 查询 → 作业离队 → 解析 slurm-<id>.out 退出码与耗时
               └─ python3 mail_notify.py --strict --to <邮箱> --rc N …
                    └─ SMTP 发信（失败重试 3 次: 5/10/15 分钟后）
@@ -409,7 +473,7 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 校验按此分�
 
 ### 6.3 配置（管理员）
 
-`mail_config.txt`（与 app.R 同目录，参考 `mail_config.example.txt`）：
+`~/.diann_gui/mail_config.txt`（每用户；历史 shiny-server 部署才读与 `app.R` 同目录的 `mail_config.txt`；模板 `inst/config/mail_config.example.txt`）：
 
 ```
 smtp_host = smtp.126.com
@@ -420,8 +484,9 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 ```
 
 - 465 端口走 SMTP_SSL；587 走 STARTTLS。
-- 配置文件对全体用户可读，**必须使用 SMTP 授权码**，切勿填邮箱主密码。
-- 自测：`python3 mail_notify.py --check`（只测 SMTP 连通）；`--self-test`（发测试邮件）。
+- 建议 `chmod 600`（文件里是 SMTP 凭据）；**必须使用 SMTP 授权码**，切勿填邮箱主密码。
+- STARTTLS 失败会直接报错，不会回退明文发送凭据（v1.11 起）。
+- 自测：`python3 mail_notify.py --check`（只测 SMTP 连通）；`--self-test`（发测试邮件）；`Rscript -e 'diann.gui::watch_daemon(once = TRUE)'`（手动补发一轮）。
 - 缺少 `mail_config.txt` 时 GUI 会以金色 ⚠ 提示「已填写邮箱, 但未找到邮件配置」，作业照常提交只是不发邮件。
 
 ---
@@ -436,6 +501,7 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 - 数值旗标（25 个：`--qvalue`、`--threads`、`--mass-acc`、`--cut` 以外的全部数值参数等）→ 数值输入框。
 - 文本旗标 `--cut` / `--out-lib` / `--cont-quant-exclude` → 文本框。
 - `--var-mod`/`--fixed-mod` → 修饰行；`--f`/`--fasta`/`--lib`/`--ref`/`--temp`/`--out`/`--out-dir` → 文件路径（勾选相应「覆盖 ×××（用导入路径）」后生效）。
+- `--dir` / `--dir-all` → RAW 目录覆盖层，并自动把「RAW 输入方式」切到目录模式（v1.11 起；此前会作为未知旗标导致无法提交）。
 - 内置 cRAP FASTA 路径自动转为「启用污染物扣除」开关；未知旗标自动收进「额外参数」。
 
 **自动保护**：
@@ -445,19 +511,27 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 **已知陷阱（务必了解）**：
 1. **导入只置 TRUE、从不清除布尔旗标**：粘贴的命令里出现的每个布尔旗标都会被勾上；若之后在同页面上改做别的分析（例如拿旧建库命令导入后改为普通搜库），`--gen-spec-lib` 等开关会**静默保持勾选**。导入后请逐标签检查开关状态。
 2. `--fasta-search` 与 `--gen-spec-lib` 是两个独立开关，前者并不 gate 后者。
-3. 导入不改动「5. Slurm 资源」（任务名/分区/内存等仍需自行确认）。
+3. 导入不改动「6. Slurm 资源」（任务名/分区/内存等仍需自行确认）。
 
 ---
 
 ## 8. 提交校验规则对照表
 
-校验实时显示在「6. 命令预览与提交」中，三级分流：
+校验实时显示在「7. 命令预览与提交」中，三级分流：
 
 ### ✗ 阻断（红色，必须解决才能提交）
 
 | 触发条件 | 提示 |
 |---|---|
 | 未选 sif / sif 不存在 | ✗ 未选择 sif 镜像 / ✗ sif 镜像不存在: … |
+| sif 不可读 / 魔数校验失败 | ✗ GUI 运行身份无权读取该镜像 / ✗ 该文件不是有效的 SIF 镜像 … |
+| 未选择 apptainer（未自动识别到且未手填） | ✗ 未选择 apptainer 运行环境 (未自动识别到, 请手动指定路径) |
+| apptainer 路径非绝对 | ✗ apptainer 路径必须是服务器绝对路径 (以 / 开头) |
+| 任务名为空 / 含 `/`、`\`、换行 / 超 64 字符 | ✗ 任务名不能为空 / 不能包含 … / 长度不能超过 64 |
+| 线程数不在 1–1024 | ✗ 线程数无效 … |
+| 输出目录对当前身份不可写 | ✗ 输出目录对 GUI 运行身份不可写 … |
+| 主报告文件名含 `/` | ✗ 主报告文件名不能包含 / … |
+| 时限 < 1 分钟 | ✗ 时限至少 1 分钟 |
 | 无 RAW（且未勾 `--gen-spec-lib` 独立建库） | ✗ 未选择 RAW 文件/目录 |
 | 未选输出目录 | ✗ 未选择输出目录 |
 | 邮箱格式错误 | ✗ 邮箱通知格式不正确 (多个邮箱用英文逗号分隔) |
@@ -476,7 +550,11 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 |---|---|
 | 勾选了仅转换模式 | ℹ 转换模式: 命令仅包含文件与 --convert, .dia 文件将保存在 RAW 文件所在目录 |
 | FASTA 预测建库 + RAW 同场执行（无光谱库的组合模式） | ℹ FASTA 预测建库与搜库将同场执行 (组合模式); DIA-NN 建议先不选 RAW 独立生成预测库, 再用该库搜库 (库可复用, 结果更稳) |
-| 填了邮箱但服务器缺 `mail_config.txt` | ℹ 已填写邮箱, 但未找到邮件配置 …, 将不会发送通知邮件 |
+| 填了邮箱但缺 `~/.diann_gui/mail_config.txt` | ⚠ 已填写邮箱, 但未找到邮件配置 …, 将不会发送通知邮件 |
+| GUI 节点看不到/跑不动所选 apptainer | ⚠ GUI 节点看不到该 apptainer … / ⚠ apptainer 不可执行 …（`APPTAINER_STRICT_CHECK=TRUE` 时升级为 ✗） |
+| 输入/输出路径不在 `$HOME`/当前目录/`BIND_PATHS` 内 | ⚠ 以下路径不在 … 容器里可能看不到（历史 v1.4 事故类别） |
+| 可变修饰行数 > `--var-mods` | ⚠ 可变修饰填了 N 行, 但每肽段最大可变修饰数为 M … |
+| 镜像文件 < 1 MB | ⚠ 镜像仅 … MB, 可疑 |
 
 ### ℹ 说明（蓝色，信息提示）
 
@@ -485,6 +563,10 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | 光谱库 + `--gen-spec-lib` + RAW（经验谱库工作流） | ℹ 经验谱库工作流: 以光谱库搜库, 并用本次鉴定精修输出谱库 (--out-lib); 该库可用于全部样本的后续搜索 |
 | 启用污染物扣除且生成谱库 | ℹ 污染物 cRAP 将编入输出谱库, 便于后续搜库时鉴定并经 --cont-quant-exclude 从定量矩阵扣除 |
 | 同时选光谱库与 FASTA | ℹ 已同时选择光谱库与 FASTA: FASTA 预测前体将并入搜索空间 (可扩充库覆盖; 若 FASTA 与库内容相同则为重复预测, 清除 FASTA 可提速) |
+| 设置了时限 | ℹ 时限按 N 分钟提交 (Slurm -t N) |
+| 填了 `--out-lib` 但未勾选「生成谱图库」 | ℹ 未勾选「生成谱图库」, --out-lib 不会写入命令 (填写值已忽略) |
+| 选中 `singularity` 可执行文件 | ℹ 当前使用 singularity 命令 (与 apptainer 等价) |
+| 可选镜像版本与文件名不一致（深度验证） | ℹ 容器内 DIA-NN 实际版本 … 注意: 文件名版本为 … |
 
 > 全部为空时显示「✔ 校验通过, 可提交」。注意 ⚠/ℹ 项也可能出现在「✔ 校验通过」旁边，提交前请读完。
 
@@ -513,7 +595,7 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 ### 10.1 作业显示 COMPLETED 但没有结果 / 疑似失败
 
 - **先看 `.err` 再看 `.out`**：Slurm 脚本没有 `set -e`，DIA-NN 秒退（如参数错误）时作业状态仍可能 COMPLETED；真实报错几乎总在 `slurm-<JobID>.err`。GUI「运行日志查看」已附带 .err 尾部 30 行。
-- 反之，DIA-NN 实际成功但 apptainer 容器卸载阶段偶发 `Illegal instruction (core dumped)` 会造成**假失败**——脚本已用「主报告文件非空即视为成功」兜底；看到邮件 ✗ 但 report.tsv 已生成且非空，通常结果可用。
+- 反之，DIA-NN 实际成功但 apptainer 容器卸载阶段偶发 `Illegal instruction (core dumped)` 会造成**假失败**——v1.8 起由四层状态合成判为「待核实」（主报告为本次新写 + 退出码 ∈ {132,134,139}），不再伪造成功；看到「待核实」但 report.tsv 已生成且非空，通常结果可用。
 
 ### 10.2 library size mismatch / 混用版本后报错
 
@@ -521,7 +603,7 @@ DIA-NN 会在 RAW 目录生成 `*.raw.quant` 缓存并自动复用。同一目�
 
 ### 10.3 Cannot load FASTA / 容器内看不到文件
 
-历史上（GUI v1.4 前）rootless apptainer 不绑定 /share，容器内看不到输入文件。现版本脚本已固定 `--bind /share`。若再次出现类似报错：确认提交脚本中 `apptainer exec --bind /share` 未被改动；确认文件路径在 `/share` 之下（GUI 也只允许 DataHome 下的路径）。
+历史上（GUI v1.4 前）rootless apptainer 不绑定 /share，容器内看不到输入文件。现版本脚本按 `BIND_PATHS` 生成 `--bind`（例如 `BIND_PATHS <- c("/share")`）。若再次出现类似报错：确认提交脚本中的 `--bind` 与数据实际位置一致；GUI 会在提交前警告不在 `$HOME`/当前目录/`BIND_PATHS` 内的路径。
 
 ### 10.4 日志文件找不到（运行日志查看显示"未能自动定位"）
 
@@ -539,10 +621,12 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 
 1. 「任务队列 → 本会话提交记录」下方通知队列面板：显示「等待完成…」= watcher 还没检测到离队（60s 轮询一次）；显示「已处理」= 已发送；显示失败原因 = 发送失败（重试至多 3 次，间隔 5/10/15 分钟）。
 2. 检查邮箱地址拼写；多个邮箱用英文逗号。
-3. 管理员自测：`python3 mail_notify.py --check`（连通性）、`--self-test`（发测试邮件）、`Rscript notify_watch.R --once`（手动补发一轮）。
+3. 自测：`python3 mail_notify.py --check`（连通性）、`--self-test`（发测试邮件）、`Rscript -e 'diann.gui::watch_daemon(once = TRUE)'`（手动补发一轮）。
 4. 提交时未填邮箱自然没有邮件（通知按作业记录，不支持事后补填——可让管理员用 `--once` 对指定记录补发）。
 
-### 10.6 「lab 用户无权限」读写 GUI 产出
+### 10.6 「lab 用户无权限」读写 GUI 产出（仅 legacy 共享部署）
+
+自托管模式下产物属于你本人，不存在本节问题。以下排查仅适用于中央 shiny-server 共享身份部署：
 
 排查顺序（按实际案例总结）：
 
@@ -556,7 +640,30 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 - 「额外参数」中的裸旗标（如 `--f` 后没有取值）会让 DIA-NN 直接退出——多为命令导入残留，校验会 ✗ 提示。
 - 版本行为差异见第 11 节；改用其他 sif 版本对比是快速定位手段。
 
-### 10.8 其他
+### 10.8 apptainer 识别不到 / 版本不对
+
+1. 先看「1. apptainer 运行环境 → 运行环境自检」：列出每个候选的来源、版本与 module 回退状态。
+2. 登录节点没有 apptainer 是常见且可接受的：手动填写计算节点可见的路径（如
+   `/opt/apptainer/bin/apptainer`），提交只警告不阻断；作业脚本里会打印
+   `DIANN_GUI_APPTAINER` 实际使用的二进制。
+3. 版本不对：`DEFAULT_APPTAINER` 指定固定路径，或把 `APPTAINER_PATHS` 指到目标目录后点「重新扫描」。
+4. 「深度验证」报 `Unknown image format/type`：运行时的主版本不够——SIF 需要
+   `apptainer ≥ 1.0` / `singularity ≥ 3.0`；2.x 只能读 `.simg`。改选 ≥3.0 的
+   apptainer/singularity 路径（或升级该 conda 环境），再点「重新扫描」。
+5. `apptainer --version` 能跑但容器起不来：用「深度验证」看 `inspect`/容器内启动的具体报错；
+   也可在登录节点直接 `apptainer exec <sif> diann-linux --version` 复现。
+
+### 10.9 每用户自托管：装包 / 运行 / 端口
+
+1. 装包：`install.packages("diann.gui", repos = c(SITE = "<站点仓库>", getOption("repos")))`，
+   无外网时 `install.packages("/path/diann.gui_1.11.0.tar.gz", repos = NULL, type = "source")`。
+2. 自检：`diann.gui::doctor()` 一次列出缺依赖/缺 Slurm 命令/找不到 apptainer/SIF_DIRS 未配/状态目录不可写。
+3. 启动：`diann.gui::run_app()`（自动选空闲端口并打印 URL/隧道命令）；固定端口 `run_app(port = 3838)`。
+4. 端口被占用：`run_app()` 会自动换端口；也可显式指定。
+5. 找不到包（watcher 子进程）：watcher 启动命令显式传入当前 `.libPaths()` 与配置文件（v1.11 起）；
+   仍有问题先跑 `doctor()`。
+
+### 10.10 其他
 
 - **分区选择**：`compute` 为主计算分区；`head-node` 仅用于小测试（与管理服务混部，勿跑大作业）。
 - **取消作业**：「任务队列 → 取消作业」输入 JobID 确认即 scancel；排队中与运行中的作业都可取消。
@@ -576,7 +683,7 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 | 2.3.2 | Main（2026-01-21） | 早期生产主力；与 2.3.1 结果完全一致 |
 | 2.3.1 | Preview（2025-12-05） | 稳定旧版；与 2.3.2 结果完全一致 |
 
-版本选择建议：默认 2.7.0；追求最高鉴定数用 2.6.1；复现历史结果用当初的版本。切换只需在「1. DIA-NN 版本」下拉中选择（或自定义 sif 路径）。
+版本选择建议：默认 2.7.0；追求最高鉴定数用 2.6.1；复现历史结果用当初的版本。切换只需在「2. DIA-NN 版本」下拉中选择（或自定义 sif 路径）。
 
 > 注意 2.3.0/2.3.1 不识别 Slice/diagonal PASEF（按 dia-PASEF 处理导致鉴定数偏低，2.3.2 修复）；timsTOF Slice 数据请用 ≥2.3.2。
 
@@ -679,4 +786,4 @@ GUI 按五级链自动定位 `slurm-<ID>.out`：
 
 ---
 
-*手册基于 GUI v1.6 源码（app.R）、DIA-NN 官方文档（DIANN参数说明.md）与集群实测记录整理；2026-10-06。*
+*手册基于 GUI v1.11 源码（R 包 diann.gui）、DIA-NN 官方文档与集群实测记录整理；2026-10-20。*

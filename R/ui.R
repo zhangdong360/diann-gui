@@ -3,6 +3,21 @@
 # inputId/DOM/JS 条件为三重契约的一部分 (server + 旗标映射 + e2e), 不得单独改动。
 # ============================================================
 app_ui <- function() {
+# SIF 运行时版本要求 (apptainer ≥ 1.0 / singularity ≥ 3.0) 的统一文案:
+# 先算成 HTML 字符串, 再交给 helpText, 避免多层嵌套把 UI 结构写乱。
+sif_min_txt <- sif_min_version_text()
+sif_req_panel <- HTML(sprintf(paste0(
+  "<b>版本要求:</b> %s。SIF 是 Singularity 3.0 起的镜像格式, ",
+  "2.x (如 conda 里的 2.4.6) 只能读 squashfs/ext3 的 .simg, ",
+  "对 .sif 会报 <code>Unknown image format/type</code>; ",
+  "候选里标注 <b style='color:#dd4b39'>⚠ 不支持 SIF</b> 的请勿选用。"),
+  htmltools::htmlEscape(sif_min_txt)))
+sif_req_current <- HTML(sprintf(paste0(
+  "SIF 镜像需要 <b>%s</b>; 低于此版本的 singularity 能执行 <code>--version</code> ",
+  "但读不了 .sif, 提交会被拦下。"), htmltools::htmlEscape(sif_min_txt)))
+sif_req_chain <- HTML(sprintf(paste0(
+  "验证链: 文件存在/可读 → SIF 魔数 → 运行时版本 (<b>%s</b>) ",
+  "→ apptainer inspect → 容器内启动 diann-linux。"), htmltools::htmlEscape(sif_min_txt)))
 ui <- dashboardPage(
   dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION))),
   dashboardSidebar(
@@ -19,8 +34,37 @@ ui <- dashboardPage(
       # ==================== 提交分析 ====================
       tabItem(tabName = "analysis",
         fluidRow(
-          box(title = "1. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
+          box(title = "1. apptainer 运行环境", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(4,
+                selectInput("apptainer_version",
+                            sprintf("apptainer (自动识别, 共 %d 个):", length(cfg_get("APPTAINER_CHOICES"))),
+                            choices = cfg_get("APPTAINER_CHOICES"), selected = cfg_get("APPTAINER_SELECTED")),
+                actionButton("refresh_apptainer", "重新扫描", icon = icon("sync")),
+                helpText("扫描 PATH、APPTAINER_PATHS 与常见安装位置; 多版本按版本号列出。"),
+                helpText(sif_req_panel),
+                checkboxInput("use_custom_apptainer", "手动指定 apptainer 路径", FALSE),
+                conditionalPanel("input.use_custom_apptainer == 1",
+                  textInput("custom_apptainer", "apptainer 可执行文件完整路径:",
+                            placeholder = "/opt/apptainer/bin/apptainer"),
+                  actionButton("verify_apptainer", "识别并验证", icon = icon("check")),
+                  uiOutput("apptainer_verify_result")
+                )
+              ),
+              column(4,
+                tags$label("当前生效 apptainer:"), br(),
+                verbatimTextOutput("apptainer_display"),
+                helpText("作业脚本优先使用该路径; 计算节点不可见时按 APPTAINER_PATHS → PATH → module 回退。"),
+                helpText(sif_req_current)
+              ),
+              column(4,
+                tags$label("运行环境自检 (GUI 节点):"), br(),
+                uiOutput("apt_check_display")
+              )
+          )
+        ),
+        fluidRow(
+          box(title = "2. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
+              column(6,
                 selectInput("sif_version",
                             sprintf("版本 (自动扫描 diann*.sif, 共 %d 个):", length(cfg_get("sif_choices"))),
                             choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected")),
@@ -32,22 +76,19 @@ ui <- dashboardPage(
                   helpText("镜像须位于计算节点可见的共享存储; 浏览范围限于数据卷, 之外的路径请手动输入。")
                 )
               ),
-              column(4,
+              column(6,
                 tags$label("当前生效镜像:"), br(),
                 verbatimTextOutput("sif_display"),
-                actionButton("verify_sif", "验证镜像可用性", icon = icon("check-circle"), width = "100%",
+                actionButton("verify_sif", "验证镜像可用性 (快速)", icon = icon("check-circle"), width = "100%",
                              style = "color:#fff; background-color:#00a65a; border-color:#008d4d"),
+                actionButton("verify_sif_deep", "深度验证 (容器内启动, 较慢)", icon = icon("microscope"), width = "100%"),
+                helpText(sif_req_chain),
                 uiOutput("sif_verify_result")
-              ),
-              column(4,
-                tags$label("运行环境自检 (GUI 节点):"), br(),
-                uiOutput("apt_check_display"),
-                helpText("计算节点由作业脚本自行回退 (PATH 候选 → module load), GUI 节点探测失败不阻断提交。")
               )
           )
         ),
         fluidRow(
-          box(title = "2. 文件与数据库", status = "primary", solidHeader = TRUE, width = 12,
+          box(title = "3. 文件与数据库", status = "primary", solidHeader = TRUE, width = 12,
               column(3,
                 radioButtons("raw_mode", "RAW 输入方式:", inline = TRUE,
                              choices = c("选择文件" = "files", "扫描目录" = "dir")),
@@ -83,7 +124,7 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = "3. 输出设置", status = "success", solidHeader = TRUE, width = 4,
+          box(title = "4. 输出设置", status = "success", solidHeader = TRUE, width = 4,
               shinyDirButton("out_dir", "选择输出目录", "选择结果存放目录"),
               verbatimTextOutput("out_path_display"),
               textInput("report_name", "主报告文件名 (自动加 .tsv):", "report"),
@@ -92,7 +133,7 @@ ui <- dashboardPage(
               checkboxInput("convert_only", "仅执行 RAW→DIA 转换 (--convert)", FALSE),
               helpText("勾选后忽略分析参数; 转换后的 .dia 文件保存在 RAW 文件所在目录")
           ),
-          box(title = "4. 分析参数", status = "warning", solidHeader = TRUE, width = 8,
+          box(title = "5. 分析参数", status = "warning", solidHeader = TRUE, width = 8,
               fluidRow(
                 column(4, actionButton("preset_lib", "预设: FASTA 生成预测库", icon = icon("magic"), width = "100%")),
                 column(4, actionButton("preset_convert", "预设: RAW 转 DIA (仅转换)", icon = icon("file-export"), width = "100%")),
@@ -113,6 +154,7 @@ ui <- dashboardPage(
               column(4,
                 actionButton("import_btn", "解析并填充参数", icon = icon("download"), class = "btn-primary", width = "100%"),
                 checkboxInput("use_imported_raws", "覆盖 RAW 文件 (用导入路径)", FALSE),
+                checkboxInput("use_imported_raw_dir", "覆盖 RAW 目录 (用导入路径)", FALSE),
                 checkboxInput("use_imported_lib", "覆盖光谱库 library (用导入路径)", FALSE),
                 checkboxInput("use_imported_fasta", "覆盖 FASTA (用导入路径)", FALSE),
                 checkboxInput("use_imported_ref", "覆盖校准库 ref (用导入路径)", FALSE),
@@ -123,16 +165,16 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = "5. Slurm 资源", status = "info", solidHeader = TRUE, width = 12,
+          box(title = "6. Slurm 资源", status = "info", solidHeader = TRUE, width = 12,
               column(3, textInput("job_name", "任务名称:", "DIANN_Task")),
               column(3, selectInput("partition", "计算分区:", choices = cfg_get("SLURM_PARTITIONS"), selected = cfg_get("SLURM_PARTITIONS")[1])),
               column(3, numericInput("mem_gb", "内存 (GB):", 64, min = 1, max = 4096)),
               column(3, numericInput("time_h", "时限 (小时, 留空=不限):", NA, min = 1)),
-              helpText("CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, 由「4. 分析参数 → 常规 → 线程数」决定。")
+              helpText("CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, 由「5. 分析参数 → 常规 → 线程数」决定。")
           )
         ),
         fluidRow(
-          box(title = "6. 命令预览与提交", status = "danger", solidHeader = TRUE, width = 12,
+          box(title = "7. 命令预览与提交", status = "danger", solidHeader = TRUE, width = 12,
               fluidRow(
                 column(4,
                   textInput("notify_email", "邮箱通知 (可选):", placeholder = "someone@126.com, someone2@126.com"),

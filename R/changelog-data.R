@@ -7,6 +7,28 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.11", date = "2026-10-20", items = c(
+    "新增: 明确运行时版本要求——SIF 镜像需 apptainer ≥ 1.0 或 singularity ≥ 3.0 (SIF 自 Singularity 3.0 起; 2.x 只能读 squashfs/ext3 的 .simg)。候选下拉/自检面板/当前生效回显/「识别并验证」/快速与深度验证/提交前校验/doctor 统一标注「⚠ 不支持 SIF」; 选中 2.x 时直接给出结论与升级路径, 不再只显示 \"Unknown image format/type\" 裸报错 (同时剥掉 2.x stderr 的 ANSI 颜色码与 \\r 拼接)",
+    "改进: 默认 apptainer 优先选「可执行且支持 SIF」的候选——避免下拉默认值是个能跑 --version 却读不了 .sif 的 singularity 2.x",
+    "新增: 「1. apptainer 运行环境」面板——自动识别 apptainer/singularity (PATH / APPTAINER_PATHS / 常见安装位置 / conda 环境), 逐个解析版本后像 DIA-NN 版本下拉一样列入候选; 识别不到时自动展开手动路径输入并可「识别并验证」; 选定路径写入作业脚本作为首选, 计算节点不可见时按 APPTAINER_PATHS → PATH → module → singularity 回退",
+    "新增: diann.gui::init_config() 在 R 内生成 ~/.diann_gui/config.R (可自动探测 Slurm 分区 / apptainer / SIF 目录); diann.gui::doctor() 一次性自检 R 版本/依赖/Slurm 命令/分区/apptainer/SIF/配置/邮件/状态目录",
+    "改进: 交付方式回归 R 包自托管——install.packages() → library(diann.gui) → run_app() 即可, 每用户在自己的库与账号下运行; 删除 bin/diann-gui 启动器与根 app.R, 中央 shiny-server 降为 legacy 文档附录",
+    "变更: run_app() 现在直接启动服务并打印访问地址与 SSH 隧道提示 (以前 port=NULL 只返回 app 对象, 依赖控制台 auto-print); 嵌入/legacy 用法改为 run_app(app_only = TRUE)",
+    "修复: 提交注册表保留最近 300 条时误用 head(), 满 300 条后新记录被静默丢弃 (月报/日志定位看不到新作业)",
+    "修复: 归档遗留产物时把用户报告名拼进正则——报告名含 [ ( 等字符时提交直接报错, 报告名为 \".\" 时会把目录内全部 tsv 批量改名",
+    "修复: dir 模式下导入的 RAW 文件被忽略 (生成命令没有任何输入); --dir/--dir-all 命令导入后不再作为未知旗标, 目录写入覆盖层并切换输入方式",
+    "修复: 时限只按整小时截断 (1.9h → 1h), 且 <1h 被当成不限时; 现按分钟提交 (-t 114)",
+    "修复: SIF 版本按字符串排序, 2.10.0 会排在 2.9.1 之后导致默认镜像选错; 改为数值版本排序",
+    "修复: 完成邮件的结果简介硬编码 report.tsv, 自定义报告名时没有识别数; --out-file 现在生效; STARTTLS 失败不再静默降级为明文发送凭据",
+    "修复: 月度统计脚本错配——同目录多次提交时把别的作业 .rc 当成当前作业; 注册表 schema v2 记录 script_path/out_file/sif/apptainer/版本, 旧注册表仍可读",
+    "修复: 邮件 watcher 把 sacct 记账滞后导致的\"未知\"当成最终结果并置 done; 现在先等最多 3 轮再退化",
+    "修复: HOME 不可写时状态文件回退到固定 /tmp 文件名 (多用户互相覆盖/可被预置符号链接); 改为 per-user 目录 (0700)",
+    "修复: 任务名未校验 (含 / 时脚本文件名构造失败) 与报告名含 / 导致写到不存在子目录; 均增加提交前校验",
+    "改进: 镜像验证拆为「快速」(本地静态检查) 与「深度」(apptainer inspect + 容器内启动, 超时收紧), 减少单进程 Shiny 的阻塞",
+    "改进: Slurm 查询收敛——squeue/sacct 合并为一次快照 (20s 缓存), 任务面板/通知面板/watcher 共用, 不再为每条记录各起子进程",
+    "新增: SLURM_EXTRA_ARGS (--account/--qos 等额外 #SBATCH 选项)、RETENTION_DAYS 输出目录保留策略、BIND_PATHS 容器可见性提交前警告、可变修饰行数 > --var-mods 的警告",
+    "改进: 锁竞争失败时通知记录落 sidecar 目录, 下一轮 watcher 补写, 不再静默丢邮件; 配置发现不再无条件下读取工作目录 config.R (仅 legacy app.R 标记时)"
+  )),
   list(ver = "v1.10", date = "2026-10-15", items = c(
     "修复: 含字母 s 的邮箱 (如 ihcams.ac.cn) 被误判格式不正确——R 默认 POSIX 正则引擎不识别字符类内的 \\s, [^@,\\s] 被当作排除字母 s; 校验改用 perl 正则",
     "新增: 「DIA-NN 版本」页镜像浏览选择按钮——自定义镜像可在数据卷内点选, 路径自动回填 (仍可手动输入数据卷之外的路径)",

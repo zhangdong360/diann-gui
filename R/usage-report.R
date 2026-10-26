@@ -23,14 +23,16 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     if (is.null(path) || !nzchar(path) || !file.exists(path)) return(NULL)
     tryCatch(readRDS(path), error = function(e) NULL)
   }
-  home <- Sys.getenv("HOME", unset = "/tmp")
-  registry <- read_rds_opt(if (!is.null(registry) && nzchar(registry)) registry else
-    file.path(home, "diann_gui_jobs_registry.rds"))
+  # 注册表默认位置与 GUI 完全一致 (jobs_registry_file 依赖 NOTIFY_STATE; 未加载配置时先加载)
+  if (is.null(cfg_get("NOTIFY_STATE"))) try(diann_load_config(), silent = TRUE)
+  def_registry <- if (nzchar(cfg_get("NOTIFY_STATE") %||% "")) jobs_registry_file() else
+    file.path(Sys.getenv("HOME", unset = "/tmp"), "diann_gui_jobs_registry.rds")
+  registry <- read_rds_opt(if (!is.null(registry) && nzchar(registry)) registry else def_registry)
   nstate <- read_rds_opt(if (!is.null(state) && nzchar(state)) state else
-    file.path(home, "diann_gui_notify_state.rds"))
+    file.path(dirname(def_registry), "diann_gui_notify_state.rds"))
   if (is.null(registry) || !nrow(registry)) {
-    message("注册表为空或不可读 (", home, "/diann_gui_jobs_registry.rds)",
-            ": 无统计数据。可用 registry 参数指定路径。")
+    message("注册表为空或不可读 (", def_registry,
+            "): 无统计数据。可用 registry 参数指定路径。")
     return(invisible(NULL))
   }
   recs <- if (!is.null(nstate)) nstate$recs else list()
@@ -44,13 +46,33 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   }
 
   # ---- 每作业状态合成 ----
-  # 主报告文件名: 优先取输出目录里最新的非矩阵 tsv (report 名用户可自定义, 注册表未存)
-  report_of <- function(out_d) {
+  # 主报告/脚本优先用注册表 v2 记录 (script_path/out_file); 旧注册表没有这两列,
+  # 才回退到"目录里最新非矩阵 tsv / 有 rcfile 的脚本"这种启发式 (同目录多作业会误配)。
+  col_or_na <- function(df, nm) {
+    if (nm %in% names(df)) as.character(df[[nm]]) else rep(NA_character_, nrow(df))
+  }
+  out_files <- col_or_na(gui, "out_file")
+  scripts <- col_or_na(gui, "script_path")
+  report_of <- function(out_d, out_file = NA_character_) {
+    if (length(out_file) == 1 && !is.na(out_file) && nzchar(out_file)) {
+      if (file.exists(out_file)) return(out_file)
+      # 记录的主报告可能已被下一次提交归档为 <base>.pre_<时间戳>.tsv; 取最新归档,
+      # 否则历史作业在月报里会退化成"未知"。
+      base <- tools::file_path_sans_ext(basename(out_file))
+      nm <- list.files(out_d)
+      arch <- nm[startsWith(nm, paste0(base, ".pre_")) & grepl("\\.tsv$", nm)]
+      if (length(arch)) {
+        full <- file.path(out_d, arch)
+        return(full[which.max(file.info(full)$mtime)])
+      }
+      return(out_file)  # 确实没有产物: 让状态合成判为"无本次产物"
+    }
     cand <- list.files(out_d, pattern = "\\.tsv$", full.names = TRUE)
     cand <- cand[!grepl("matrix|\\.pre_|slurm-", basename(cand))]
     if (!length(cand)) "" else cand[which.max(file.info(cand)$mtime)]
   }
-  script_of <- function(out_d, jid) {
+  script_of <- function(out_d, jid, script_path = NA_character_) {
+    if (length(script_path) == 1 && !is.na(script_path) && nzchar(script_path)) return(script_path)
     sd <- file.path(out_d, "diann_gui_scripts")
     shs <- list.files(sd, pattern = "\\.sh$", full.names = TRUE)
     if (!length(shs)) return("")
@@ -61,7 +83,12 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     r <- rec_by_id[[as.character(jid)]]
     if (is.null(r)) "" else paste(as.character(r$to), collapse = ",")
   }
-  gui$report <- vapply(gui$输出目录, report_of, "")
+  gui$report <- vapply(seq_len(nrow(gui)), function(i) {
+    report_of(as.character(gui$输出目录[i]), out_files[i])
+  }, "")
+  gui$script <- vapply(seq_len(nrow(gui)), function(i) {
+    script_of(as.character(gui$输出目录[i]), as.integer(gui$jobid[i]), scripts[i])[1]
+  }, "")
   gui$email <- vapply(as.character(gui$jobid), email_of, "")
   gui$label <- ""
   gui$reason <- ""
@@ -73,7 +100,7 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     es_i <- if (file.exists(logf)) suppressWarnings(diann_notify_elapsed(logf, jid)) else NA_integer_
     gui$elapsed_s[i] <- if (length(es_i) == 1L && !is.null(es_i)) es_i else NA_integer_
     st <- tryCatch(
-      diann_job_status(jid, wd, gui$report[i], script_path = script_of(wd, jid)[1]),
+      diann_job_status(jid, wd, gui$report[i], script_path = gui$script[i]),
       error = function(e) NULL)
     gui$label[i] <- if (is.null(st)) "未知" else st$label
     gui$reason[i] <- if (is.null(st)) "状态合成异常" else st$reason

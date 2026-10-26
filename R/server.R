@@ -29,7 +29,7 @@ server <- function(input, output, session) {
   ))
 
   # 命令导入的文件路径覆盖层 (shinyFiles 选择器无法编程填充, 导入后按类勾选覆盖)
-  ov <- reactiveValues(raws = character(0), fastas = character(0),
+  ov <- reactiveValues(raws = character(0), raw_dir = "", fastas = character(0),
                        lib = "", ref = "", temp = "", out_dir = "")
   import_txt <- reactiveValues(txt = "尚未导入命令")
 
@@ -82,7 +82,10 @@ server <- function(input, output, session) {
     if (isTRUE(input$use_imported_temp) && nz_str(ov$temp)) ov$temp
     else as.character(parseDirPath(volumes, input$temp_dir))
   })
-  selected_raw_dir <- reactive(as.character(parseDirPath(volumes, input$raw_dir_btn)))
+  selected_raw_dir <- reactive({
+    if (isTRUE(input$use_imported_raw_dir) && nz_str(ov$raw_dir)) ov$raw_dir
+    else as.character(parseDirPath(volumes, input$raw_dir_btn))
+  })
   selected_log_dir <- reactive(as.character(parseDirPath(volumes, input$log_dir_btn)))
 
   # ---------- 路径回显 ----------
@@ -96,56 +99,175 @@ server <- function(input, output, session) {
       sprintf("%sv%s) %s", prefix, if (nzchar(v)) v else "?", p)
     }
   })
-  # ---------- 运行环境自检 (apptainer, 结果为启动时探测所得) ----------
+  # ---------- apptainer 运行环境 (自动识别候选 → 下拉; 识别不到 → 手动路径) ----------
+  apt_cands <- reactiveVal(cfg_get("APPTAINER_CANDS") %||% data.frame(
+    path = character(0), kind = character(0), source = character(0), version = character(0),
+    ok = logical(0), sif_ok = logical(0), checked_at = numeric(0), stringsAsFactors = FALSE))
+  apptainer_info <- reactiveVal(NULL)
+
+  # 当前生效 apptainer: 手动路径(勾选且非空) 优先, 否则下拉选择
+  effective_apptainer <- reactive({
+    v <- if (isTRUE(input$use_custom_apptainer)) trimws(input$custom_apptainer %||% "")
+         else as.character(input$apptainer_version %||% "")
+    if (!length(v)) "" else v[1]
+  })
+
+  # 某路径的运行时版本 + SIF 能力: 只读已探测结果 (候选缓存 / 「识别并验证」), 不跑子进程
+  # (版本要求: apptainer ≥ 1.0 / singularity ≥ 3.0; 见 R/apptainer.R 的 SIF_MIN_MAJOR)
+  apptainer_sif_state <- function(path) {
+    p <- trimws(as.character(path %||% ""))
+    out <- list(known = FALSE, sif_ok = NA, version = "", kind = "", note = "")
+    if (!nzchar(p)) return(out)
+    nkey <- function(x) suppressWarnings(normalizePath(path.expand(x), mustWork = FALSE))
+    pk <- nkey(p)
+    cands <- tryCatch(apptainer_cands_sif(apt_cands()), error = function(e) NULL)
+    if (!is.null(cands) && nrow(cands)) {
+      hit <- cands[vapply(cands$path, function(x) identical(nkey(x), pk), logical(1)), , drop = FALSE]
+      if (nrow(hit)) {
+        ok1 <- isTRUE(hit$ok[1])
+        return(list(known = ok1,
+                    sif_ok = if (ok1) hit$sif_ok[1] else NA,
+                    version = if (ok1) as.character(hit$version[1]) else "",
+                    kind = as.character(hit$kind[1]), note = ""))
+      }
+    }
+    info <- apptainer_info()
+    if (!is.null(info) && isTRUE(info$ok) && identical(nkey(info$path), pk)) {
+      return(list(known = TRUE, sif_ok = info$sif_ok %||% NA,
+                  version = as.character(info$version %||% ""),
+                  kind = as.character(info$kind %||% ""),
+                  note = as.character(info$sif_note %||% "")))
+    }
+    out
+  }
+
+  apply_apptainer_scan <- function(refresh = FALSE) {
+    cands <- tryCatch(apptainer_candidates(refresh = refresh), error = function(e) NULL)
+    if (is.null(cands)) return(invisible(NULL))
+    .cfg$APPTAINER_CANDS <- cands
+    .cfg$APPTAINER_CHOICES <- apptainer_choices(cands)
+    apt_cands(cands)
+    cur <- effective_apptainer()
+    sel <- if (nzchar(cur) && cur %in% .cfg$APPTAINER_CHOICES) cur else apptainer_default(cands)
+    updateSelectInput(session, "apptainer_version", choices = .cfg$APPTAINER_CHOICES, selected = sel)
+    invisible(cands)
+  }
+
+  # 一个都没识别到: 直接展开"手动指定", 否则用户会卡在空下拉上
+  session$onFlushed(function() {
+    if (!length(cfg_get("APPTAINER_CHOICES"))) {
+      updateCheckboxInput(session, "use_custom_apptainer", value = TRUE)
+      showNotification("未自动识别到 apptainer/singularity: 请在「1. apptainer 运行环境」中手动指定路径",
+                       type = "warning", duration = 12)
+    }
+  }, once = TRUE)
+
+  observeEvent(input$refresh_apptainer, {
+    withProgress(message = "正在扫描 apptainer…", value = 0.5, apply_apptainer_scan(refresh = TRUE))
+    showNotification(sprintf("识别到 %d 个 apptainer/singularity 候选", nrow(apt_cands())), type = "message")
+  })
+
+  observeEvent(input$verify_apptainer, {
+    apptainer_info(apptainer_check(effective_apptainer()))
+  })
+
+  output$apptainer_verify_result <- renderUI({
+    info <- apptainer_info()
+    if (is.null(info)) return(NULL)
+    no_sif <- isTRUE(info$ok) && identical(info$sif_ok, FALSE)
+    col <- if (no_sif) "#f39c12" else if (isTRUE(info$ok)) "#00a65a" else "#dd4b39"
+    icon <- if (no_sif) "⚠" else if (isTRUE(info$ok)) "✓" else "✗"
+    txt <- if (no_sif && nzchar(info$sif_note %||% "")) {
+      sprintf("%s — %s", info$message, info$sif_note)
+    } else info$message
+    tags$div(style = sprintf("color:%s;font-size:13px;margin-top:4px;", col),
+             HTML(sprintf("<b>%s</b> %s", icon, htmltools::htmlEscape(txt))))
+  })
+
+  output$apptainer_display <- renderText({
+    p <- effective_apptainer()
+    if (!nz_str(p)) return("未选择 (未自动识别到, 请手动指定路径)")
+    if (isTRUE(input$use_custom_apptainer)) {
+      info <- apptainer_info()
+      if (!is.null(info) && identical(info$path, path.expand(trimws(p))) && isTRUE(info$ok)) {
+        note <- if (identical(info$sif_ok, FALSE)) sprintf(" ⚠ 不支持 SIF (需 %s)", sif_min_version_text()) else ""
+        return(sprintf("✓ %s%s (%s)", info$message, note, info$path))
+      }
+      return(sprintf("未验证 — %s (点击「识别并验证」)", p))
+    }
+    st <- apptainer_sif_state(p)
+    ver <- if (isTRUE(st$known) && nzchar(st$version)) {
+      sprintf("%s %s", if (nzchar(st$kind)) st$kind else "apptainer", st$version)
+    } else "版本未知"
+    note <- if (identical(st$sif_ok, FALSE)) sprintf(" ⚠ 不支持 SIF (需 %s)", sif_min_version_text()) else ""
+    sprintf("%s%s (%s)", ver, note, p)
+  })
+
+  # ---------- 运行环境自检 (候选列表 + module 回退 + 运行身份) ----------
   output$apt_check_display <- renderUI({
-    pr <- cfg_get("APPTAINER_PROBE") %||% list(ok = FALSE, bins = character(0),
-                                               src = character(0), vers = character(0), module = NULL)
-    apt_paths <- cfg_get("APPTAINER_PATHS") %||% character(0)
-    fmt_line <- function(ok, txt) tags$div(
-      style = "margin-bottom:2px;",
-      tags$span(style = sprintf("color:%s;font-weight:bold;", if (ok) "#00a65a" else "#dd4b39"),
-                if (ok) "✓ " else "✗ "),
-      txt
-    )
+    cands <- apt_cands()
+    mod <- cfg_get("APPTAINER_MODULE") %||% NULL
+    esc <- htmltools::htmlEscape
+    fmt_line <- function(ok, txt, warn = FALSE) {
+      col <- if (warn) "#f39c12" else if (ok) "#00a65a" else "#dd4b39"
+      icon <- if (warn) "⚠ " else if (ok) "✓ " else "✗ "
+      tags$div(style = "margin-bottom:2px;",
+               tags$span(style = sprintf("color:%s;font-weight:bold;", col), icon),
+               txt)
+    }
+    cur <- effective_apptainer()
     tagList(
-      if (length(pr$bins)) {
-        tagList(lapply(seq_along(pr$bins), function(i) fmt_line(TRUE, HTML(sprintf(
-          "apptainer <b>%s</b> <small>(来源: %s)</small><br><code style='word-break:break-all'>%s</code>",
-          if (nzchar(pr$vers[i])) pr$vers[i] else "?", pr$src[i], pr$bins[i])))))
+      tags$div(style = "color:#666;font-size:12px;margin-bottom:4px;",
+               HTML(sprintf("运行身份: <b>%s</b> · 配置: %s", esc(user),
+                            esc(if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)")))),
+      if (nrow(cands)) {
+        cands <- apptainer_cands_sif(cands)
+        tagList(lapply(seq_len(nrow(cands)), function(i) {
+          ok <- isTRUE(cands$ok[i])
+          # 能跑 --version 但读不了 SIF 的旧版本 (singularity 2.x): 黄灯 + 明确版本要求
+          no_sif <- ok && identical(cands$sif_ok[i], FALSE)
+          note <- if (no_sif) {
+            sprintf(" <b style='color:#dd4b39'>⚠ 不支持 SIF</b> <small>需 %s</small>",
+                    esc(sif_min_version_text()))
+          } else ""
+          fmt_line(ok, HTML(sprintf("%s <b>%s</b> <small>(%s)</small>%s%s<br><code style='word-break:break-all'>%s</code>",
+                       esc(cands$kind[i]),
+                       esc(if (ok) cands$version[i] else "版本未知"),
+                       esc(cands$source[i]),
+                       note,
+                       if (identical(cands$path[i], cur)) " <b>← 当前选中</b>" else "",
+                       esc(cands$path[i]))),
+                   warn = no_sif)
+        }))
       } else {
-        fmt_line(FALSE, HTML(sprintf(
-          "未找到 apptainer 可执行文件%s<br><small>请在 config.R 的 APPTAINER_PATHS 配置其所在目录</small>",
-          if (!is.null(pr$error)) sprintf(" (探测出错: %s)", pr$error) else "")))
+        fmt_line(FALSE, HTML("未找到 apptainer/singularity<br><small>请手动指定路径, 或在 config.R 配置 APPTAINER_PATHS</small>"))
       },
-      if (length(apt_paths)) tags$div(
-        style = "color:#777;font-size:12px;margin-top:4px;",
-        "脚本 PATH 候选:",
-        tags$ul(style = "margin:2px 0 0 18px;padding:0;",
-          lapply(apt_paths, function(d) tags$li(
-            style = "word-break:break-all;",
-            sprintf("%s — %s", d, if (file.exists(file.path(d, "apptainer"))) "存在" else "不存在"))))),
-      if (!is.null(pr$module)) fmt_line(pr$module$ok, HTML(sprintf(
-        "module 回退 <code>%s</code> %s<small>%s</small>", cfg_get("APPTAINER_MODULE_FALLBACK"),
-        if (pr$module$ok) "可用 " else "不可用 ",
-        if (pr$module$ok && nzchar(pr$module$path)) sprintf("(%s)", pr$module$path) else "")))
+      if (!is.null(mod)) fmt_line(isTRUE(mod$ok), HTML(sprintf(
+        "module 回退 <code>%s</code> %s<small>%s</small>", esc(cfg_get("APPTAINER_MODULE_FALLBACK")),
+        if (isTRUE(mod$ok)) "可用 " else "不可用 ",
+        if (isTRUE(mod$ok) && nzchar(mod$path)) sprintf("(%s)", esc(mod$path)) else ""))),
+      tags$div(style = "color:#777;font-size:12px;margin-top:4px;",
+               sprintf("状态目录: %s", esc(dirname(cfg_get("NOTIFY_STATE")))))
     )
   })
 
-  # ---------- 镜像可用性验证 (按钮触发; 本地静态检查 → apptainer inspect → 容器内启动) ----------
+  # ---------- 镜像可用性验证 ----------
+  # 快速验证 = 本地静态检查 (<1s); 深度验证 = apptainer inspect + 容器内启动 (最长 45s)。
+  # 单进程 Shiny 中后者会阻塞所有会话, 因此拆成两个按钮、收紧超时, 并默认只跑快速检查。
   sif_verify <- reactiveVal(NULL)
-  observeEvent(input$verify_sif, {
+  sif_verify_run <- function(deep = FALSE) {
     sif <- effective_sif()
     rows <- list()
-    add_row <- function(kind, ...) {
+    add_row <- function(kind, text) {
       col <- switch(kind, ok = "#00a65a", bad = "#dd4b39", warn = "#f39c12", info = "#3c8dbc")
       icon <- switch(kind, ok = "✓", bad = "✗", warn = "⚠", info = "ℹ")
       rows[[length(rows) + 1]] <<- tags$div(
-        style = sprintf("color:%s;margin:1px 0;", col), HTML(sprintf("<b>%s</b> %s", icon, paste0(...))))
+        style = sprintf("color:%s;margin:1px 0;", col),
+        HTML(sprintf("<b>%s</b> %s", icon, htmltools::htmlEscape(text))))
     }
-    finish <- function() sif_verify(tags$div(style = "margin-top:4px;font-size:13px;", rows))
-    if (!nz_str(sif)) { add_row("bad", "未选择镜像"); return(finish()) }
+    if (!nz_str(sif)) { add_row("bad", "未选择镜像"); return(rows) }
     lc <- sif_check_local(sif)
-    if (!lc$exists) { add_row("bad", sprintf("镜像不存在: %s", sif)); return(finish()) }
+    if (!lc$exists) { add_row("bad", sprintf("镜像不存在: %s", sif)); return(rows) }
     size_mb <- lc$size_bytes / 1024^2
     if (is.na(size_mb)) add_row("warn", sprintf("文件存在但无法读取大小: %s", sif))
     else if (size_mb < 1) add_row("warn", sprintf("文件仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)", size_mb))
@@ -153,52 +275,91 @@ server <- function(input, output, session) {
     if (!isTRUE(lc$readable)) {
       add_row("bad", sprintf("GUI 运行身份 (%s) 无权读取该镜像, 作业将无法启动容器",
                              Sys.info()[["user"]]))
-      return(finish())
+      return(rows)
     }
     add_row("ok", "GUI 运行身份可读取")
     if (!isTRUE(lc$sif_magic)) {
       add_row("bad", "SIF 魔数校验失败 — 文件不是有效的 SIF 镜像 (可能损坏或下载截断)")
-      return(finish())
+      return(rows)
     }
     add_row("ok", "SIF 镜像格式有效")
-    pr <- cfg_get("APPTAINER_PROBE") %||% list(ok = FALSE, bins = character(0))
-    if (!isTRUE(pr$ok) || !length(pr$bins)) {
-      add_row("info", "GUI 节点未找到 apptainer, 跳过容器级检查 (作业脚本内自行回退查找)")
-      return(finish())
+    ap <- effective_apptainer()
+    if (!nz_str(ap) || !file.exists(ap) || file.access(ap, 1) != 0) {
+      add_row("info", "未选择在 GUI 节点可用的 apptainer, 跳过容器级检查 (作业脚本内自行回退查找)")
+      return(rows)
     }
-    withProgress(message = "正在验证镜像…", value = 0.5, {
-      bin <- pr$bins[1]
-      ins <- tryCatch(suppressWarnings(apptainer_run(bin, c("inspect", shQuote(sif)), timeout = 20)),
-                      error = function(e) paste("探测出错:", conditionMessage(e)))
-      ins_txt <- if (is.character(ins)) paste(ins, collapse = "\n") else ""
-      if (grepl("org.label-schema", ins_txt)) {
-        from <- sub(".*org.label-schema.usage.singularity.deffile.from:[[:space:]]*([^\n]+).*", "\\1", ins_txt)
-        lbl <- if (from != ins_txt && nzchar(from)) sprintf(" (镜像来源: %s)", trimws(from)) else ""
-        add_row("ok", sprintf("apptainer inspect 通过%s", lbl))
-      } else {
-        tl <- tail(ins_txt[nzchar(ins_txt)], 1)
-        if (!length(tl)) tl <- "(无输出)"
-        add_row("bad", sprintf("apptainer inspect 失败: %s", substr(tl, 1, 200)))
-        return(finish())
+    add_row("ok", sprintf("apptainer 可用: %s", ap))
+    # 版本下限: SIF 需要 apptainer ≥ 1.0 / singularity ≥ 3.0。2.x 的 --version 一切正常,
+    # 但 inspect/exec 在解析镜像头时就失败 —— 必须在这里给结论, 不能让用户只看到裸报错。
+    st <- apptainer_sif_state(ap)
+    if (!isTRUE(st$known)) {
+      info <- tryCatch(suppressWarnings(apptainer_check(ap)), error = function(e) NULL)
+      if (!is.null(info)) {
+        st <- list(known = isTRUE(info$ok), sif_ok = info$sif_ok %||% NA,
+                   version = as.character(info$version %||% ""),
+                   kind = as.character(info$kind %||% ""),
+                   note = as.character(info$sif_note %||% ""))
       }
-      incProgress(0.4, detail = "容器内启动 diann-linux…")
-      # --version 非 DIA-NN 已知旗标, 但二进制仍会先打印版本横幅; 正则从合并输出提取, 不依赖具体流
-      exe <- tryCatch(suppressWarnings(apptainer_run(bin, c("exec", shQuote(sif), "diann-linux", "--version"), timeout = 60)),
-                      error = function(e) paste("探测出错:", conditionMessage(e)))
-      exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
-      m <- regmatches(exe_txt, regexpr("DIA-NN [0-9][^,(\n]*", exe_txt))
-      if (length(m)) {
-        ver_real <- trimws(sub("^DIA-NN ", "", m))
-        ver_num <- sub("^([0-9]+(?:\\.[0-9]+)*).*", "\\1", ver_real, perl = TRUE)
-        cmp <- if (nzchar(lc$ver_from_name)) {
-          if (identical(ver_num, lc$ver_from_name)) ", 与文件名版本一致" else sprintf(", 注意: 文件名版本为 %s", lc$ver_from_name)
-        } else ""
-        add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s%s", ver_real, cmp))
-      } else {
-        add_row("warn", "容器内启动 diann-linux 未成功 — 若为 GUI 节点限制 (FUSE/命名空间) 可忽略, 以作业实际运行为准")
+    }
+    ver_txt <- if (nzchar(st$version)) sprintf("%s %s", if (nzchar(st$kind)) st$kind else "apptainer", st$version) else ""
+    if (identical(st$sif_ok, FALSE)) {
+      add_row("bad", sprintf("%s 不支持 SIF 镜像 (需要 %s): %s",
+                             if (nzchar(ver_txt)) ver_txt else ap, sif_min_version_text(), sif_2x_symptom()))
+      add_row("info", "请改选 apptainer ≥ 1.0 / singularity ≥ 3.0 的路径; 该路径已被写入作业脚本时, 作业同样会在启动容器时失败")
+      return(rows)
+    }
+    if (isTRUE(st$sif_ok) && nzchar(ver_txt)) {
+      add_row("ok", sprintf("运行时版本满足 SIF 要求: %s (需 %s)", ver_txt, sif_min_version_text()))
+    }
+    if (!isTRUE(deep)) {
+      add_row("info", "快速验证通过; 需要确认容器内能启动 diann-linux 请点「深度验证」")
+      return(rows)
+    }
+    ins <- tryCatch(suppressWarnings(apptainer_run(ap, c("inspect", shQuote(sif)), timeout = 15)),
+                    error = function(e) paste("探测出错:", conditionMessage(e)))
+    ins_txt <- if (is.character(ins)) paste(ins, collapse = "\n") else ""
+    if (grepl("org.label-schema", ins_txt)) {
+      from <- sub(".*org.label-schema.usage.singularity.deffile.from:[[:space:]]*([^\n]+).*", "\\1", ins_txt)
+      lbl <- if (from != ins_txt && nzchar(from)) sprintf(" (镜像来源: %s)", trimws(from)) else ""
+      add_row("ok", sprintf("apptainer inspect 通过%s", lbl))
+    } else {
+      tl <- tail(ins_txt[nzchar(ins_txt)], 1)
+      if (!length(tl)) tl <- "(无输出)"
+      # 2.x 的 stderr 带 ANSI 颜色码和 \r 拼接 (如 "\033[91mERROR : ... \033[31mABORT : ..."), 原样显示很乱
+      tl <- gsub("\r", " ", gsub("\033\\[[0-9;]*[A-Za-z]", "", tl))
+      add_row("bad", sprintf("apptainer inspect 失败: %s", substr(trimws(tl), 1, 200)))
+      if (grepl("Unknown image format", ins_txt, fixed = TRUE)) {
+        add_row("info", sprintf("该报错说明运行时读不了 SIF 镜像头: 需要 %s", sif_min_version_text()))
       }
+      return(rows)
+    }
+    incProgress(0.4, detail = "容器内启动 diann-linux…")
+    # --version 非 DIA-NN 已知旗标, 但二进制仍会先打印版本横幅; 正则从合并输出提取, 不依赖具体流
+    exe <- tryCatch(suppressWarnings(apptainer_run(ap, c("exec", shQuote(sif), "diann-linux", "--version"), timeout = 30)),
+                    error = function(e) paste("探测出错:", conditionMessage(e)))
+    exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
+    # 用 perl 正则: 非 perl 引擎下字符类里的 \n 是字面量"反斜杠+n"(会误排除字母 n)
+    m <- regmatches(exe_txt, regexpr("DIA-NN [0-9][^,(\\n]*", exe_txt, perl = TRUE))
+    if (length(m)) {
+      ver_real <- trimws(sub("^DIA-NN ", "", m))
+      ver_num <- sub("^([0-9]+(?:\\.[0-9]+)*).*", "\\1", ver_real, perl = TRUE)
+      cmp <- if (nzchar(lc$ver_from_name)) {
+        if (identical(ver_num, lc$ver_from_name)) ", 与文件名版本一致" else sprintf(", 注意: 文件名版本为 %s", lc$ver_from_name)
+      } else ""
+      add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s%s", ver_real, cmp))
+    } else {
+      add_row("warn", "容器内启动 diann-linux 未成功 — 若为 GUI 节点限制 (FUSE/命名空间) 可忽略, 以作业实际运行为准")
+    }
+    rows
+  }
+  observeEvent(input$verify_sif, {
+    sif_verify(tags$div(style = "margin-top:4px;font-size:13px;", sif_verify_run(FALSE)))
+  })
+  observeEvent(input$verify_sif_deep, {
+    withProgress(message = "深度验证镜像 (最长约 45 秒)…", value = 0.2, {
+      rows <- sif_verify_run(TRUE)
+      sif_verify(tags$div(style = "margin-top:4px;font-size:13px;", rows))
     })
-    finish()
   })
   output$sif_verify_result <- renderUI(sif_verify())
   output$raw_path_display <- renderText({
@@ -206,7 +367,8 @@ server <- function(input, output, session) {
     if (length(selected_raws())) paste0(mk, paste(selected_raws(), collapse = "\n")) else "未选 RAW 文件"
   })
   output$raw_dir_display <- renderText({
-    if (length(selected_raw_dir())) selected_raw_dir() else "未选目录"
+    mk <- if (isTRUE(input$use_imported_raw_dir) && nz_str(ov$raw_dir)) "(导入) " else ""
+    if (length(selected_raw_dir())) paste0(mk, selected_raw_dir()) else "未选目录"
   })
   output$lib_path_display <- renderText({
     mk <- if (isTRUE(input$use_imported_lib) && nz_str(ov$lib)) "(导入) " else ""
@@ -238,11 +400,12 @@ server <- function(input, output, session) {
     rep_name <- trimws(input$report_name)
     sif <- effective_sif()
     time_h <- input$time_h
-    if (!is.null(time_h) && length(time_h) == 1 && !is.na(time_h) && time_h < 1) time_h <- NA_real_
+    # 不再把 <1 h 转 NA: 0.5 h 会变成"不限时"(共享集群资源安全问题)。时限在脚本里按分钟取整。
     list(
       job_name = trimws(input$job_name %||% ""), partition = input$partition %||% "compute",
       threads = input$threads %||% 16, mem_gb = input$mem_gb %||% 64, time_h = time_h,
       sif = sif,
+      apptainer_bin = effective_apptainer(),
       ver = if (nz_str(sif)) {
         v <- sif_check_local(sif)$ver_from_name
         if (nzchar(v)) v else "自定义"
@@ -254,6 +417,7 @@ server <- function(input, output, session) {
       fastas = selected_fasta(),
       temp = if (length(selected_temp_dir())) selected_temp_dir() else "",
       out_dir = out_dir,
+      report_name = rep_name,
       out_file = if (nz_str(out_dir) && nz_str(rep_name)) file.path(out_dir, paste0(rep_name, ".tsv")) else "",
       slurm_out = if (nz_str(out_dir)) file.path(out_dir, "slurm-%j.out") else "",
       slurm_err = if (nz_str(out_dir)) file.path(out_dir, "slurm-%j.err") else "",
@@ -321,14 +485,62 @@ server <- function(input, output, session) {
         warn <- c(warn, sprintf("⚠ 镜像仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)", lc$size_bytes / 1024^2))
       }
     }
+    # apptainer 运行环境: 空选择阻断; "GUI 节点看不见/不可执行"只警告 (strict 模式才阻断)。
+    # 不在每次按键时跑 --version (子进程卡顿); 深度校验由「识别并验证」按钮或提交前触发。
+    apt <- trimws(p$apptainer_bin %||% "")
+    if (!nzchar(apt)) {
+      msgs <- c(msgs, "✗ 未选择 apptainer 运行环境 (未自动识别到, 请手动指定路径)")
+    } else if (!startsWith(path.expand(apt), "/")) {
+      msgs <- c(msgs, "✗ apptainer 路径必须是服务器绝对路径 (以 / 开头)")
+    } else {
+      ap_abs <- path.expand(apt)
+      info_hit <- apptainer_info()
+      verified <- !is.null(info_hit) && identical(info_hit$path, ap_abs) && isTRUE(info_hit$ok)
+      if (!verified) {
+        local_msg <- if (!file.exists(ap_abs)) {
+          sprintf("⚠ GUI 节点看不到该 apptainer: %s (若为计算节点专用安装可继续; 作业会按回退链查找)", ap_abs)
+        } else if (file.access(ap_abs, 1) != 0) {
+          sprintf("⚠ apptainer 不可执行: %s", ap_abs)
+        } else NULL
+        if (!is.null(local_msg)) {
+          if (isTRUE(cfg_get("APPTAINER_STRICT_CHECK"))) {
+            msgs <- c(msgs, sub("^⚠", "✗", local_msg))
+          } else {
+            warn <- c(warn, local_msg)
+          }
+        }
+      }
+      # 版本下限: 2.x 无法读 SIF, 这是必然而非"节点差异", 一律阻断 (不看 strict)
+      st <- apptainer_sif_state(ap_abs)
+      if (identical(st$sif_ok, FALSE)) {
+        msgs <- c(msgs, sprintf(
+          "✗ 所选 %s %s 不支持 SIF 镜像 (需要 %s): %s",
+          if (nzchar(st$kind)) st$kind else "apptainer", st$version,
+          sif_min_version_text(), sif_2x_symptom()))
+      }
+      if (grepl("singularity", basename(ap_abs), fixed = TRUE)) {
+        info <- c(info, sprintf("ℹ 当前使用 singularity 命令 (与 apptainer 等价; SIF 需 singularity ≥ %d.0)",
+                                SIF_MIN_MAJOR[["singularity"]]))
+      }
+    }
     th <- suppressWarnings(as.integer(p$threads))
     if (length(p$threads) != 1 || is.na(th) || th < 1 || th > 1024) {
       msgs <- c(msgs, "✗ 线程数无效 (需 1–1024 的整数): Slurm --cpus-per-task 与 DIA-NN --threads 均使用该值")
     }
-    if (!is.null(input$time_h) && !is.na(input$time_h) && input$time_h < 1) {
-      info <- c(info, "ℹ 时限填了小于 1 的小时数, 将按不限时提交")
+    jn <- trimws(p$job_name %||% "")
+    if (!nzchar(jn)) {
+      msgs <- c(msgs, "✗ 任务名不能为空")
+    } else if (grepl("[/\\\\\r\n\t]", jn)) {
+      msgs <- c(msgs, "✗ 任务名不能包含 / \\ 或换行/制表符 (会破坏脚本文件名)")
+    } else if (nchar(jn, type = "chars") > 64L) {
+      msgs <- c(msgs, "✗ 任务名长度不能超过 64 个字符")
     }
-    has_raws <- length(p$raws) > 0 || (identical(p$raw_mode, "dir") && nz_str(p$raw_dir))
+    if (!is.null(input$time_h) && length(input$time_h) == 1 && !is.na(input$time_h)) {
+      mins <- ceiling(60 * input$time_h)
+      if (mins < 1) msgs <- c(msgs, "✗ 时限至少 1 分钟")
+      else info <- c(info, sprintf("ℹ 时限按 %d 分钟提交 (Slurm -t %d)", mins, mins))
+    }
+    has_raws <- length(p$raws) > 0 || nz_str(p$raw_dir)
     # 预测库独立生成模式 (--gen-spec-lib) 不需要 RAW 文件
     if (!has_raws && !isTRUE(p$gen_spec_lib)) msgs <- c(msgs, "✗ 未选择 RAW 文件/目录")
     if (!nz_str(p$out_dir)) msgs <- c(msgs, "✗ 未选择输出目录")
@@ -351,6 +563,7 @@ server <- function(input, output, session) {
       warn <- c(warn, "ℹ 转换模式: 命令仅包含文件与 --convert, .dia 文件将保存在 RAW 文件所在目录")
     } else {
       if (!nz_str(p$out_file)) msgs <- c(msgs, "✗ 主报告文件名不能为空")
+      else if (grepl("[/\\\\\r\n\t]", p$report_name)) msgs <- c(msgs, "✗ 主报告文件名不能包含 / \\ 或换行")
       if (nz_str(p$lib)) {
         # 光谱库模式: FASTA 可选 (注释/重注释), 无需 --fasta-search
       } else if (!length(p$fastas)) {
@@ -384,8 +597,28 @@ server <- function(input, output, session) {
     for (m in p$fixed_mod_rows) {
       if (any(nz_str(m)) && !all(nz_str(m))) msgs <- c(msgs, sprintf("✗ 固定修饰行不完整: %s", paste(m, collapse = ",")))
     }
-    if (isTRUE(p$gen_spec_lib) && nz_str(p$out_lib)) {
-      if (!startsWith(p$out_lib, "/")) {
+    # 可变修饰行数 > --var-mods: 超出部分不会被搜索 (v1.9 事故邻域)
+    n_var <- sum(vapply(p$var_mod_rows, function(m) all(nz_str(m)), logical(1)))
+    vmax <- suppressWarnings(as.integer(p$var_mods_max))
+    if (!is.na(vmax) && n_var > vmax) {
+      warn <- c(warn, sprintf("⚠ 可变修饰填了 %d 行, 但每肽段最大可变修饰数为 %d: 超出部分不会进入搜索空间 (建议调到 ≥%d)",
+                              n_var, vmax, n_var))
+    }
+    # 容器可见性: apptainer 默认只绑 $HOME / 当前目录 / /tmp, 其它路径必须写进 BIND_PATHS
+    if (!isTRUE(p$convert_only)) {
+      roots <- c(Sys.getenv("HOME"), getwd(), cfg_get("BIND_PATHS") %||% character(0))
+      inputs <- c(p$raws, p$raw_dir, p$lib, p$ref, p$fastas, p$temp, p$out_dir)
+      hidden <- container_visible(inputs, roots)
+      if (length(hidden)) {
+        warn <- c(warn, sprintf(paste0("⚠ 以下路径不在 $HOME / 当前目录 / BIND_PATHS 内, 容器里可能看不到 ",
+                                       "(历史 v1.4 事故类别; 如属共享盘请加入 config.R 的 BIND_PATHS): %s"),
+                                paste(unique(hidden), collapse = ", ")))
+      }
+    }
+    if (nz_str(p$out_lib)) {
+      if (!isTRUE(p$gen_spec_lib)) {
+        info <- c(info, "ℹ 未勾选「生成谱图库」, --out-lib 不会写入命令 (填写值已忽略)")
+      } else if (!startsWith(p$out_lib, "/")) {
         msgs <- c(msgs, "✗ 谱库输出路径必须是服务器绝对路径 (以 / 开头)")
       } else if (!dir.exists(dirname(p$out_lib))) {
         msgs <- c(msgs, sprintf("✗ 谱库输出路径的父目录不存在: %s", dirname(p$out_lib)))
@@ -440,7 +673,8 @@ server <- function(input, output, session) {
 
   # ---------- 命令导入 ----------
   # 导入前的分析参数重置 (限定范围): 清掉上一次导入/手填的残留, 保证导入结果只反映粘贴的命令。
-  # 不动: sif 镜像、Slurm 分区/内存/时限、邮箱、项目简介、RAW 文件选择器与 raw_mode。
+  # 不动: sif 镜像、Slurm 分区/内存/时限、邮箱、项目简介; raw_mode 仅在导入实际
+  # 提供 RAW 文件/目录时按导入内容切换 (否则会静默沿用上一次的选择)。
   # threads 兼具资源属性, 采取 sticky 策略——仅当导入命令含 --threads 时才改写。
   reset_import_state <- function() {
     for (ctrl in unname(BOOL_FLAG_MAP)) updateCheckboxInput(session, ctrl, value = FALSE)
@@ -469,10 +703,11 @@ server <- function(input, output, session) {
       updateTextInput(session, paste0("fm_sites_", i), value = "")
     }
     updateNumericInput(session, "var_mods_max", value = 1)
-    ov$raws <- character(0); ov$fastas <- character(0)
+    ov$raws <- character(0); ov$raw_dir <- ""; ov$fastas <- character(0)
     ov$lib <- ""; ov$ref <- ""; ov$temp <- ""; ov$out_dir <- ""
-    for (ctrl in c("use_imported_raws", "use_imported_lib", "use_imported_fasta",
-                   "use_imported_ref", "use_imported_out", "use_imported_temp")) {
+    for (ctrl in c("use_imported_raws", "use_imported_raw_dir", "use_imported_lib",
+                   "use_imported_fasta", "use_imported_ref", "use_imported_out",
+                   "use_imported_temp")) {
       updateCheckboxInput(session, ctrl, value = FALSE)
     }
   }
@@ -535,21 +770,27 @@ server <- function(input, output, session) {
       if (length(x) == 1) (if (ok) x else "") else x[ok]
     }
     f$raws <- scope_keep(f$raws, "RAW")
+    f$raw_dir <- scope_keep(f$raw_dir, "RAW 目录")
     f$fastas <- scope_keep(f$fastas, "FASTA")
     f$lib <- scope_keep(f$lib, "光谱库")
     f$ref <- scope_keep(f$ref, "校准库")
     f$temp <- scope_keep(f$temp, "临时目录")
     f$out_dir <- scope_keep(f$out_dir, "输出目录")
-    if (length(f$raws) || length(f$fastas) || nz_str(f$lib) || nz_str(f$ref) || nz_str(f$temp) || nz_str(f$out_dir)) {
-      ov$raws <- f$raws; ov$fastas <- f$fastas
+    if (length(f$raws) || nz_str(f$raw_dir) || length(f$fastas) || nz_str(f$lib) ||
+        nz_str(f$ref) || nz_str(f$temp) || nz_str(f$out_dir)) {
+      ov$raws <- f$raws; ov$raw_dir <- f$raw_dir; ov$fastas <- f$fastas
       ov$lib <- f$lib; ov$ref <- f$ref; ov$temp <- f$temp; ov$out_dir <- f$out_dir
       # 按类自动勾选覆盖 (该类解析出路径才勾)
       if (length(f$raws))    updateCheckboxInput(session, "use_imported_raws", value = TRUE)
+      if (nz_str(f$raw_dir)) updateCheckboxInput(session, "use_imported_raw_dir", value = TRUE)
       if (length(f$fastas))  updateCheckboxInput(session, "use_imported_fasta", value = TRUE)
       if (nz_str(f$lib))     updateCheckboxInput(session, "use_imported_lib", value = TRUE)
       if (nz_str(f$ref))     updateCheckboxInput(session, "use_imported_ref", value = TRUE)
       if (nz_str(f$out_dir)) updateCheckboxInput(session, "use_imported_out", value = TRUE)
       if (nz_str(f$temp))    updateCheckboxInput(session, "use_imported_temp", value = TRUE)
+      # RAW 输入方式随导入内容切换, 否则 dir 模式会忽略导入的 --f、files 模式会忽略 --dir-all
+      if (nz_str(f$raw_dir) && !length(f$raws)) updateRadioButtons(session, "raw_mode", selected = "dir")
+      if (length(f$raws) && !nz_str(f$raw_dir)) updateRadioButtons(session, "raw_mode", selected = "files")
     }
     if (nz_str(pr$report_name)) updateTextInput(session, "report_name", value = pr$report_name)
 
@@ -565,6 +806,7 @@ server <- function(input, output, session) {
     if (length(pr$bool)) info <- c(info, paste0("布尔旗标: ", paste(pr$bool, collapse = " ")))
     if (length(pr$num)) info <- c(info, paste0("数值: ", paste(sprintf("%s = %s", names(pr$num), unlist(pr$num)), collapse = "; ")))
     if (length(f$raws)) info <- c(info, sprintf("RAW 文件 ×%d (已写入导入覆盖层)", length(f$raws)))
+    if (nz_str(f$raw_dir)) info <- c(info, paste0("RAW 目录 (--dir/--dir-all): ", f$raw_dir))
     if (length(f$fastas)) info <- c(info, sprintf("FASTA ×%d (已写入导入覆盖层)", length(f$fastas)))
     if (nz_str(f$lib)) info <- c(info, paste0("光谱库: ", f$lib))
     if (nz_str(f$out_dir)) info <- c(info, paste0("输出目录: ", f$out_dir))
@@ -619,6 +861,29 @@ server <- function(input, output, session) {
       return()
     }
     p <- params_ready()
+    # 手动路径可能没点过「识别并验证」: 提交前做一次真实校验 (约 1–2 s)。
+    # 失败时 strict 模式阻断, 否则只提示 —— "apptainer 只在计算节点"很常见。
+    if (isTRUE(input$use_custom_apptainer)) {
+      info <- apptainer_check(p$apptainer_bin)
+      apptainer_info(info)
+      # 版本下限: 2.x 读不了 SIF, 提交后必然在容器启动阶段失败 -> 直接阻断 (不受 strict 影响)
+      if (isTRUE(info$ok) && identical(info$sif_ok, FALSE)) {
+        msg <- sprintf("%s %s 不支持 SIF 镜像 (需要 %s): %s",
+                       info$kind, info$version, sif_min_version_text(), sif_2x_symptom())
+        showNotification(HTML(paste0("✗ 已阻止提交: ", htmltools::htmlEscape(msg))),
+                         type = "error", duration = NULL)
+        return()
+      }
+      if (!isTRUE(info$ok)) {
+        msg <- sprintf("apptainer 未能验证: %s", info$message)
+        if (isTRUE(cfg_get("APPTAINER_STRICT_CHECK"))) {
+          showNotification(HTML(paste0("✗ ", htmltools::htmlEscape(msg))), type = "error", duration = NULL)
+          return()
+        }
+        showNotification(paste("提示:", msg, "— 作业将按回退链查找 apptainer"),
+                         type = "warning", duration = 8)
+      }
+    }
     script_dir <- file.path(p$out_dir, "diann_gui_scripts")
     if (!dir.create(script_dir, recursive = TRUE, showWarnings = FALSE) && !dir.exists(script_dir)) {
       showNotification(paste("无法创建脚本目录:", script_dir,
@@ -630,50 +895,50 @@ server <- function(input, output, session) {
     # 组diann + 组可写 + setgid, 否则 mass 在中间层就被挡住, 作业也无法写结果
     fix_shared_dirs(unique(c(p$out_dir, script_dir)))
     # 遗留产物归档: 旧 report/矩阵改名为 *.pre_<时间戳>.tsv, 防止其掩盖本次运行的状态判定
-    archived <- character(0)
-    if (nz_str(p$out_file) && dir.exists(p$out_dir)) {
-      rep_base <- tools::file_path_sans_ext(basename(p$out_file))
-      olds <- list.files(p$out_dir, pattern = paste0("^", rep_base, "(.*matrix.*)?\\.tsv$"), full.names = TRUE)
-      olds <- olds[file.exists(olds) & file.info(olds)$size > 0]
-      if (length(olds)) {
-        stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        for (f in olds) {
-          tgt <- sprintf("%s.pre_%s.tsv", file.path(p$out_dir, tools::file_path_sans_ext(basename(f))), stamp)
-          if (file.rename(f, tgt) || (file.copy(f, tgt, overwrite = TRUE) && file.remove(f))) {
-            archived <- c(archived, sprintf("%s → %s", basename(f), basename(tgt)))
-          }
-        }
-      }
-    }
-    sh_path <- file.path(script_dir, sprintf("diann_%s_%s.sh", format(Sys.time(), "%Y%m%d_%H%M%S"), p$job_name))
+    # (纯函数在 R/artifacts.R; 用户报告名不拼进正则, 避免 [ ( 等元字符让提交报错/误改名)
+    archived <- archive_stale_artifacts(p$out_dir, p$out_file)
+    # 保留策略: 清理过期脚本/rc/项目简介/旧归档 (默认 90 天), 防止输出目录无限增长
+    cleaned <- try(cleanup_old_artifacts(p$out_dir, cfg_get("RETENTION_DAYS")), silent = TRUE)
+    if (!is.numeric(cleaned)) cleaned <- 0L
+    job_name <- safe_job_name(p$job_name)
+    sh_path <- file.path(script_dir, sprintf("diann_%s_%s.sh", format(Sys.time(), "%Y%m%d_%H%M%S"), job_name))
     desc_path <- if (nz_str(p$project_desc)) sub("\\.sh$", "_desc.txt", sh_path) else ""
     if (nz_str(desc_path)) writeLines(p$project_desc, desc_path)
-    pp <- p; pp$script_path <- sh_path; pp$desc_file <- desc_path
+    pp <- p; pp$script_path <- sh_path; pp$desc_file <- desc_path; pp$job_name <- job_name
     writeLines(make_slurm_script(pp), sh_path)
     res <- suppressWarnings(system2("sbatch", shQuote(sh_path), stdout = TRUE, stderr = TRUE))
     res_txt <- paste(res, collapse = " ")
     if (grepl("Submitted batch job [0-9]+", res_txt)) {
       jid <- sub(".*Submitted batch job ([0-9]+).*", "\\1", res_txt)
       jobs$jobs <- rbind(jobs$jobs, data.frame(
-        jobid = jid, 任务名 = p$job_name, 版本 = p$ver,
+        jobid = jid, 任务名 = job_name, 版本 = p$ver,
         输出目录 = p$out_dir, 提交时间 = format(Sys.time(), "%H:%M:%S"),
         邮箱 = if (nz_str(p$notify_email)) p$notify_email else "",
         stringsAsFactors = FALSE
       ))
       updateNumericInput(session, "log_id", value = suppressWarnings(as.integer(jid)))
-      try(jobs_registry_add(jid, p$job_name, p$out_dir), silent = TRUE)
+      try(jobs_registry_add(jid, job_name, p$out_dir, script_path = sh_path,
+                            out_file = p$out_file, sif = p$sif,
+                            apptainer = p$apptainer_bin %||% NA_character_,
+                            ver = p$ver), silent = TRUE)
       if (nz_str(p$notify_email)) {
-        try(diann_notify_add(list(jobid = jid, to = p$notify_email, task = p$job_name,
+        try(diann_notify_add(list(jobid = jid, to = p$notify_email, task = job_name,
                                    out_dir = p$out_dir, out_file = p$out_file, sif = p$sif,
                                    script_path = sh_path, desc_file = desc_path)), silent = TRUE)
         try(ensure_diann_watcher(), silent = TRUE)
       }
       showNotification(sprintf("✔ 提交成功, JobID: %s\n脚本: %s", jid, sh_path),
                        type = "message", duration = 10)
-      if (length(archived)) {
+      if (nrow(archived)) {
         showNotification(HTML(paste0("已归档上次运行的遗留产物 (防掩盖本次状态):<br>",
-                                     paste(archived, collapse = "<br>"))),
+                                     paste(htmltools::htmlEscape(sprintf("%s → %s", archived$from, archived$to)),
+                                           collapse = "<br>"))),
                          type = "warning", duration = 12)
+      }
+      if (is.numeric(cleaned) && cleaned > 0L) {
+        showNotification(sprintf("按保留策略清理了 %d 个过期脚本/归档产物 (RETENTION_DAYS=%s)",
+                                 cleaned, cfg_get("RETENTION_DAYS")),
+                         type = "message", duration = 8)
       }
     } else {
       showNotification(HTML(paste0("✗ 提交失败:<br>", html_unescape(paste(res, collapse = "<br>")))),
@@ -682,12 +947,12 @@ server <- function(input, output, session) {
   })
 
   # ---------- 任务队列 ----------
+  # squeue/sacct 合并为一次快照 (slurm_snapshot): 两个表 + 通知面板共用, 20 s 内缓存。
   output$squeue_output <- renderText({
     if (isTRUE(input$auto_refresh)) invalidateLater(10000)
     input$refresh_q
-    out <- suppressWarnings(system(
-      sprintf("squeue -u %s -o '%%.10i %%.24j %%.8u %%.8T %%.10M %%.6D %%R'", user),
-      intern = TRUE))
+    snap <- tryCatch(slurm_snapshot(refresh = TRUE), error = function(e) NULL)
+    out <- if (is.null(snap)) character(0) else snap$lines
     if (!length(out)) "(squeue 无输出)" else paste(out, collapse = "\n")
   })
   # sacct 状态码 → 中文 (20.11 的 CANCELLED 可能带 "by <uid>" 尾巴, 用前缀匹配)
@@ -712,10 +977,8 @@ server <- function(input, output, session) {
   output$sacct_table <- renderTable({
     if (isTRUE(input$auto_refresh)) invalidateLater(10000)
     input$refresh_q
-    since <- format(Sys.Date() - 1, "%Y-%m-%d")
-    out <- suppressWarnings(system(
-      sprintf("sacct -u %s -S %s -X -n --parsable2 -o jobid,jobname,state,elapsed,end", user, since),
-      intern = TRUE))
+    snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
+    out <- if (is.null(snap)) character(0) else snap$sacct_lines
     if (!length(out)) {
       return(data.frame(信息 = "(sacct 无输出——本集群未开启作业记账 (accounting), 无法显示历史)",
                         stringsAsFactors = FALSE))
@@ -745,7 +1008,9 @@ server <- function(input, output, session) {
     recs <- state$recs
     if (!length(recs)) return("")
     lines <- c("—— 提交记录与邮件通知 (最近 100 条) ——")
-    live_budget <- 10L  # 未处理记录的实时状态合成上限, 防止 sacct 查询风暴
+    live_budget <- 5L  # 未处理记录的实时状态合成上限 (共用一次 Slurm 快照)
+    snap <- tryCatch(slurm_snapshot(), error = function(e) NULL)
+    fns <- if (is.null(snap)) list(squeue_fn = NULL, sacct_fn = NULL) else slurm_snapshot_fns(snap)
     for (r in recs) {
       lr <- if (length(r$last_result) && nzchar(r$last_result)) r$last_result else ""
       lab <- ""
@@ -754,7 +1019,8 @@ server <- function(input, output, session) {
           live_budget <- live_budget - 1L
           st <- tryCatch(
             diann_job_status(r$jobid, r$out_dir, r$out_file,
-                             script_path = r$script_path, submitted = r$submitted),
+                             script_path = r$script_path, submitted = r$submitted,
+                             squeue_fn = fns$squeue_fn, sacct_fn = fns$sacct_fn),
             error = function(e) NULL)
           if (!is.null(st)) lab <- sprintf("[%s] %s ", st$label, st$reason)
         }
@@ -855,8 +1121,11 @@ server <- function(input, output, session) {
   # ---------- 参数速查 ----------
   output$doc_path_display <- renderText({
     if (!is.null(cfg_get("param_ref"))) {
-      sprintf("来源: %s (共 %d 个参数)\n官方文档: https://github.com/vdemichev/DiaNN", cfg_get("PARAM_DOC"), nrow(cfg_get("param_ref")))
-    } else "未找到参数说明文档 (DIANN参数说明.md)"
+      # PARAM_DOC 由 run_app() 写入; 未走 run_app 时回退 param_doc_path() (避免 sprintf(NULL) -> character(0) 空白)
+      pd <- cfg_get("PARAM_DOC")
+      if (!nz_str(pd)) pd <- param_doc_path()
+      sprintf("来源: %s (共 %d 个参数)\n官方文档: https://github.com/vdemichev/DiaNN", pd, nrow(cfg_get("param_ref")))
+    } else "未找到参数说明文档 (inst/docs/DIANN_param_reference.md)"
   })
   output$param_ref <- renderUI({
     if (is.null(cfg_get("param_ref"))) return(NULL)

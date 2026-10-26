@@ -76,6 +76,20 @@ test_that("裸 --lib + 无 RAW = 预测库生成意图, 推断 --gen-spec-lib", 
   expect_length(r$unknown, 0)
 })
 
+test_that("--dir / --dir-all 解析为 RAW 目录 (不再是未知旗标)", {
+  r <- parse_diann_command("diann --dir-all /d/raws --lib /d/l.parquet --matrices")
+  expect_equal(r$files$raw_dir, "/d/raws")
+  expect_length(r$files$raws, 0)
+  expect_length(r$unknown, 0)
+  r2 <- parse_diann_command("diann --dir /d/raws2 --qvalue 0.01")
+  expect_equal(r2$files$raw_dir, "/d/raws2")
+  expect_length(r2$unknown, 0)
+  # 裸 --dir-all 与其它路径旗标一样被识别为"缺取值", 不进 unknown
+  r3 <- parse_diann_command("diann --matrices --dir-all")
+  expect_true("--dir-all" %in% r3$bare)
+  expect_length(r3$unknown, 0)
+})
+
 test_that("命令末尾收尾的裸旗标同样不进 unknown", {
   r <- parse_diann_command("diann --f /d/a.raw --matrices --out")
   expect_length(r$unknown, 0)

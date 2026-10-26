@@ -20,15 +20,7 @@ jobs:
           needs: check
 
       - name: Install package
-        run: |
-          OUT=$(R CMD INSTALL --no-multiarch . 2>&1) || true
-          echo "$OUT"
-          if echo "$OUT" | grep -qE "^\* DONE"; then
-            echo "install OK"
-          else
-            echo "$OUT" | grep -inE "error|undefined|no package|cannot|loading failed" | head -12 | while IFS= read -r l; do echo "::error::${l:0:250}"; done
-            exit 1
-          fi
+        run: R CMD INSTALL --no-multiarch .
 
       - name: Run R test suite
         run: |
@@ -36,26 +28,54 @@ jobs:
           res <- testthat::test_dir("tests/testthat", stop_on_failure = FALSE)
           df <- as.data.frame(res)
           print(df[, c("file", "test", "failed", "error")])
-          bad <- df[df$failed > 0 | df$error, ]
-          if (nrow(bad)) for (i in seq_len(nrow(bad))) {
-            msg <- trimws(gsub("[\\r\\n]+", " | ", bad$message[i]))
-            cat(sprintf("::error file=%s::%s / %s :: %s\n",
-                        bad$file[i], bad$file[i], bad$test[i], substr(msg, 1, 500)))
+          bad_idx <- which(df$failed > 0 | df$error)
+          if (length(bad_idx)) for (i in bad_idx) {
+            msg <- tryCatch(res[[i]]$message, error = function(e) "")
+            cat(sprintf("::error file=%s::%s :: %s\n",
+                        df$file[i], df$test[i], substr(gsub("[\\r\\n]+", " | ", msg), 1, 500)))
           }
           cat("::notice::", sessionInfo()$R.version$version.string,
-              "| testthat", as.character(packageVersion("testthat")),
-              "| shiny", as.character(packageVersion("shiny")), "\n")
+              "| testthat", as.character(packageVersion("testthat")), "\n")
           quit(status = if (any(df$error) || sum(df$failed) > 0) 1 else 0)
           RS
+
+      - name: Python unit tests
+        run: python3 -m unittest discover -s tests/python -v
 
       - name: Synthetic-ID allowlist scan
         run: python3 tests/check_synthetic_ids.py
 
-      - name: Launcher syntax check
-        run: bash -n bin/diann-gui
-
       - name: Python syntax check
         run: python3 -m py_compile inst/python/mail_notify.py
+
+  r-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: check
+
+      - name: R CMD build
+        run: R CMD build --no-build-vignettes .
+
+      - name: R CMD check (no ERROR allowed)
+        run: |
+          R CMD check --no-manual --no-build-vignettes diann.gui_*.tar.gz || true
+          LOG="$(ls -d diann.gui.Rcheck)/00check.log"
+          tail -40 "$LOG"
+          if grep -qE "^Status:.*ERROR" "$LOG"; then
+            echo "::error::R CMD check 出现 ERROR"
+            exit 1
+          fi
+          if grep -qE "WARNING" "$LOG"; then
+            echo "::warning::R CMD check 有已知的非 ASCII 警告 (中文界面文案)，不阻断发布"
+          fi
 
   app-e2e:
     runs-on: ubuntu-latest
@@ -71,34 +91,49 @@ jobs:
           needs: check
 
       - name: Install package
-        run: |
-          OUT=$(R CMD INSTALL --no-multiarch . 2>&1) || true
-          echo "$OUT"
-          if echo "$OUT" | grep -qE "^\* DONE"; then
-            echo "install OK"
-          else
-            echo "$OUT" | grep -inE "error|undefined|no package|cannot|loading failed" | head -12 | while IFS= read -r l; do echo "::error::${l:0:250}"; done
-            exit 1
-          fi
+        run: R CMD INSTALL --no-multiarch .
 
       - name: Install browser stack
         run: |
           python3 -m pip install --user selenium
-          firefox --version
-          geckodriver --version
+          sudo apt-get update
+          sudo apt-get install -y firefox
 
-      - name: Smoke (app object builds, no site config needed)
+      - uses: browser-actions/setup-geckodriver@latest
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke (app object builds)
         run: |
           Rscript - <<'RS'
           r <- tryCatch({
-            invisible(library(diann.gui))
-            invisible(run_app())
+            app <- diann.gui::run_app(app_only = TRUE)
+            stopifnot(inherits(app, "shiny.appobj"))
             cat("smoke OK\n")
           }, error = function(e) {
-            cat(sprintf("::error::包装载失败: %s\n", conditionMessage(e)))
+            cat(sprintf("::error::应用构建失败: %s\n", conditionMessage(e)))
             quit(status = 1)
           })
           RS
 
-      - name: Browser E2E (import regression, 3 fixtures)
+      - name: Package-level launch smoke (tarball -> user lib -> run_app)
+        run: |
+          R CMD build --no-build-vignettes .
+          LIB="$(mktemp -d)"
+          R CMD INSTALL --no-multiarch -l "$LIB" diann.gui_*.tar.gz
+          cd /tmp
+          env HOME="$(mktemp -d)" R_LIBS="$LIB" \
+            Rscript -e "diann.gui::run_app(port = 4850, host = '127.0.0.1', launch.browser = FALSE)" &
+          APP_PID=$!
+          code=""
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:4850/ || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          kill "$APP_PID" 2>/dev/null || true
+          [ "$code" = "200" ] || { echo "::error::包级启动冒烟失败 (http=$code)"; exit 1; }
+          echo "package launch smoke OK"
+
+      - name: Browser E2E (import + apptainer)
         run: bash tests/e2e/run_e2e.sh

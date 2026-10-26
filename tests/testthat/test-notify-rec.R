@@ -36,3 +36,25 @@ test_that("损坏的状态文件安全回退为空", {
   expect_equal(length(st$recs), 0)
   unlink(NOTIFY_STATE, force = TRUE)
 })
+
+test_that("notify_defer_unknown: 未知状态在 3 轮内延后发送, 之后才退化", {
+  st <- list(label = "未知")
+  expect_true(notify_defer_unknown(st, 0))
+  expect_true(notify_defer_unknown(st, 2))
+  expect_false(notify_defer_unknown(st, 3))
+  expect_false(notify_defer_unknown(list(label = "成功"), 0))
+  expect_false(notify_defer_unknown(NULL, 0))
+})
+
+test_that("watcher_spawn_command: 显式带用户库路径与配置文件", {
+  cmd <- watcher_spawn_command(state = "/tmp/s.rds", pidfile = "/tmp/s.pid",
+                               logf = "/tmp/s.log", cfg_file = "/tmp/c.R")
+  expect_match(cmd, "DIANN_GUI_CONFIG='/tmp/c.R'", fixed = TRUE)
+  expect_match(cmd, ".libPaths(c(", fixed = TRUE)
+  expect_match(cmd, "watch_daemon", fixed = TRUE)
+  expect_match(cmd, "--no-save --slave", fixed = TRUE)
+  expect_match(cmd, "< /dev/null &", fixed = TRUE)
+  cmd2 <- watcher_spawn_command(state = "/tmp/s.rds", pidfile = "/tmp/s.pid",
+                                logf = "/tmp/s.log", cfg_file = "")
+  expect_false(grepl("DIANN_GUI_CONFIG", cmd2, fixed = TRUE))
+})

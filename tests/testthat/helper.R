@@ -44,22 +44,36 @@ PATH_VALUE_FLAGS <- diann.gui:::PATH_VALUE_FLAGS
 NOTIFY_STATE <- cfg_get("NOTIFY_STATE")
 notify_lock_acquire <- diann.gui:::notify_lock_acquire
 notify_lock_release <- diann.gui:::notify_lock_release
-diann_notify_tick <- diann.gui:::diann_notify_tick
-BOOL_FLAG_MAP <- diann.gui:::BOOL_FLAG_MAP
-NUM_FLAG_MAP <- diann.gui:::NUM_FLAG_MAP
-TEXT_FLAG_MAP <- diann.gui:::TEXT_FLAG_MAP
-PATH_VALUE_FLAGS <- diann.gui:::PATH_VALUE_FLAGS
-NOTIFY_STATE <- cfg_get("NOTIFY_STATE")
+notify_defer_unknown <- diann.gui:::notify_defer_unknown
+archive_stale_artifacts <- diann.gui:::archive_stale_artifacts
+safe_job_name <- diann.gui:::safe_job_name
+apptainer_parse_version <- diann.gui:::apptainer_parse_version
+apptainer_check <- diann.gui:::apptainer_check
+apptainer_discover <- diann.gui:::apptainer_discover
+apptainer_candidates <- diann.gui:::apptainer_candidates
+apptainer_choices <- diann.gui:::apptainer_choices
+apptainer_default <- diann.gui:::apptainer_default
+apptainer_cands_sif <- diann.gui:::apptainer_cands_sif
+sif_capable <- diann.gui:::sif_capable
+sif_min_version_text <- diann.gui:::sif_min_version_text
+init_config_autofill <- diann.gui:::init_config_autofill
+watcher_spawn_command <- diann.gui:::watcher_spawn_command
+container_visible <- diann.gui:::container_visible
+cleanup_old_artifacts <- diann.gui:::cleanup_old_artifacts
+slurm_snapshot <- diann.gui:::slurm_snapshot
+slurm_snapshot_fns <- diann.gui:::slurm_snapshot_fns
+slurm_queue_states <- diann.gui:::slurm_queue_states
 
 # 构造一份与 GUI server 收集结果同构的参数表
 base_params <- function(overrides = list()) {
   p <- list(
     job_name = "T", partition = "compute", threads = 16, mem_gb = 64, time_h = 12,
     sif = "/x/diann-2.7.0.sif", ver = "2.7.0",
+    apptainer_bin = "/opt/apptainer/bin/apptainer",
     slurm_out = "/o/slurm-%j.out", slurm_err = "/o/slurm-%j.err",
     script_path = "/o/diann_gui_scripts/diann_test.sh",
     raw_mode = "files", raws = "/d/a.raw", raw_dir = "", lib = "", ref = "",
-    fastas = c(), temp = "", out_dir = "/o", out_file = "/o/report.tsv",
+    fastas = c(), temp = "", out_dir = "/o", report_name = "report", out_file = "/o/report.tsv",
     verbose = 1L, qvalue = 0.01, convert_only = FALSE, cont_exclude = FALSE,
     cont_tag = "cRAP-", var_mods_max = 1,
     var_mod_rows = list(c("UniMod:35", "15.994915", "M")), fixed_mod_rows = list(),

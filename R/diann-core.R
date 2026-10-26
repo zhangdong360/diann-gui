@@ -29,7 +29,35 @@ path_in_scope <- function(p) {
   out
 }
 nz_str <- function(x) !is.null(x) && length(x) > 0 && !any(is.na(x)) && all(nzchar(trimws(as.character(x))))
+
+# 容器可见性: apptainer 默认只绑 $HOME / cwd / /tmp, 其它路径必须显式 --bind。
+# 返回不在任何 root 之下的路径 (用于提交前警告; v1.4 事故类别)。
+container_visible <- function(paths, roots) {
+  paths <- as.character(paths %||% character(0))
+  paths <- paths[!is.na(paths) & nzchar(paths)]
+  roots <- as.character(roots %||% character(0))
+  roots <- roots[!is.na(roots) & nzchar(roots)]
+  if (!length(paths)) return(character(0))
+  if (!length(roots)) return(paths)
+  rp <- normalizePath(collapse_dots(roots), mustWork = FALSE)
+  np <- normalizePath(collapse_dots(paths), mustWork = FALSE)
+  ok <- vapply(np, function(p) any(p == rp | startsWith(p, paste0(rp, "/"))), logical(1))
+  paths[!ok]
+}
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# 任务名同时用于 #SBATCH -J 与脚本文件名 diann_<时间戳>_<任务名>.sh。
+# 文件名不能含路径分隔符/换行（曾致 file.path 报错或写出 diann_gui_scripts 之外）;
+# 允许中文: 用户习惯用中文任务名。
+safe_job_name <- function(x, max_len = 64L) {
+  nm <- gsub("[\r\n\t]+", " ", trimws(as.character(x %||% "")))
+  nm <- gsub("[/\\\\]", "-", nm)
+  nm <- gsub("^\\.+", "", trimws(nm))
+  nm <- trimws(nm)
+  if (!nzchar(nm)) nm <- "DIANN_Task"
+  if (nchar(nm, type = "chars") > max_len) nm <- substr(nm, 1L, max_len)
+  nm
+}
 flag_arg <- function(on, f) if (identical(on, TRUE)) f else NULL
 num_arg <- function(v, f) if (!is.null(v) && length(v) == 1 && !is.na(v)) c(f, format(v, trim = TRUE, scientific = FALSE)) else NULL
 pos_arg <- function(v, f) if (!is.null(v) && length(v) == 1 && !is.na(v) && v > 0) c(f, format(v, trim = TRUE, scientific = FALSE)) else NULL
@@ -80,15 +108,20 @@ build_diann_chunks <- function(p) {
   }
 
   # --- 输入文件 ---
-  if (identical(p$raw_mode, "dir")) {
+  # 以"实际提供了什么"为准, 不只信 raw_mode: 导入的 RAW 覆盖层与目录选择器可能交叉存在,
+  # 旧实现只看 raw_mode 会在 dir 模式下静默丢掉导入的 raws (命令一个输入都没有)。
+  if (identical(p$raw_mode, "dir") && nz_str(p$raw_dir)) {
     add(str_arg(p$raw_dir, "--dir-all"))
   } else if (length(p$raws)) {
     ch <- c(ch, paste0("--f ", shQuote(p$raws)))
+  } else if (nz_str(p$raw_dir)) {
+    add(str_arg(p$raw_dir, "--dir-all"))  # files 模式但只有目录: 不让输入凭空消失
   }
   add(str_arg(p$lib, "--lib"))
   for (f in p$fastas) ch <- c(ch, paste0("--fasta ", shQuote(f)))
   if (isTRUE(p$cont_exclude) && nz_str(cfg_get("CON_FASTA"))) ch <- c(ch, paste0("--fasta ", shQuote(cfg_get("CON_FASTA"))))
-  add(flag_arg(p$cont_exclude, paste0("--cont-quant-exclude ", shQuote(p$cont_tag %||% "cRAP-"))))
+  add(flag_arg(p$cont_exclude, paste0("--cont-quant-exclude ",
+                                      shQuote(if (nz_str(p$cont_tag)) trimws(p$cont_tag) else "cRAP-"))))
   add(str_arg(p$ref, "--ref"))
   add(str_arg(p$temp, "--temp"))
 
@@ -142,11 +175,13 @@ build_diann_chunks <- function(p) {
   add(flag_arg(p$predictor, "--predictor"))
   add(flag_arg(p$light_models, "--light-models"))
   add(flag_arg(p$gen_spec_lib, "--gen-spec-lib"))
-  out_lib_val <- p$out_lib
-  if (isTRUE(p$gen_spec_lib) && !nz_str(out_lib_val) && nz_str(p$out_dir)) {
-    out_lib_val <- file.path(p$out_dir, "library.speclib")
+  # --out-lib 只在勾选「生成谱图库」时才有意义: 未勾选却写入会被 DIA-NN 忽略/报错,
+  # 且会造成「填了路径却没建库」的假象。
+  if (isTRUE(p$gen_spec_lib)) {
+    out_lib_val <- p$out_lib
+    if (!nz_str(out_lib_val) && nz_str(p$out_dir)) out_lib_val <- file.path(p$out_dir, "library.speclib")
+    add(str_arg(out_lib_val, "--out-lib"))
   }
-  add(str_arg(out_lib_val, "--out-lib"))
   add(num_arg(p$out_lib_qvalue, "--out-lib-qvalue"))
 
   # --- 高级 ---
@@ -171,27 +206,60 @@ build_diann_chunks <- function(p) {
 make_slurm_script <- function(p) {
   args <- paste(build_diann_chunks(p), collapse = " \\\n    ")
   sc1 <- function(x) if (is.null(x) || length(x) == 0) "" else as.character(x)
+  # 时限按分钟提交: 1.9 h -> -t 114, 0.5 h -> -t 30。旧实现 as.integer(h) 会把 1.9 截成 1 h,
+  # 且 server 曾把 <1 h 转成 NA 变成"不限时"——用户明确限时却得到无限, 属资源安全问题。
   time_line <- if (!is.null(p$time_h) && length(p$time_h) == 1 && !is.na(p$time_h)) {
-    sprintf("#SBATCH -t %s:00:00\n", as.integer(p$time_h))
+    sprintf("#SBATCH -t %d\n", max(1L, as.integer(ceiling(60 * p$time_h))))
   } else ""
-  # apptainer 初始化: 依次尝试配置的 PATH, 配置了模块名则回退 module load
-  apptainer_init <- c(
-    "# apptainer invocation: try configured PATH entries, then optional module fallback",
-    vapply(cfg_get("APPTAINER_PATHS"), function(d) {
-      sprintf('if [ -x "%s/apptainer" ]; then export PATH="%s:$PATH"; fi', d, d)
-    }, character(1)),
-    if (nzchar(cfg_get("APPTAINER_MODULE_FALLBACK"))) {
-      # 先 source /etc/profile.d/modules.sh: 它导出站点真实 MODULEPATH (login shell 才加载,
-      # sbatch 的非 login bash 里缺它, 仅 init/bash 的默认 MODULEPATH 找不到站点模块)
-      sprintf(paste0('command -v apptainer >/dev/null 2>&1 || { ',
-                     'source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null; ',
-                     'module load %s 2>/dev/null; }'), cfg_get("APPTAINER_MODULE_FALLBACK"))
-    } else NULL,
-    'command -v apptainer >/dev/null 2>&1 || echo "WARNING: apptainer not found in PATH"',
-    'echo "apptainer: $(command -v apptainer 2>/dev/null || echo NOT-FOUND)"'
+  # ---- apptainer 运行环境: GUI 选定路径优先, 不可见时按候选目录 → PATH → module 回退 ----
+  # 选定路径放在脚本里 (同一个共享存储路径在计算节点通常也可见); 回退链保证
+  # "只在计算节点安装"或"只配了 module"的集群仍能跑。找不到时不提前退出, 让
+  # "$APPTAINER_BIN" exec 自然返回 127, 仍走下方 rc/.rc 单一通道进入四层状态判定。
+  ap_sel <- if (nz_str(p$apptainer_bin)) trimws(p$apptainer_bin) else "apptainer"
+  ap_dirs <- cfg_get("APPTAINER_PATHS") %||% character(0)
+  ap_dirs <- ap_dirs[!is.na(ap_dirs) & nzchar(ap_dirs)]
+  ap_dir_loop <- if (length(ap_dirs)) {
+    paste0(
+      'if [ ! -x "$APPTAINER_BIN" ]; then\n',
+      '  for d in ', paste(shQuote(ap_dirs), collapse = " "), '; do\n',
+      '    for n in apptainer singularity; do\n',
+      '      if [ -x "$d/$n" ]; then APPTAINER_BIN="$d/$n"; break 2; fi\n',
+      '    done\n',
+      '  done\n',
+      'fi\n')
+  } else ""
+  ap_module <- if (nzchar(cfg_get("APPTAINER_MODULE_FALLBACK") %||% "")) {
+    # 先 source /etc/profile.d/modules.sh: 它导出站点真实 MODULEPATH (login shell 才加载,
+    # sbatch 的非 login bash 里缺它, 仅 init/bash 的默认 MODULEPATH 找不到站点模块)
+    sprintf(paste0('if [ ! -x "$APPTAINER_BIN" ]; then\n',
+                   '  source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null\n',
+                   '  module load %s 2>/dev/null\n',
+                   'fi\n'),
+            cfg_get("APPTAINER_MODULE_FALLBACK"))
+  } else ""
+  apptainer_init_str <- paste0(
+    "APPTAINER_BIN=", shQuote(ap_sel), "\n",
+    ap_dir_loop,
+    'if [ ! -x "$APPTAINER_BIN" ]; then\n',
+    '  APPTAINER_BIN=$(command -v apptainer 2>/dev/null || true)\n',
+    'fi\n',
+    ap_module,
+    'if [ ! -x "$APPTAINER_BIN" ]; then\n',
+    '  APPTAINER_BIN=$(command -v apptainer 2>/dev/null || command -v singularity 2>/dev/null || true)\n',
+    'fi\n',
+    # conda 安装的 apptainer 依赖同目录的 squashfuse 等辅助程序, 必须前置 PATH
+    'export PATH="$(dirname "${APPTAINER_BIN:-apptainer}"):$PATH"\n',
+    'echo "DIANN_GUI_APPTAINER ${APPTAINER_BIN:-NOT-FOUND}"\n',
+    '[ -x "$APPTAINER_BIN" ] || echo "ERROR: apptainer/singularity not found (GUI selected: ',
+    gsub('"', "'", ap_sel), ')" >&2'
   )
-  apptainer_init_str <- paste(apptainer_init, collapse = "\n")
   bind_args <- if (length(cfg_get("BIND_PATHS"))) paste0("--bind ", shQuote(cfg_get("BIND_PATHS")), collapse = " ") else ""
+  # 站点额外 #SBATCH 选项 (--account/--qos/--reservation 等), 逐行写入
+  slurm_extra <- cfg_get("SLURM_EXTRA_ARGS") %||% character(0)
+  slurm_extra <- trimws(slurm_extra[!is.na(slurm_extra) & nzchar(slurm_extra)])
+  slurm_extra_lines <- if (length(slurm_extra)) paste0(paste0("#SBATCH ", slurm_extra), collapse = "\n") else ""
+  # 空字符串时保留一个空行, 避免把下面的 #SBATCH -o 粘到 -e 后
+  if (!nzchar(slurm_extra_lines)) slurm_extra_lines <- ""
   # 程序层退出码落盘 (四层状态判定的第二层来源): apptainer exec 的返回码;
   # 容器卸载阶段偶发 SIGILL 会把 rc 污染为 132, 由 GUI 状态合成判为"待核实"而非失败
   rc_file <- sub("\\.sh$", ".rc", sc1(p$script_path %||% "diann_gui_preview.sh"))
@@ -203,13 +271,14 @@ make_slurm_script <- function(p) {
 #SBATCH --mem=%sG
 %s#SBATCH -o %s
 #SBATCH -e %s
+%s
 
 %s
 
 echo \"DIA-NN analysis start: $(date)\"
 echo \"DIANN_GUI_START_EPOCH $(date +%%s)\"
 
-apptainer exec %s %s diann-linux %s
+\"$APPTAINER_BIN\" exec %s %s diann-linux %s
 rc=$?
 printf '%%s' \"$rc\" > %s
 echo \"DIA-NN analysis done: $(date), exit code: $rc\"
@@ -220,7 +289,7 @@ exit $rc
 ",
     shQuote(sc1(p$job_name)), sc1(p$partition), sc1(as.integer(p$threads)), sc1(as.integer(p$mem_gb)),
     time_line,
-    shQuote(sc1(p$slurm_out)), shQuote(sc1(p$slurm_err)),
+    shQuote(sc1(p$slurm_out)), shQuote(sc1(p$slurm_err)), slurm_extra_lines,
     apptainer_init_str, bind_args, shQuote(sc1(p$sif)), args,
     shQuote(rc_file))
 }
@@ -255,7 +324,7 @@ NUM_FLAG_MAP <- c(
 # 文本旗标 -> 输入控件 id
 TEXT_FLAG_MAP <- c("--cut" = "cut", "--out-lib" = "out_lib", "--cont-quant-exclude" = "cont_tag")
 # 需要取值的路径类旗标; Windows GUI 在路径留空时导出裸旗标 (无取值, 如 "--lib --f ...")
-PATH_VALUE_FLAGS <- c("--f", "--fasta", "--lib", "--ref", "--temp", "--out", "--out-dir", "--out-lib")
+PATH_VALUE_FLAGS <- c("--f", "--fasta", "--lib", "--ref", "--temp", "--out", "--out-dir", "--out-lib", "--dir", "--dir-all")
 
 is_win_path <- function(x) grepl("^[A-Za-z]:\\\\", x) || grepl("\\\\", x)
 
@@ -279,7 +348,7 @@ parse_diann_command <- function(text) {
   res <- list(
     bool = character(0), num = list(), text = list(),
     var_mods = list(), fixed_mods = list(),
-    files = list(raws = character(0), fastas = character(0), lib = "", ref = "", temp = "", out_dir = ""),
+    files = list(raws = character(0), raw_dir = "", fastas = character(0), lib = "", ref = "", temp = "", out_dir = ""),
     report_name = "", windows_paths = character(0), unknown = character(0), cont_fasta = FALSE,
     bare = character(0), bare_lib = FALSE
   )
@@ -339,12 +408,16 @@ parse_diann_command <- function(text) {
       if (!win) res$files$ref <- nxt
     } else if (t == "--temp") {
       if (!win) res$files$temp <- nxt
+    } else if (t %in% c("--dir", "--dir-all")) {
+      # 目录模式 (DIA-NN Windows GUI 选择文件夹时导出 --dir / --dir-all)
+      if (!win) res$files$raw_dir <- nxt
     } else if (t == "--out-dir") {
       if (!win) res$files$out_dir <- nxt
     } else if (t == "--out") {
       if (!win) {
         res$files$out_dir <- dirname(nxt)
-        res$report_name <- sub("\\.tsv$", "", basename(nxt))
+        # DIA-NN 2.x 主报告默认 .parquet; 两种后缀都要剥离, 否则 GUI 会生成 x.parquet.tsv
+        res$report_name <- sub("(?i)\\.(tsv|parquet)$", "", basename(nxt), perl = TRUE)
       }
     } else if (t == "--var-mod") {
       parts <- strsplit(nxt, ",", fixed = TRUE)[[1]]

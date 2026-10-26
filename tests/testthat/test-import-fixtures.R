@@ -147,3 +147,34 @@ test_that("夹具: 预览 Slurm 脚本 (预测库) 导入——rc=$? 截断 + SB
   expect_equal(r$num[["--threads"]], 32)
   expect_length(r$var_mods, 2)
 })
+
+# 2026-10 审查: --dir/--dir-all (Windows GUI 选择文件夹时导出) 此前被当成未知旗标,
+# RAW 目录不进入覆盖层, 导入后校验报"未选择 RAW 文件/目录"而无法提交。
+test_that("夹具: 目录模式命令 (--dir-all) 解析为 RAW 目录", {
+  r <- parse_diann_command(read_fixture("import_dir_userpaste.txt"))
+  expect_equal(r$files$raw_dir, "/share/home/demo/data/raw/demo_batch_07")
+  expect_length(r$files$raws, 0)
+  expect_length(r$unknown, 0)
+  expect_equal(r$report_name, "report")
+  expect_equal(r$num[["--threads"]], 24)
+  expect_true(all(c("--matrices", "--reanalyse", "--rt-profiling") %in% r$bool))
+})
+
+test_that("目录模式夹具端到端: 构建脚本含 --dir-all", {
+  r <- parse_diann_command(read_fixture("import_dir_userpaste.txt"))
+  p <- base_params(list(raw_mode = "dir", raw_dir = r$files$raw_dir, raws = character(0),
+                        lib = r$files$lib, out_dir = r$files$out_dir,
+                        out_file = file.path(r$files$out_dir, "report.tsv")))
+  ch <- build_diann_chunks(p)
+  expect_true(any(grepl(sprintf("--dir-all '%s'", r$files$raw_dir), ch, fixed = TRUE)))
+  expect_false(any(grepl("^--f ", ch)))
+})
+
+test_that("目录夹具路径落在数据范围内", {
+  set_core_const("BASE_VOLUMES", c(Data = "/share"))
+  on.exit(set_core_const("BASE_VOLUMES", c(Data = tempdir())), add = TRUE)
+  r <- parse_diann_command(read_fixture("import_dir_userpaste.txt"))
+  expect_true(path_in_scope(r$files$raw_dir))
+  expect_true(path_in_scope(r$files$lib))
+  expect_true(path_in_scope(r$files$out_dir))
+})
