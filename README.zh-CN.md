@@ -20,7 +20,7 @@ Apptainer/Singularity `.sif`），并监控队列、日志与结果。v1.12 起 
 # 1) 装进自己的用户库（三选一）
 install.packages("diann.gui", repos = c(SITE = "<站点 drat/miniCRAN>", getOption("repos")))
 # 无外网集群（管理员把 tarball 放到共享存储）：
-install.packages("/share/app/tools/R/diann.gui_1.12.0.tar.gz", repos = NULL, type = "source")
+install.packages("/share/app/tools/R/diann.gui_1.13.0.tar.gz", repos = NULL, type = "source")
 # 有外网：
 remotes::install_github("zhangdong360/diann-gui")
 

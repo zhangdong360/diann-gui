@@ -24,7 +24,7 @@ shared queue identity, no admin ACL work.
 # 1) install into your user library — pick one
 install.packages("diann.gui", repos = c(SITE = "<site drat/miniCRAN>", getOption("repos")))
 # air-gapped cluster (admin stages the tarball on shared storage):
-install.packages("/share/app/tools/R/diann.gui_1.12.0.tar.gz", repos = NULL, type = "source")
+install.packages("/share/app/tools/R/diann.gui_1.13.0.tar.gz", repos = NULL, type = "source")
 # with internet access:
 remotes::install_github("zhangdong360/diann-gui")
 
