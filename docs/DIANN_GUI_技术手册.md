@@ -23,6 +23,7 @@
 7. [命令导入功能](#7-命令导入功能)
 8. [提交校验规则对照表](#8-提交校验规则对照表)
 9. [结果文件说明](#9-结果文件说明)
+   - [结果分析（下游分析模块，v1.14）](#91-结果分析下游分析模块v114)
 10. [常见问题与故障排查](#10-常见问题与故障排查)
 11. [DIA-NN 版本说明](#11-diann-版本说明)
 12. [附录：常用命令行参数速览](#12-附录常用命令行参数速览)
@@ -702,6 +703,51 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 | `<RAW 同目录>/*.raw.quant` | DIA-NN | RAW 分析缓存（注意 10.2） |
 
 ---
+
+### 9.1 结果分析（下游分析模块，v1.14）
+
+「结果分析」页整合了蛋白矩阵下游统计（移植自 ProteoDIA Studio），
+与运行管理页构成完整流水线：raw → DIA-NN → 蛋白矩阵 → QC/统计 → HTML 报告。
+
+**输入约定**：DIA-NN `--matrices` 导出的蛋白水平矩阵（`*matrix*.tsv`；
+`pg_matrix` 优先，precursor 级矩阵不用于差异分析）。Spectronaut `PG.*` 矩阵
+可在页内切换格式。数据经服务端路径直接读取（HPC 共享存储），无上传控件。
+
+**页签结构**：① 数据与分组（自动注释列/分组推断 + 可编辑分组表 + 批量粘贴 +
+可选 ComBat 去批次）→ ② 预处理（过滤/log2/插补/归一化明细与缺失机制诊断）→
+③ QC 可视化（9 张图）→ ④ 差异分析（limma；≥3 组自动全局 F + 全部两两对比）→
+⑤ 功能富集（GO + KEGG，数据源可选本地 KEGG.db / 在线 enrichKEGG）→
+⑥ 生成报告。
+
+**闭环入口**：任务队列页「结果分析入口」从提交记录（done / 成功）选定作业，
+调 `analysis_find_matrices()` 发现其输出目录内的矩阵（pg_matrix 优先、
+排除 `.pre_` 归档与空文件）→「进入下游分析」填入路径并切页。
+
+**报告目录契约**（生成于报告输出目录，默认 `~/diann_gui_analysis_reports/`）：
+
+```
+analysis_report_<YYYYMMDD_HHMMSS>/
+├── report.html              # 自包含可双击打开 (相对路径)
+├── assets/                  # style.css / report.js / logo.png (包内 inst/analysis/assets)
+├── data/                    # 01~15 号 SVG + iframe 静态表 + dep_table 等
+├── _results/                # 全部原始结果 (csv/xlsx)
+├── 08_summary_report.md     # 汇要 (英文, 与 CLI 版同格式)
+└── analysis_params.json     # 全参数快照 (可复现)
+```
+
+**依赖策略**：分析依赖全部放 Suggests + 运行时检查（`an_deps_*`），
+缺失时页内/doctor 给出可复制安装命令，不静默自动安装（HPC 无网/无权限场景）。
+富集依赖最重（clusterProfiler + org.Xx.eg.db）；`KEGG.db` 已被 Bioconductor
+移除，缺失时 KEGG 降级为仅 GO，可切换「在线 KEGG (需联网)」。
+可编辑分组表需要 DT。
+
+**图形红线**（预览与落盘同一条 svglite 路径，改动前先读
+`R/analysis-plot.R` 头注）：不要改回 renderPlot 位图预览、不要给
+`.plot-box` 设 max-height、不要给 img 加 aspect-ratio、base64 一律走
+`jsonlite::base64_enc(readBin(...))`。
+
+**独立启动**：`run_app(analysis_only = TRUE)` 只加载本页并跳过执行后端/
+apptainer/SIF 初始化（UI 与 server 均按 `analysis_only` 分支渲染）。
 
 ## 10. 常见问题与故障排查
 

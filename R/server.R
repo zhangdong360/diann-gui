@@ -1,7 +1,17 @@
 # ============================================================
 # server.R — 应用服务端逻辑
 # ============================================================
-app_server <- function(input, output, session) {
+
+# v1.14 独立启动模式 (run_app(analysis_only = TRUE)): 只注册结果分析模块,
+# 不初始化执行后端 / apptainer / SIF (下游分析不依赖它们)。
+server_analysis_only <- function(input, output, session) {
+  volumes <- cfg_get("BASE_VOLUMES")[file.exists(unname(cfg_get("BASE_VOLUMES")))]
+  analysis_req <- reactiveVal(NULL)
+  mod_analysis_server("analysis", volumes = volumes, matrix_req = analysis_req)
+}
+
+app_server <- function(analysis_only = FALSE) {
+  if (isTRUE(analysis_only)) return(server_analysis_only)
 server <- function(input, output, session) {
   volumes <- cfg_get("BASE_VOLUMES")[file.exists(unname(cfg_get("BASE_VOLUMES")))]
   user <- Sys.getenv("USER"); if (!nzchar(user)) user <- Sys.info()[["user"]]
@@ -1458,6 +1468,63 @@ server <- function(input, output, session) {
         tags$ul(lapply(e$items, tags$li))
       )
     }))
+  })
+
+  # ---- v1.14 结果分析模块 (完整模式同样注册; 任务队列页可一键带入矩阵) ----
+  analysis_req <- reactiveVal(NULL)
+  mod_analysis_server("analysis", volumes = volumes, matrix_req = analysis_req)
+
+  # 已完成作业清单: 来自提交记录 (done / 状态成功) 且输出目录仍存在
+  analysis_jobs <- reactive({
+    if (isTRUE(input$auto_refresh)) invalidateLater(15000)
+    input$refresh_q
+    st <- tryCatch(diann_notify_load(), error = function(e) NULL)
+    recs <- if (is.null(st)) list() else st$recs
+    out <- list()
+    for (r in recs) {
+      ok <- isTRUE(r$done) ||
+        identical(as.character(r$last_result %||% ""), "成功")
+      if (!ok) next
+      od <- as.character(r$out_dir %||% "")[1]
+      if (is.na(od) || !nzchar(od) || !dir.exists(od)) next
+      task <- substr(as.character(r$task %||% "DIA-NN")[1], 1, 24)
+      out[[length(out) + 1L]] <-
+        list(label = sprintf("#%s %s — %s", r$jobid, task, od), out_dir = od)
+    }
+    out
+  })
+  observe({
+    js <- analysis_jobs()
+    updateSelectInput(session, "analysis_job",
+                      choices = if (length(js)) vapply(js, `[[`, "", "label") else character(0),
+                      selected = if (length(js)) js[[1]]$label else NULL)
+  })
+  output$analysis_matrix_ui <- renderUI({
+    js <- analysis_jobs()
+    sel <- input$analysis_job
+    hit <- Filter(function(j) identical(j$label, sel), js)
+    if (!length(hit))
+      return(div(class = "an-hint", "尚无已完成作业的提交记录; 可直接在「结果分析」页填写矩阵路径。"))
+    ms <- tryCatch(analysis_find_matrices(hit[[1]]$out_dir), error = function(e) NULL)
+    if (is.null(ms) || !nrow(ms))
+      return(div(class = "an-err", icon("triangle-exclamation"),
+                 " 该作业输出目录未发现 *matrix*.tsv 蛋白矩阵",
+                 " (DIA-NN 需带 --matrices 导出; 主报告 report.tsv 是前体级, 不用于本页)。"))
+    tagList(
+      selectInput("analysis_matrix", sprintf("蛋白矩阵 (%d 个候选, pg_matrix 优先):", nrow(ms)),
+                  choices = ms$path, selected = ms$path[1]),
+      helpText(sprintf("选中文件 %.1f MB",
+                       { sz <- ms$size[ms$path == (input$analysis_matrix %||% ms$path[1])]
+                         if (length(sz)) sz[1] else ms$size[1] } / 1024^2)))
+  })
+  observeEvent(input$goto_analysis, {
+    mp <- input$analysis_matrix
+    if (is.null(mp) || !nzchar(mp) || !file.exists(mp)) {
+      showNotification("未找到可用矩阵; 请在「结果分析」页手动填写路径。", type = "warning")
+      return()
+    }
+    analysis_req(list(path = mp, tab = "① 数据与分组"))
+    updateTabItems(session, "tabs", "downstream")
   })
 }
 

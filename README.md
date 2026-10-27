@@ -114,6 +114,15 @@ and ID sequence in `~/diann_gui_local_jobs.rds` and `~/diann_gui_local_seq`
   backend (Slurm queue or local job state file) and sends completion emails via
   `mail_notify.py` when jobs finish; works on clusters where compute nodes have
   no outbound network.
+- **Downstream analysis (v1.14)** — the new "结果分析" page consumes the protein
+  matrix exported by DIA-NN `--matrices` (pg_matrix): preprocessing
+  (contaminant/reverse filtering, low-detection filtering, log2,
+  LoD/KNN/seqKNN imputation, sample median normalization, optional ComBat batch
+  correction) → 9 QC plots → limma differential analysis (single pairwise or
+  global F-test + all pairwise contrasts) → GO/KEGG enrichment → a
+  self-contained HTML report. Completed jobs can be carried over from the job
+  monitor page in one click; `run_app(analysis_only = TRUE)` starts the
+  analysis page alone on hosts without containers.
 - **Parameter reference** — an in-app searchable DIA-NN flag reference.
 
 ## Architecture
@@ -129,7 +138,15 @@ flowchart LR
     LP --> DN
     SS -->|"auto-spawn"| W["diann.gui::watch_daemon()"]
     W -->|"poll queue / local state; parse slurm-&lt;id&gt;.out / local-&lt;id&gt;.out"| M["mail_notify.py → SMTP"]
+    DN -->|"*matrix*.tsv (pg_matrix)"| AN["Analysis module (v1.14)<br/>preprocess → QC plots → limma → GO/KEGG"]
+    AN --> RPT["Self-contained HTML report<br/>+ analysis_params.json"]
+    Q -.->|"one-click from job monitor"| AN
 ```
+
+> Analysis dependencies (ggplot2 / limma / clusterProfiler, ...) are optional:
+> without them the submit/monitor chain is unaffected, and the analysis page
+> shows copy-paste install commands; `doctor()` reports them in a dedicated
+> group.
 
 ## Requirements
 
@@ -141,6 +158,7 @@ flowchart LR
 | **R** ≥ 4.1 | per-user library; dependencies install with the package |
 | **Apptainer or Singularity** | plus a DIA-NN `.sif` container image (login node may not have apptainer — the GUI accepts a compute-node-only path). **`.sif` requires apptainer ≥ 1.0 or singularity ≥ 3.0**; 2.x only reads `.simg` |
 | **python3** | optional, only for email notifications (standard library only) |
+| Analysis packages (ggplot2/limma/...) | *optional* — only the analysis page needs them; missing packages produce install hints there and never affect submit/monitor |
 
 ## Configuration (`~/.diann_gui/config.R`)
 
@@ -278,6 +296,54 @@ EXEC_BACKEND <- "local"
 Out of scope in this version: native DIA-NN binaries (no container), cloud
 execution, Windows, and PBS/LSF. Local mode is Linux-only and still requires
 Apptainer/Singularity plus a `.sif` image, exactly like Slurm mode.
+
+## Downstream analysis (protein-matrix QC / statistics, v1.14)
+
+The "结果分析" page adds the downstream half of the workflow to the same GUI.
+Input: a DIA-NN **protein-level matrix** (`*pg_matrix*.tsv` from `--matrices`;
+Spectronaut `PG.*` matrices also accepted). Output: a publication-ready HTML
+report.
+
+**Workflow** (six in-page tabs):
+
+1. **Data & groups** — enter the matrix path (read directly from server-side
+   storage, no upload); annotation/sample columns and groups are inferred
+   automatically, with an editable group table plus Excel-paste bulk filling;
+   optional ComBat batch correction.
+2. **Preprocessing** — live filtering details and warnings; a missingness
+   profile helps decide between MAR/MNAR imputation strategies.
+3. **QC plots** — detection counts, missing rates, PCA, sample correlation
+   heatmap, hierarchical clustering, within-group CV distribution and
+   reproducibility boxplot, before/after normalization; SVG zip export.
+4. **Differential analysis** — limma empirical Bayes; single contrast for two
+   groups, global F-test plus all pairwise contrasts for ≥3 groups
+   (volcano / count / Z-score heatmap / top-protein boxplots / tables).
+5. **Enrichment** — GO (BP/MF/CC); KEGG source selectable between **local
+   KEGG.db** (default, matching the CLI pipeline; the package was removed from
+   Bioconductor, so without it KEGG degrades to GO-only) and **online
+   enrichKEGG** (needs internet, more species).
+6. **Report** — generates `analysis_report_<timestamp>/` (report.html, data/
+   figures & tables, assets, an `analysis_params.json` snapshot and
+   `08_summary_report.md`) with in-page iframe preview and zip download.
+
+**Closed loop with run management**: the job-monitor page has a "结果分析入口"
+box — pick a completed job, the GUI discovers protein matrices in its output
+directory (pg_matrix first), and one click carries the path into the analysis
+page. Raw data → DIA-NN → matrix → statistics → report, all in the browser.
+
+**Standalone mode** (hosts without Slurm/apptainer):
+
+```r
+diann.gui::run_app(analysis_only = TRUE)
+```
+
+**Dependencies**: all analysis dependencies are optional (Suggests +
+runtime checks). QC layer (ggplot2/ggrepel/gridExtra/pheatmap/scales/svglite)
+and DE layer (limma/openxlsx) are light; enrichment additionally needs
+clusterProfiler + AnnotationDbi + species annotation libraries
+(org.Hs/Mm/Rn.eg.db, installed on demand). DT is needed for the editable
+group table. Missing packages produce copy-paste install hints on the page
+and in `doctor()`; the submit/monitor features never require them.
 
 ## Email notifications (optional)
 

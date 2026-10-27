@@ -1,0 +1,108 @@
+# v1.14 结果分析·预处理层: 注释列识别 / 读取 / 分组校验 / prep_run 流程
+
+test_that("auto_annot_cols: DIA-NN pg_matrix 注释列识别与样本列划分", {
+  df <- make_fixture_pg_matrix()
+  am <- auto_annot_cols(colnames(df), "diann")
+  expect_identical(am$Protein.Group, "Protein.Group")
+  expect_identical(am$Genes, "PG.Genes")
+  expect_identical(am$N.Sequences, "N.Sequences")
+  expect_true(is.na(am$Organism))
+  sample_cols <- setdiff(colnames(df), unlist(am[!is.na(unlist(am))]))
+  expect_setequal(sample_cols, c("A1", "A2", "A3", "B1", "B2", "B3"))
+})
+
+test_that("auto_annot_cols: Spectronaut PG.* 列识别", {
+  cn <- c("PG.ProteinAccessions", "PG.ProteinNames", "PG.Genes",
+          "PG.ProteinDescriptions", "PG.Organisms", "S1", "S2", "S3", "S4")
+  am <- auto_annot_cols(cn, "spectronaut")
+  expect_identical(am$Protein.Group, "PG.ProteinAccessions")
+  expect_identical(am$Organism, "PG.Organisms")
+  expect_setequal(setdiff(cn, unlist(am[!is.na(unlist(am))])), c("S1", "S2", "S3", "S4"))
+})
+
+test_that("read_input_file: tsv 与 csv 分隔符自判", {
+  df <- make_fixture_pg_matrix(n_prot = 8)
+  tsv <- write_fixture_matrix(df, file.path(tempdir(), "anfix_tsv.tsv"))
+  on.exit(unlink(tsv), add = TRUE)
+  d1 <- read_input_file(tsv)
+  expect_identical(colnames(d1)[1], "Protein.Group")
+  expect_equal(nrow(d1), 8)
+
+  csv <- file.path(tempdir(), "anfix_csv.csv")
+  utils::write.csv(df, csv, row.names = FALSE)
+  on.exit(unlink(csv), add = TRUE)
+  d2 <- read_input_file(csv)
+  expect_identical(colnames(d2)[1], "Protein.Group")
+})
+
+test_that("validate_group_map: 空/缺列/单组/单样本给出中文原因", {
+  expect_match(validate_group_map(NULL), "为空")
+  expect_match(validate_group_map(data.frame(Sample = "A1", Group = "A")),
+               "至少需要 2 个分组")
+  bad <- data.frame(Sample = c("A1", "A2", "B1"), Group = c("A", "A", "B"))
+  expect_match(validate_group_map(bad), "仅 1 个样本")
+  ok <- data.frame(Sample = c("A1", "A2", "B1", "B2"), Group = c("A", "A", "B", "B"))
+  expect_null(validate_group_map(ok))
+})
+
+test_that("prep_run: 过滤/插补/归一化/分组 全流程数值正确", {
+  df <- make_fixture_pg_matrix(n_prot = 30, n_rep = 3, fold = 4, seed = 42)
+  p <- prep_run(df, params = list(source = "diann", min_detect_frac = 0.5,
+                                  impute_method = "mnar"))
+  # 污染/反库: 2 条
+  expect_identical(p$n_contam, 2L)
+  # 自动分组 A/B 各 3 个
+  expect_identical(p$group_levels, c("A", "B"))
+  expect_identical(p$map_src, "auto")
+  # 插补后矩阵无缺失
+  expect_false(anyNA(p$expr_imp))
+  # 归一化: 各样本中位数对齐到最大值
+  meds <- apply(p$expr_imp, 2, stats::median)
+  expect_equal(max(meds), p$median_target, tolerance = 1e-8)
+  expect_true(all(abs(meds - p$median_target) < 1e-6))
+  # 对照组默认第一组; 物种自动检测为 Human
+  expect_identical(p$control_grp, "A")
+  expect_match(p$species, "Homo sapiens")
+  # 检出数向量长度 = 样本数
+  expect_identical(length(p$det_sample), 6L)
+  expect_identical(ncol(p$expr_imp), 6L)
+})
+
+test_that("prep_run: impute_method=none 保留缺失并标记未插补", {
+  df <- make_fixture_pg_matrix(seed = 7)
+  p <- prep_run(df, params = list(impute_method = "none"))
+  expect_false(p$imputed)
+  expect_true(anyNA(p$expr_imp))
+  expect_true(any(grepl("不填补", p$warnings)))
+})
+
+test_that("prep_run: 显式分组表生效 (explicit 模式)", {
+  df <- make_fixture_pg_matrix(seed = 3)
+  gm <- data.frame(Sample = c("A1", "A2", "A3", "B1", "B2", "B3"),
+                   Group = c("G1", "G1", "G1", "G2", "G2", "G2"),
+                   stringsAsFactors = FALSE)
+  p <- prep_run(df, params = list(), sample_group_map = gm)
+  expect_identical(p$group_levels, c("G1", "G2"))
+  expect_identical(p$map_src, "explicit")
+})
+
+test_that("prep_run: 分组表未覆盖样本列时报错", {
+  df <- make_fixture_pg_matrix(seed = 3)
+  gm <- data.frame(Sample = c("A1", "A2", "B1", "B2"),
+                   Group = c("G1", "G1", "G2", "G2"), stringsAsFactors = FALSE)
+  expect_error(prep_run(df, params = list(), sample_group_map = gm), "未被分组表覆盖")
+})
+
+test_that("detect_species: UniProt 后缀与默认回退", {
+  a <- data.frame(Protein.Names = "X_HUMAN", First.Protein.Description = "",
+                  Organism = NA_character_)
+  expect_identical(detect_species(a)$org_pkg, "org.Hs.eg.db")
+  b <- data.frame(Protein.Names = "X_MOUSE", First.Protein.Description = "",
+                  Organism = NA_character_)
+  expect_identical(detect_species(b)$kegg_org, "mmu")
+  c <- data.frame(Protein.Names = "NoName", First.Protein.Description = "unknown",
+                  Organism = NA_character_)
+  sp <- detect_species(c)
+  expect_match(sp$species, "default")
+  expect_true(!is.null(sp$warn))
+})

@@ -7,6 +7,15 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.14", date = "2026-10-27", items = c(
+    "新增: 「结果分析」页 (下游分析模块, 整合 ProteoDIA Studio)——对 DIA-NN --matrices 导出的蛋白矩阵 (pg_matrix) 做预处理 (污染/反库剔除、低检出过滤、log2、LoD/KNN/seqKNN 插补、样本中位数归一化、可选 ComBat 去批次)、9 张 QC 图 (检出数/缺失率/PCA/相关性热图/层次聚类/CV 分布/CV 箱线/归一化前后/缺失机制诊断)、limma 差异分析 (2 组单对比; ≥3 组全局 F + 全部两两对比)、GO/KEGG 富集与一键 HTML 报告 (report.html + 图形/结果表/analysis_params.json, 浏览器打包 zip 下载)",
+    "新增: 独立启动模式 run_app(analysis_only = TRUE)——只加载结果分析页, 不初始化 Slurm/apptainer/SIF; 适合无容器环境或只做矩阵分析的机器",
+    "新增: 闭环——任务队列页新增「结果分析入口」: 从提交记录选定已完成作业, 自动发现其输出目录内的 *matrix*.tsv (pg_matrix 优先), 一键带入结果分析页并填好路径",
+    "设计: 结果分析依赖全部可选 (ggplot2/limma/clusterProfiler 等放 Suggests + 运行时检查)——不装也能正常提交/监控作业, 进入分析页时给可复制的安装命令; doctor() 新增「结果分析依赖」体检组 (缺包 warn + 安装命令)",
+    "设计: KEGG 数据源可切换——默认本地 KEGG.db (与 CLI 版一致; 该包已被 Bioconductor 移除, 缺失时降级为仅 GO 并提示), 可选在线 enrichKEGG (需联网, 支持斑马鱼等更多物种); 报告附录注明所用数据源",
+    "设计: 图形预览与报告落盘走同一 svglite 绘制路径 (所见即报告所得); 报告模板资产 (样式/交互脚本/logo) 随包内置于 inst/analysis/assets, 全部为本项目生成",
+    "测试: 合成 pg_matrix 夹具 (MNAR 缺失) 矩阵化验证预处理数值/DE 回收/报告目录契约/矩阵发现; doctor 分组契约更新 (结果分析依赖在 Slurm 之前)"
+  )),
   list(ver = "v1.13", date = "2026-10-27", items = c(
     "新增: SIF 镜像下拉扫描 SIF_DIRS 下全部 *.sif (文件名无关)——image.sif / diann_latest.sif 等不再不可见；版本不再取自文件名，改为选中镜像后在容器内实测 (apptainer exec <sif> diann-linux --version)，结果按 size+mtime 缓存到 ~/.diann_gui/sif_probe.rds，文件变化自动失效",
     "新增: 「识别所有未识别镜像」按钮 (带进度逐个识别) 与选中未识别镜像自动识别；「识别版本并深度验证」成功后同样写缓存并刷新下拉；启动不跑容器 (HPC 登录节点安全)；版本未识别不阻断提交 (GUI 节点无 apptainer 时提示而不报错)",
