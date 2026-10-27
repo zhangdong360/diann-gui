@@ -170,7 +170,13 @@ test_that("local: 取消 -> 已取消 (标记 + 进程组 kill, 无残留进程)
   expect_true(file.exists(paste0(p$script_path, ".cancelled")))
   rec <- local_jobs_find(res$job_id)
   expect_false(is.null(rec))
-  expect_false(local_job_alive(rec))
+  # CI 负载下 TERM 到进程消失有延迟, 单发断言会竞态红 — 轮询等待判死 (最长 10s)
+  dead <- FALSE
+  for (i in 1:40) {
+    if (!isTRUE(local_job_alive(rec))) { dead <- TRUE; break }
+    Sys.sleep(0.25)
+  }
+  expect_true(dead)
 })
 
 test_that("local: PID 复用防护 (starttime 不匹配 -> 判死)", {

@@ -40,7 +40,10 @@ test_that("init_config + doctor 在包安装状态下可用", {
     d <- diann.gui::doctor(apptainer_cands = data.frame(
       path = character(0), kind = character(0), source = character(0), version = character(0),
       ok = logical(0), checked_at = numeric(0), stringsAsFactors = FALSE),
-      partitions = "compute", slurm_cmds = c(sbatch = "/usr/bin/sbatch"),
+      partitions = "compute", slurm_cmds = local({
+        p <- file.path(td, "fake_sbatch"); writeLines("#!/bin/sh", p); Sys.chmod(p, "0755")
+        c(sbatch = p)
+      }),
       sif_dirs = character(0), mail_conf = "/nonexistent", state_dir = td,
       deps = character(0))))
   expect_equal(d$status[d$check == "状态目录"], "ok")

@@ -97,11 +97,12 @@ jobs:
       - name: Install package
         run: R CMD INSTALL --no-multiarch .
 
-      - name: Install browser stack
-        run: |
-          python3 -m pip install --user selenium
-          sudo apt-get update
-          sudo apt-get install -y firefox
+      - name: Install selenium
+        run: python3 -m pip install --user selenium
+
+      # ubuntu-latest (24.04) 的 apt firefox 是 snap 过渡桩, 无头启动即退
+      # (WebDriverException: unexpectedly closed) — 改用 Mozilla 官方构建
+      - uses: browser-actions/setup-firefox@latest
 
       - uses: browser-actions/setup-geckodriver@latest
         with:
