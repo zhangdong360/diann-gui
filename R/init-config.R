@@ -13,13 +13,13 @@ detect_slurm_partitions <- function() {
   p[nzchar(p)]
 }
 
-# 在常见目录里非递归找 diann*.sif
+# 在常见目录里非递归找 *.sif (v1.13: 文件名无关)
 detect_sif_dirs <- function() {
   cands <- c(file.path(path.expand("~"), "data"), "/share/app/tools/diann", "/opt", "/usr/local")
   cands <- unique(cands[dir.exists(cands)])
   if (!length(cands)) return(character(0))
   hit <- cands[vapply(cands, function(d) {
-    length(list.files(d, pattern = "(?i)^diann.*\\.sif$")) > 0
+    length(list.files(d, pattern = "(?i)\\.sif$")) > 0
   }, logical(1))]
   utils::head(hit, 3L)
 }

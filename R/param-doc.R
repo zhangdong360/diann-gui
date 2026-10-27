@@ -1,11 +1,10 @@
 # ============================================================
 # param-doc.R — 参数速查文档解析
 # ============================================================
+# v1.13 起不再随包分发 DIA-NN 文档快照 (许可归属 DIA-NN 作者, 不宜打包再分发):
+# 用户自行从官方仓库获取, 存为工作目录下的 DIANN_param_reference.md 即可。
 param_doc_candidates <- function() {
-  c(
-    system.file("docs", "DIANN_param_reference.md", package = "diann.gui"),
-    file.path(getwd(), "DIANN_param_reference.md")
-  )
+  file.path(getwd(), "DIANN_param_reference.md")
 }
 
 param_doc_path <- function() {
@@ -22,7 +21,9 @@ html_unescape <- function(x) {
   gsub("&amp;", "&", x, fixed = TRUE)
 }
 parse_param_doc <- function(path) {
-  txt <- readLines(path, n = 6, warn = FALSE)
+  # v1.13: 文件头有 attribution HTML 注释, 固定 n=6 可能整个落在注释里;
+  # 读足够多行, 找到首个 <li> 行即停 (参数速查是单行超长 HTML)。
+  txt <- readLines(path, n = 40, warn = FALSE)
   idx <- which(grepl("<li", txt))[1]
   if (is.na(idx)) return(NULL)
   line <- txt[idx]

@@ -8,7 +8,7 @@ UI / 提交 / 监控 / 日志 / 取消 / 会话连接是否与 Slurm 模式同�
 
 自包含模式 (不带 --url):
   在临时目录里建 假 apptainer (--version -> 1.4.5; exec 解析 --out 写报告,
-  sleep/退出码可经 control 文件控制) + 带 SIF_MAGIC 的假 .sif (>=1MiB) +
+  sleep/退出码可经 control 文件控制) + 带 SIF_MAGIC 的假 .sif (>=1MiB, 任意文件名 image.sif) +
   假 RAW/光谱库 + 临时 config (EXEC_BACKEND="local", APPTAINER_PATHS/DATA_HOME/
   BASE_VOLUMES 指向临时目录, MAIL 关闭) + 临时 HOME, 起一个 run_app 实例
   (随机高位端口 41xxx/48xxx, 绝不使用 3838), 结束后按进程组 kill 并清理。
@@ -63,6 +63,17 @@ if [ "${1:-}" != "exec" ]; then
   exit 1
 fi
 shift
+# v1.13: 容器内 diann-linux --version (SIF 版本识别路径); exec 后 $1 是 sif 路径,
+# 在参数流里找 "diann-linux" 后跟 "--version"
+is_ver=0; pv=""
+for a in "$@"; do
+  if [ "$pv" = "diann-linux" ] && [ "$a" = "--version" ]; then is_ver=1; fi
+  pv="$a"
+done
+if [ "$is_ver" = "1" ]; then
+  echo "DIA-NN 2.7.0 Academia, build Oct 12 2025 17:36:10 (git 8f2b1c3)"
+  exit 0
+fi
 out=""; prev=""
 for a in "$@"; do
   if [ "$prev" = "--out" ]; then out="$a"; fi
@@ -130,7 +141,7 @@ def build_fixtures(base, backend="local"):
         "base": base,
         "bin": base / "bin",
         "apptainer": base / "bin" / "apptainer",
-        "sif": base / "sif" / "diann-9.9.9.sif",
+        "sif": base / "sif" / "image.sif",
         "data": base / "data",
         "lib": base / "data" / "fake.parquet",
         "raw": base / "data" / "sample.raw",
@@ -161,7 +172,6 @@ def build_fixtures(base, backend="local"):
         "DATA_HOME <- \"%s\"\n"
         "BASE_VOLUMES <- c(Data = \"%s\", Out = \"%s\")\n"
         "MAIL_PYTHON <- \"\"\n"
-        "LOCAL_ALLOW_SHARED <- TRUE\n"
         "RETENTION_DAYS <- 7\n"
         % (backend, fx["bin"], fx["base"] / "sif", fx["sif"], fx["data"], fx["data"], fx["out"]),
         encoding="utf-8")
@@ -184,7 +194,11 @@ def check_fixtures_static(fx):
     raw = Path(fx["sif"]).read_bytes()
     check("假 SIF 魔数/尺寸符合 GUI 校验",
           raw[32:41] == b"SIF_MAGIC" and len(raw) >= 1024 * 1024, "%d bytes" % len(raw), failures)
-    check("假 SIF 文件名可解析 DIA-NN 版本", fx["sif"].name.startswith("diann-9.9.9"),
+    v = subprocess.run([str(fx["apptainer"]), "exec", str(fx["sif"]), "diann-linux", "--version"],
+                       capture_output=True, text=True, env=env)
+    check("假 apptainer 支持 diann-linux --version (v1.13 版本识别)",
+          v.returncode == 0 and "DIA-NN 2.7.0" in v.stdout, v.stdout.strip()[:80], failures)
+    check("假 SIF 为任意文件名 (v1.13 文件名无关)", fx["sif"].name == "image.sif",
           fx["sif"].name, failures)
     txt = fx["config"].read_text(encoding="utf-8")
     check("临时 config 含 EXEC_BACKEND=local 且指向假 apptainer 目录",
@@ -429,6 +443,22 @@ def run_browser(fx, url):
         sif_ok = wait_until(lambda: str(fx["sif"]) in elem_text("sif_display"), 30)
         check("自动扫描到假 SIF 并默认选中 (SIF_DIRS)", sif_ok,
               "display=%s" % elem_text("sif_display")[:160], failures)
+        # v1.13: 模式 banner
+        check("提交页模式提示条为「当前执行后端：本地单机（无 Slurm）」",
+              "当前执行后端：本地单机（无 Slurm）" in elem_text("backend_banner"),
+              elem_text("backend_banner")[:160], failures)
+        # v1.13: 任意文件名可见; ignoreInit — 页面加载不跑容器 (回显"未识别"),
+        # 点「识别所有未识别镜像」后才在容器内实测并回显 v2.7.0 (审查 P1-C3)
+        check("页面加载不跑容器: 默认选中镜像回显为 未识别",
+              "未识别" in elem_text("sif_display") and "image.sif" in elem_text("sif_display"),
+              elem_text("sif_display")[:160], failures)
+        click_js(By.ID, "sif_identify_all")
+        id_ok = wait_until(lambda: "v2.7.0" in elem_text("sif_version_info")
+                           and "已识别" in elem_text("sif_version_info")
+                           and "v2.7.0" in elem_text("sif_display"), 90)
+        check("「识别所有未识别镜像」后 image.sif 识别为 v2.7.0 且回显已识别(缓存)", id_ok,
+              "info=%s | display=%s" % (elem_text("sif_version_info")[:100],
+                                        elem_text("sif_display")[:120]), failures)
         apt_opts = [o.text for o in drv.find_elements(By.CSS_SELECTOR, "#apptainer_version option")]
         scan_panel = elem_text("apt_check_display")
         check("apptainer 自动扫描面板/候选含 1.4.5 版本",
@@ -494,6 +524,10 @@ def run_browser(fx, url):
         rows = job_rows()
         jid1 = rows[0][0] if rows else ""
         check("提交记录「后端」列为 本地", bool(rows) and "本地" in " ".join(rows[0]),
+              " | ".join(rows[0]) if rows else "", failures)
+        # v1.13: 版本列为容器实测值 (不再来自文件名)
+        check("提交记录「版本」列为 2.7.0 (容器实测)",
+              bool(rows) and "2.7.0" in " ".join(rows[0]),
               " | ".join(rows[0]) if rows else "", failures)
         check("提交后 Shiny 会话保持连接 (v1.11 断连事故回归)", connected(), "", failures)
         scan_errors("post-submit")
@@ -643,7 +677,7 @@ def main():
             # run_e2e.sh 已建好夹具; 只在缺失时补齐 (便于手工 --url 调试)
             fx = build_fixtures(base) if not (base / "bin" / "apptainer").exists() else {
                 "base": base, "bin": base / "bin", "apptainer": base / "bin" / "apptainer",
-                "sif": base / "sif" / "diann-9.9.9.sif", "data": base / "data",
+                "sif": base / "sif" / "image.sif", "data": base / "data",
                 "lib": base / "data" / "fake.parquet", "raw": base / "data" / "sample.raw",
                 "out": base / "out", "out_report": base / "out" / "report.tsv",
                 "ctl": base / "fake_ctl", "apt_log": base / "fake_apptainer_exec.log",

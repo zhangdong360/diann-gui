@@ -20,8 +20,8 @@ test_that("run_app(app_only = TRUE) 在任意工作目录返回 shiny.appobj", {
 
   app <- diann.gui::run_app(app_only = TRUE)
   expect_s3_class(app, "shiny.appobj")
-  # 包内资源从 system.file 读取, 不依赖 getwd()
-  expect_true(nzchar(diann.gui:::param_doc_path()))
+  # v1.13 起参数文档快照不随包分发 (许可归属 DIA-NN 作者): 中立 cwd 下无文档是预期
+  expect_equal(diann.gui:::param_doc_path(), "")
   # 状态目录落在本次 HOME 下 (每用户隔离)
   expect_true(startsWith(diann.gui::cfg_get("NOTIFY_STATE"), td))
 })
@@ -75,7 +75,10 @@ test_that("本地后端: run_app(app_only=TRUE) 构建 local 版 UI (按钮/标�
   html <- paste(as.character(htmltools::renderTags(ui_obj)$html), collapse = "")
   expect_match(html, "提交本地任务", fixed = TRUE)
   expect_match(html, "本地运行任务", fixed = TRUE)
-  expect_match(html, "执行后端: 本地单机", fixed = TRUE)
+  # v1.13: header 徽标 + 提交页/监控页模式 banner
+  expect_match(html, "当前执行后端：本地单机（无 Slurm）", fixed = TRUE)
+  expect_match(html, 'id="backend_banner"', fixed = TRUE)
+  expect_match(html, 'id="backend_banner_monitor"', fixed = TRUE)
   expect_false(grepl("sinfo_table", html, fixed = TRUE))
   expect_true(grepl("local-&lt;ID&gt;.out", html, fixed = TRUE))
   # 包内自带本地运行器 (R CMD INSTALL 后 inst/scripts 就位)
@@ -109,4 +112,5 @@ test_that("Slurm 模式 app 构建保持原样 (按钮/标题/含 sinfo)", {
   expect_match(html, "提交 Slurm 任务", fixed = TRUE)
   expect_match(html, "运行队列 (squeue)", fixed = TRUE)
   expect_match(html, "sinfo_table", fixed = TRUE)
+  expect_match(html, "当前执行后端：Slurm 集群", fixed = TRUE)   # v1.13 banner
 })

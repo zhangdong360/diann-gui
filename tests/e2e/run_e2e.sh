@@ -54,6 +54,16 @@ set -u
 if [ "${1:-}" = "--version" ]; then echo "apptainer version 1.4.5"; exit 0; fi
 if [ "${1:-}" != "exec" ]; then echo "fake-apptainer: unsupported argv: $*" >&2; exit 1; fi
 shift
+# v1.13: 容器内 diann-linux --version (SIF 版本识别路径); exec 后 $1 是 sif 路径
+is_ver=0; pv=""
+for a in "$@"; do
+  if [ "$pv" = "diann-linux" ] && [ "$a" = "--version" ]; then is_ver=1; fi
+  pv="$a"
+done
+if [ "$is_ver" = "1" ]; then
+  echo "DIA-NN 2.7.0 Academia, build Oct 12 2025 17:36:10 (git 8f2b1c3)"
+  exit 0
+fi
 out=""; prev=""
 for a in "$@"; do if [ "$prev" = "--out" ]; then out="$a"; fi; prev="$a"; done
 sleep_s=1
@@ -76,7 +86,7 @@ FAKEAPT
   printf '1\n' > "$CLEANUP_DIR/fake_ctl"
   : > "$CLEANUP_DIR/fake_apptainer_exec.log"
   # 假 SIF: 32 字节引导头 + 偏移 32 处 SIF_MAGIC + 1MiB 填充 (GUI 校验魔数与尺寸)
-  python3 - "$CLEANUP_DIR/sif/diann-9.9.9.sif" <<'PYSIF'
+  python3 - "$CLEANUP_DIR/sif/image.sif" <<'PYSIF'
 import sys
 data = b"#!/usr/bin/env run-singularity\n"
 data += b"\0" * (32 - len(data))
@@ -91,11 +101,10 @@ PYSIF
 EXEC_BACKEND <- "$E2E_BACKEND"
 APPTAINER_PATHS <- c("$CLEANUP_DIR/bin")
 SIF_DIRS <- c("$CLEANUP_DIR/sif")
-DEFAULT_SIF <- "$CLEANUP_DIR/sif/diann-9.9.9.sif"
+DEFAULT_SIF <- "$CLEANUP_DIR/sif/image.sif"
 DATA_HOME <- "$CLEANUP_DIR/data"
 BASE_VOLUMES <- c(Data = "$CLEANUP_DIR/data", Out = "$CLEANUP_DIR/out")
 MAIL_PYTHON <- ""
-LOCAL_ALLOW_SHARED <- TRUE
 RETENTION_DAYS <- 7
 EOF
   export DIANN_GUI_CONFIG="$CLEANUP_DIR/config.R"

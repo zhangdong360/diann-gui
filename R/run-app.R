@@ -25,7 +25,7 @@ run_app <- function(port = NULL, host = "127.0.0.1",
                     config_file = NULL, app_only = FALSE) {
   diann_load_config(config_file)
 
-  # 执行后端 (v1.12): auto 检测 + 安全防护 (HPC 登录节点 / legacy 中央部署)。
+  # 执行后端 (v1.12): auto 检测 + 安全防护 (HPC 登录节点拒绝静默回退本地执行)。
   # error 时给出可操作报错并停止启动; warn 打印到控制台。
   backend_startup_check()
   binfo <- backend_info()
@@ -40,15 +40,13 @@ run_app <- function(port = NULL, host = "127.0.0.1",
   .cfg$APPTAINER_SELECTED <- apptainer_default(cfg_get("APPTAINER_CANDS"))
   .cfg$APPTAINER_MODULE <- tryCatch(apptainer_module_probe(), error = function(e) NULL)
 
-  # 启动期状态: 镜像扫描 / 参数速查 (ui 与 server 经 cfg_get 读取)
-  .cfg$sif_df <- scan_sif_images(cfg_get("SIF_DIRS"))
-  .cfg$sif_choices <- if (nrow(.cfg$sif_df)) {
-    labels <- sprintf("v%s · %s", .cfg$sif_df$ver, .cfg$sif_df$path)
-    setNames(.cfg$sif_df$path, labels)
-  } else character(0)
-  .cfg$sif_selected <- if (cfg_get("DEFAULT_SIF") %in% .cfg$sif_df$path) {
-    cfg_get("DEFAULT_SIF")
-  } else if (nrow(.cfg$sif_df)) .cfg$sif_df$path[1] else NULL
+  # 启动期状态: 镜像扫描 + 版本缓存合并 / 参数速查 (ui 与 server 经 cfg_get 读取)。
+  # v1.13: 扫描 SIF_DIRS 下所有 *.sif (文件名无关); 版本只来自容器识别缓存
+  # (sif_probe.rds), 启动不跑容器 — 识别由 UI 选中/按钮懒触发 (见 R/sif.R)。
+  .cfg$sif_df <- sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), sif_probe_load())
+  .cfg$sif_choices <- sif_choice_labels(.cfg$sif_df)
+  idx <- sif_default_index(.cfg$sif_df, cfg_get("DEFAULT_SIF"))
+  .cfg$sif_selected <- if (nrow(.cfg$sif_df)) .cfg$sif_df$path[idx] else NULL
   pd <- param_doc_path()
   .cfg$PARAM_DOC <- pd
   .cfg$param_ref <- if (nzchar(pd)) parse_param_doc(pd) else NULL
@@ -65,6 +63,9 @@ run_app <- function(port = NULL, host = "127.0.0.1",
   message(sprintf("DIA-NN GUI %s — 运行身份: %s (作业将以该身份执行)", GUI_VERSION, who))
   message(sprintf("执行后端: %s (%s)", backend_label(),
                   if (isTRUE(binfo$auto)) "自动检测" else "配置指定"))
+  n_sif <- nrow(.cfg$sif_df)
+  message(sprintf("SIF 镜像: %d 个 (已识别 %d 个)", n_sif,
+                  if (n_sif) sum(.cfg$sif_df$verified) else 0L))
   message(sprintf("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)"))
   message(sprintf("访问地址: http://%s:%s/", host, if (is.null(port)) "(随机)" else port))
   if (!is.null(port) && nzchar(Sys.getenv("SSH_CONNECTION")) && identical(host, "127.0.0.1")) {

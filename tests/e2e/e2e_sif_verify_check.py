@@ -109,7 +109,10 @@ def main():
         for needle in ["文件存在", "可读取", "SIF 镜像格式有效", "apptainer inspect 通过"]:
             assert needle in txt, f"深度验证缺步骤 {needle!r}: {txt!r}"
         assert "✗" not in txt, f"全绿路径出现失败项: {txt!r}"
-        print("[3] 快速 + 深度验证全绿 OK:", txt.replace("\n", " | ")[:200])
+        # v1.13: 深度验证解析到版本后写入识别缓存, 回显应为"已识别, 缓存"
+        info = d.find_element(By.ID, "sif_version_info").text
+        assert "已识别" in info, f"深度验证后版本回显未识别: {info!r}"
+        print("[3] 快速 + 深度验证全绿 OK:", txt.replace("\n", " | ")[:200], "| 回显:", info[:60])
 
         # ---- 4. 浏览选择回填 + 验证 ----
         if args.volume and args.dirname:

@@ -7,7 +7,6 @@
 #
 # 配置发现顺序 (diann.gui::run_app()): 环境变量 DIANN_GUI_CONFIG 指定的文件
 # → ~/.diann_gui/config.R → <工作目录>/diann_gui_config.R
-# → (仅历史 shiny-server 部署, 工作目录有 app.R 时) <工作目录>/config.R。
 #
 # 默认即"用户家目录模式", 零配置可用: 数据/输出根 = 你的家目录,
 # 作业以当前用户提交, 文件权限与你自己跑命令行完全一致。
@@ -19,6 +18,8 @@
 
 # 递归扫描 diann*.sif 的目录 (建议: 管理员把镜像统一放在 /share/app/tools/diann/
 # 这类全员可读的共享位)。GUI 的版本下拉由扫描结果生成。
+# v1.13: 扫描目录下全部 *.sif (文件名无关), 版本由容器内实测识别;
+# 构建方法见 README「构建 DIA-NN 容器镜像」章节。
 # SIF_DIRS <- c("/share/app/tools/diann")
 
 # 默认选中的镜像。留空 = 扫描到的第一个。
@@ -48,11 +49,6 @@
 # 但 PATH 上没有 sbatch 时, 拒绝静默回退到本地执行 —— 防止在 HPC 登录节点上直接
 # 跑计算任务。确认本机就是单机服务器后可设为 FALSE 关闭该保护。
 # LOCAL_REQUIRE_EXCLUSIVE_HOST <- TRUE
-
-# legacy 中央 shiny-server 部署 (所有用户共用一个 GUI 运行账号) 是否允许本地执行:
-# FALSE (默认) = 拒绝 (共享账号执行会破坏每用户隔离), TRUE 才放行并给出警告。
-# 每用户自托管 (library(diann.gui) + run_app()) 不需要改这项。
-# LOCAL_ALLOW_SHARED <- FALSE
 
 # ---- 本地执行参数 (EXEC_BACKEND = "local") --------------------------------
 
@@ -104,18 +100,14 @@
 # 工作目录——数据在别处 (如共享盘 /share) 时需要加。
 # BIND_PATHS <- c("/share")
 
-# ---- 共享输出目录 (仅多账户共读同一目录时需要) -------------------------------
-
-# GUI 创建的输出目录逐层 chmod 2770 + chgrp 到该组 (自上而下修到 DATA_HOME)。
-# 单人自托管: 保持为空即可 (完全关闭组修复)。仅当同事要用**另一个账号**读你的
-# 输出目录时才设置, 并确保双方共享该 Unix 组。
-# SHARED_GROUP <- ""
+# ---- 共享输出目录 -----------------------------------------------------------
+# v1.13: SHARED_GROUP 组修复已随 legacy 中央部署一并删除。同事用另一个账号读你的
+# 输出目录时, 请用标准 Unix 组/ACL 自行授权 (如 chmod -R g+rX 或 setfacl)。
 
 # ---- 邮件通知 (可选) -------------------------------------------------------
 
 # 发送完成邮件用的 python3。留空 = 自动探测 PATH 上的 python3。
 # 凭据文件搜索链: 环境变量 DIANN_GUI_MAIL_CONF → ~/.diann_gui/mail_config.txt
-# (历史 shiny-server 部署目录有 app.R 时才会读同目录 mail_config.txt;
-#  模板见 inst/config/mail_config.example.txt)。
+# (模板见 inst/config/mail_config.example.txt)。
 # 都不存在时邮件功能整体停用 (不影响其他功能)。
 # MAIL_PYTHON <- "/usr/bin/python3"

@@ -8,43 +8,39 @@ cmds_all <- c(sbatch = "/usr/bin/sbatch", squeue = "/usr/bin/squeue", sacct = "/
 cmds_none <- stats::setNames(rep("", length(cmds_all)), names(cmds_all))
 
 test_that("detect_exec_backend: auto + sbatch -> slurm; 无 Slurm -> local", {
-  d <- detect_exec_backend(request = "auto", cmds = cmds_all, slurm_traces = FALSE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "auto", cmds = cmds_all, slurm_traces = FALSE)
   expect_equal(d$backend, "slurm")
   expect_true(d$auto)
   expect_length(d$error, 0)
-  d2 <- detect_exec_backend(request = "auto", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  d2 <- detect_exec_backend(request = "auto", cmds = cmds_none, slurm_traces = FALSE)
   expect_equal(d2$backend, "local")
   expect_length(d2$error, 0)
 })
 
 test_that("detect_exec_backend: auto + Slurm 痕迹但 sbatch 缺失 -> 默认拒绝 (HPC 登录节点保护)", {
   cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
-  d <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE)
   expect_equal(d$backend, "local")
   expect_true(length(d$error) >= 1)
   expect_match(d$error[1], "拒绝", fixed = TRUE)
   d2 <- detect_exec_backend(request = "auto", cmds = cmds, slurm_traces = TRUE,
-                            legacy_central = FALSE, require_exclusive = FALSE)
+                            require_exclusive = FALSE)
   expect_length(d2$error, 0)
   expect_true(length(d2$warn) >= 1)
 })
 
-test_that("detect_exec_backend: 显式 local 放行但 warn; legacy 中央部署默认拒绝", {
+test_that("detect_exec_backend: 显式 local 放行但 warn (legacy 中央部署拒绝已随 v1.13 删除)", {
   cmds <- cmds_none; cmds[["squeue"]] <- "/usr/bin/squeue"
-  d <- detect_exec_backend(request = "local", cmds = cmds, slurm_traces = TRUE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "local", cmds = cmds, slurm_traces = TRUE)
   expect_equal(d$backend, "local")
   expect_length(d$error, 0)
   expect_true(length(d$warn) >= 1)
-  dl <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE, legacy_central = TRUE)
-  expect_true(length(dl$error) >= 1)
-  dl2 <- detect_exec_backend(request = "local", cmds = cmds_none, slurm_traces = FALSE,
-                             legacy_central = TRUE, allow_shared = TRUE)
-  expect_length(dl2$error, 0)
-  expect_true(length(dl2$warn) >= 1)
+  # v1.13: 不再有 legacy_central/allow_shared 参数
+  expect_false("legacy_central" %in% names(formals(detect_exec_backend)))
 })
 
 test_that("detect_exec_backend: 显式 slurm 但无 sbatch -> 保留 slurm 并 warn", {
-  d <- detect_exec_backend(request = "slurm", cmds = cmds_none, slurm_traces = FALSE, legacy_central = FALSE)
+  d <- detect_exec_backend(request = "slurm", cmds = cmds_none, slurm_traces = FALSE)
   expect_equal(d$backend, "slurm")
   expect_true(length(d$warn) >= 1)
   expect_length(d$error, 0)
@@ -191,4 +187,96 @@ test_that("local: PID 复用防护 (starttime 不匹配 -> 判死)", {
   rec$pid_start <- as.numeric(ps) + 12345
   expect_false(local_job_alive(rec))
   poll_local_status(p, res$job_id)  # 等真正结束, 避免遗留进程
+})
+
+# ---------- v1.13 WP4: 本地并发 ETA / RDS/seq 损坏恢复 ----------
+
+# 快照-恢复本地状态 (注入测试记录后还原, 不污染其它用例)
+snapshot_local_state <- function() {
+  jf <- local_jobs_file(); sf <- local_seq_file()
+  list(jf = if (file.exists(jf)) readRDS(jf) else NULL,
+       sf = if (file.exists(sf)) paste(readLines(sf, warn = FALSE), collapse = "\n") else NULL,
+       jf_path = jf, sf_path = sf)
+}
+restore_local_state <- function(snap) {
+  if (is.null(snap$jf)) unlink(snap$jf_path) else saveRDS(snap$jf, snap$jf_path)
+  if (is.null(snap$sf)) unlink(snap$sf_path) else writeLines(snap$sf, snap$sf_path)
+  # 清理损坏备份与告警
+  unlink(Sys.glob(paste0(snap$jf_path, ".corrupt-*")))
+  unlink(Sys.glob(paste0(snap$sf_path, ".corrupt-*")))
+  try(diann.gui::set_core_const("LOCAL_JOBS_WARN", NULL), silent = TRUE)
+}
+
+test_that("local_next_slot_info: 有时限给 ETA, 无时限明示未知, 多作业取最早", {
+  snap <- snapshot_local_state(); on.exit(restore_local_state(snap), add = TRUE)
+  now <- as.numeric(Sys.time())
+  rec <- function(id, ts, se = now) {
+    list(jobid = as.character(id), script_path = "", log_out = "", pid = NA_integer_,
+         submitted_epoch = se, time_sec = ts, backend = "local")
+  }
+  local_jobs_save(list(recs = list(rec(900001L, 60), rec(900002L, 120))))
+  s1 <- local_next_slot_info()
+  expect_equal(s1$n, 2L)
+  expect_false(s1$unknown_limit)
+  expect_equal(s1$earliest_job, "900001")            # 取最早
+  expect_lt(abs(s1$eta - (now + 60)), 5)
+
+  local_jobs_save(list(recs = list(rec(900003L, 0))))   # 无时限
+  s2 <- local_next_slot_info()
+  expect_equal(s2$n, 1L)
+  expect_true(s2$unknown_limit)
+  expect_true(is.na(s2$eta))
+  expect_match(s2$detail, "未设时限")
+
+  local_jobs_save(list(recs = list()))                   # 空表
+  s3 <- local_next_slot_info()
+  expect_equal(s3$n, 0L)
+})
+
+test_that("RDS 损坏: 备份 + 告警一次性 + 返回空, 不崩", {
+  snap <- snapshot_local_state(); on.exit(restore_local_state(snap), add = TRUE)
+  jf <- local_jobs_file()
+  writeLines("this is not an RDS file", jf)
+  x <- local_jobs_load()
+  expect_identical(x$recs, list())                       # 返回空表
+  expect_true(length(Sys.glob(paste0(jf, ".corrupt-*"))) == 1)  # 已备份
+  expect_true(nzchar(cfg_get("LOCAL_JOBS_WARN") %||% ""))       # 一次性告警已设置
+  expect_match(cfg_get("LOCAL_JOBS_WARN"), "ps -ef | grep local_runner")
+  expect_false(file.exists(jf))                          # 原文件已改名
+  x2 <- local_jobs_load()                                # 再次加载不重复告警/备份
+  expect_identical(x2$recs, list())
+
+  st <- local_jobs_status()                              # doctor 只读检查
+  expect_true(st$ok)                                     # 文件已不存在 -> ok
+  # 重新放一个坏文件: status 应报不可解析 (且不改文件)
+  writeLines("garbage again", jf)
+  st2 <- local_jobs_status()
+  expect_false(st2$ok)
+  expect_true(file.exists(jf))                           # 只读: 未动文件
+})
+
+test_that("坏记录逐条校验: 无 jobid 的记录被丢弃", {
+  snap <- snapshot_local_state(); on.exit(restore_local_state(snap), add = TRUE)
+  jf <- local_jobs_file()
+  saveRDS(list(recs = list(list(jobid = "900010", script_path = ""),
+                           list(script_path = "no-id"), "not-a-list")), jf)
+  x <- local_jobs_load()
+  expect_length(x$recs, 1L)
+  expect_equal(as.character(x$recs[[1]]$jobid), "900010")
+})
+
+test_that("seq 损坏/落后: 自愈为 max(existing)+1, 不撞号", {
+  snap <- snapshot_local_state(); on.exit(restore_local_state(snap), add = TRUE)
+  # 现有序列号 (可能是初始 1000000 或更高)
+  cur <- if (file.exists(snap$sf_path)) {
+    v <- suppressWarnings(as.integer(readLines(snap$sf_path, warn = FALSE)[1])); if (is.na(v)) 1000000L else v
+  } else 1000000L
+  # 注入一条 jobid 高于序列的记录 (模拟序列文件落后/损坏)
+  local_jobs_save(list(recs = list(list(jobid = as.character(cur + 50L), script_path = "",
+                                        log_out = "", pid = NA_integer_,
+                                        submitted_epoch = 0, time_sec = 0, backend = "local"))))
+  writeLines("garbage", snap$sf_path)                    # 序列文件损坏
+  nid <- local_seq_next()
+  expect_equal(nid, cur + 51L)                           # max(existing)+1, 不撞号
+  expect_true(length(Sys.glob(paste0(snap$sf_path, ".corrupt-*"))) >= 1)
 })

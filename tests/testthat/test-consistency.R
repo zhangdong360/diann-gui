@@ -96,11 +96,20 @@ test_that("apptainer/覆盖层的新 inputId 在 ui.R 与 server.R 中成对出�
   srv_src <- paste(readLines(file.path(PROJECT_ROOT, "R", "server.R"), warn = FALSE), collapse = "\n")
   ids <- c("apptainer_version", "refresh_apptainer", "use_custom_apptainer",
            "custom_apptainer", "verify_apptainer", "apptainer_display",
-           "apptainer_verify_result", "use_imported_raw_dir")
+           "apptainer_verify_result", "use_imported_raw_dir",
+           # v1.13: SIF 识别流 + 模式 banner + 本地状态告警 (banner 为静态 DOM, 只查 ui)
+           "sif_identify_all", "sif_version_info", "local_state_note")
   for (id in ids) {
     expect_true(grepl(id, ui_src, fixed = TRUE), info = paste("ui.R 缺少", id))
     expect_true(grepl(id, srv_src, fixed = TRUE), info = paste("server.R 缺少", id))
   }
+  # 静态 DOM id (e2e 按 DOM 断言, server 无需引用): 必须出现在 ui.R 且带模式文案
+  ui_all <- paste(readLines(file.path(PROJECT_ROOT, "R", "ui.R"), warn = FALSE), collapse = "\n")
+  for (id in c("backend_banner", "backend_banner_monitor")) {
+    expect_true(grepl(id, ui_all, fixed = TRUE), info = paste("ui.R 缺少", id))
+  }
+  expect_true(grepl("当前执行后端：本地单机", ui_all, fixed = TRUE))
+  expect_true(grepl("当前执行后端：Slurm 集群", ui_all, fixed = TRUE))
 })
 
 test_that("apptainer 选项写入 params_ready 与脚本模板", {

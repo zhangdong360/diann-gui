@@ -30,13 +30,10 @@ exec_backend_request <- function() {
 #   request           : "auto" / "slurm" / "local"
 #   cmds              : 命名字符向量 name -> 绝对路径 (""=不存在); NULL 时用 Sys.which
 #   slurm_traces      : 是否检测到 Slurm 痕迹; NULL 时用 cmds + /etc/slurm* 推断
-#   legacy_central    : 是否 legacy 中央 shiny-server 部署; NULL 时按站点标记/配置推断
 #   require_exclusive : auto+无 sbatch+有痕迹时是否拒绝本地执行 (默认 TRUE)
-#   allow_shared      : legacy 部署下是否允许本地执行 (默认 FALSE)
-# 返回 list(request, backend, auto, slurm_available, traces, legacy_central, warn, error)
+# 返回 list(request, backend, auto, slurm_available, traces, warn, error)
 detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL,
-                                legacy_central = NULL, require_exclusive = TRUE,
-                                allow_shared = FALSE) {
+                                require_exclusive = TRUE) {
   req <- tolower(trimws(as.character(request %||% exec_backend_request())[1]))
   if (!req %in% c("auto", "slurm", "local")) {
     stop(sprintf("EXEC_BACKEND 必须是 auto|slurm|local, 当前: %s", req), call. = FALSE)
@@ -56,14 +53,9 @@ detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL
       any(dir.exists(c("/etc/slurm", "/etc/slurm-llnl"))) ||
       nzchar(Sys.getenv("SLURM_CONF", unset = ""))
   }
-  if (is.null(legacy_central)) {
-    legacy_central <- nzchar(cfg_get("SHARED_GROUP") %||% "") ||
-      (file.exists(file.path(getwd(), "app.R")) && file.exists(file.path(getwd(), "config.R")))
-  }
   sbatch_ok <- cmd_ok("sbatch")
   out <- list(request = req, backend = NA_character_, auto = identical(req, "auto"),
               slurm_available = sbatch_ok, traces = isTRUE(slurm_traces),
-              legacy_central = isTRUE(legacy_central),
               warn = character(0), error = character(0))
   warns <- character(0)
   errs <- character(0)
@@ -103,19 +95,6 @@ detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL
     }
   }
 
-  if (identical(out$backend, "local") && isTRUE(legacy_central)) {
-    if (isTRUE(allow_shared)) {
-      warns <- c(warns, paste0(
-        "legacy 中央 shiny-server 部署 + 本地执行: 所有作业都会以 GUI 运行账号执行, ",
-        "无法按用户隔离/记账 (LOCAL_ALLOW_SHARED=TRUE 已显式放行)。"))
-    } else {
-      errs <- c(errs, paste0(
-        "legacy 中央 shiny-server 部署 (站点目录有 app.R+config.R, 或配置了 SHARED_GROUP) ",
-        "不支持本地执行: 所有作业会以共享运行账号执行, 破坏每用户隔离。\n",
-        "请改用 Slurm 后端, 或改为每用户自托管; 确需启用请设置 LOCAL_ALLOW_SHARED <- TRUE。"))
-    }
-  }
-
   out$warn <- warns
   out$error <- errs
   out
@@ -128,10 +107,9 @@ backend_info <- function(refresh = FALSE) {
   info <- tryCatch(
     detect_exec_backend(
       request = exec_backend_request(),
-      require_exclusive = isTRUE(cfg_get("LOCAL_REQUIRE_EXCLUSIVE_HOST") %||% TRUE),
-      allow_shared = isTRUE(cfg_get("LOCAL_ALLOW_SHARED") %||% FALSE)),
+      require_exclusive = isTRUE(cfg_get("LOCAL_REQUIRE_EXCLUSIVE_HOST") %||% TRUE)),
     error = function(e) list(request = "auto", backend = "local", auto = TRUE,
-                             slurm_available = FALSE, traces = FALSE, legacy_central = FALSE,
+                             slurm_available = FALSE, traces = FALSE,
                              warn = conditionMessage(e), error = character(0)))
   try(set_core_const("EXEC_BACKEND_INFO", info), silent = TRUE)
   try(set_core_const("EXEC_BACKEND_RESOLVED", info$backend), silent = TRUE)

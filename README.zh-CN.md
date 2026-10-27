@@ -42,7 +42,7 @@ diann.gui::run_app()
 - **RStudio 的 "Run App" 按钮 / `shiny::runApp()`**：仓库根保留了一个可选的
   `app.R` shim（`diann.gui::run_app(app_only = TRUE)`），两种启动方式都继续可用；
   日常使用不需要它，`diann.gui::run_app()` 就是入口。
-- **嵌入 / 历史 shiny-server**：`run_app(app_only = TRUE)` 只返回 app 对象，不启动服务。
+- **嵌入 / 自定义启动器**：`run_app(app_only = TRUE)` 只返回 app 对象，不启动服务。
 - **每用户配置**：`diann.gui::init_config()` 生成 `~/.diann_gui/config.R`
   （自动探测执行后端 `slurm`/`local`，以及 Slurm 分区、apptainer 候选与常见
   `diann*.sif` 目录）；环境变量 `DIANN_GUI_CONFIG` 指定的文件同样有效，
@@ -66,8 +66,7 @@ watcher 的 pid/日志，以及 `~/.diann_gui/` 下的 apptainer 探测缓存。
   可用环境变量 `DIANN_GUI_EXEC_BACKEND` 覆盖。`auto` 在 PATH 上有 `sbatch` 时用
   Slurm（与 v1.11 行为一致），没有则在本机运行。两种后端使用**同一套**生成的
   DIA-NN 命令与**同一个** `.sif` 镜像——只是执行器不同。安全阀：`auto` 在检测到
-  Slurm 痕迹但没有 `sbatch` 时拒绝回退本地（保护 HPC 登录节点）；legacy 中央
-  shiny-server 部署默认拒绝本地执行。
+  Slurm 痕迹但没有 `sbatch` 时拒绝回退本地（保护 HPC 登录节点）。
 - **apptainer 运行环境选择** —— 自动识别 `apptainer`/`singularity`（PATH、
   `APPTAINER_PATHS`、常见安装位置、conda 环境），逐个解析版本后像 DIA-NN 版本
   下拉一样列入候选；一个都没识别到时自动打开手动路径输入，可「识别并验证」。
@@ -125,7 +124,7 @@ flowchart LR
 
 | 配置项 | 用途 | 默认值 |
 |---|---|---|
-| `SIF_DIRS` | 递归扫描 `diann*.sif` 的目录 | *(未设置——需配置，或在 GUI 里手输镜像路径)* |
+| `SIF_DIRS` | 递归扫描**全部 `*.sif`**（文件名无关）的目录 | *(未设置——需配置，或在 GUI 里手输镜像路径)* |
 | `DEFAULT_SIF` | 下拉框默认选中的镜像 | 扫描到的第一个 |
 | `DATA_HOME` | 文件浏览器可见的数据树根目录 | 家目录 |
 | `BASE_VOLUMES` | 文件浏览器暴露的命名根（也是导入路径的安全边界） | `c(Data = DATA_HOME)` |
@@ -136,10 +135,8 @@ flowchart LR
 | `APPTAINER_STRICT_CHECK` | `TRUE` = GUI 节点跑不动所选 apptainer 时阻断提交 | `FALSE`（仅警告） |
 | `APPTAINER_MODULE_FALLBACK` | 找不到 apptainer 时加载的环境模块 | *(空，不加载)* |
 | `BIND_PATHS` | 绑定进容器的宿主路径（`--bind`） | *(空)* |
-| `SHARED_GROUP` | legacy 共享输出组修复（多账号共享实例） | *(空，关闭)* |
 | `EXEC_BACKEND` | 执行后端：`"auto"`（自动检测）/ `"slurm"` / `"local"` | `"auto"` |
 | `LOCAL_REQUIRE_EXCLUSIVE_HOST` | `auto` 模式安全阀：检测到 Slurm 痕迹但没有 `sbatch` 时拒绝回退本地（防 HPC 登录节点误跑） | `TRUE` |
-| `LOCAL_ALLOW_SHARED` | legacy 中央 shiny-server 部署下是否允许本地执行（共享账号） | `FALSE` |
 | `LOCAL_NICE` | 本地作业进程的 `nice` 值 | `10` |
 | `LOCAL_TIMEOUT_GRACE` | 本地作业到时限后 SIGTERM→SIGKILL 的等待秒数 | `30` |
 | `LOCAL_MAX_JOBS` | 本地并发上限：`0`=不限；`>0` 达到后阻断新提交（不排队） | `0` |
@@ -161,6 +158,33 @@ GUI 第一个面板「1. apptainer 运行环境」启动时自动填充：
 起）。`singularity 2.x` 能执行 `--version`，但只认 squashfs/ext3 的 `.simg`，对 `.sif`
 会报 `Unknown image format/type`；候选下拉/自检面板/验证/提交前校验都会标注
 「⚠ 不支持 SIF」，提交时直接阻断。
+
+## 构建 DIA-NN 容器镜像（`.sif`）
+
+GUI 不分发 DIA-NN 二进制、镜像或构建脚本——**每个使用者按 DIA-NN 官方说明自行
+构建 `.sif`**（学术使用免费；二进制/镜像不允许再分发——见维护者在
+[DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) 的说明）。
+官方渠道（构建步骤以官方说明为准，本文档不复述）：
+
+- 官方仓库 README（https://github.com/vdemichev/DiaNN ）——release 附带镜像构建
+  脚本，README 说明如何用 apptainer/singularity 把 Docker 镜像转成 `.sif`；
+- [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) ——社区
+  维护的 Dockerfile 讨论。
+
+**本项目对镜像的硬性要求**（这是我们唯一的契约）：
+
+1. DIA-NN 二进制目录必须在**容器内 `PATH`** 上——GUI 以裸命令 `diann-linux`
+   调用，缺 PATH 时作业报"容器内找不到 diann-linux"；
+2. 构建后自验：`apptainer exec diann-<版本>.sif diann-linux --version` 必须输出
+   `DIA-NN <版本> …`；
+3. `.sif` 放到计算节点可见的共享存储并将其目录加入 `SIF_DIRS`——**文件名任意**：
+   v1.13 起 GUI 扫描全部 `*.sif`、在容器内实测真实版本（按 size+mtime 缓存）、
+   按数值排序（2.10.0 在 2.9.1 之前）并默认选中已识别的最高版本。
+
+运行时注意：apptainer 需以 root 安装（`.deb`）或使用管理员构建的 conda 环境；
+GUI 节点与计算节点都要能看到。计算节点看不到时把路径配进 `APPTAINER_PATHS`——
+生成的作业脚本已内置 `APPTAINER_PATHS` → `PATH` → `module load` → `singularity`
+回退链。**不要分发**构建出的 `.sif`（或任何 DIA-NN 二进制）；每人自行构建。
 
 ## 单机模式（无 Slurm）
 
@@ -205,8 +229,6 @@ EXEC_BACKEND <- "local"
 # Sys.setenv(DIANN_GUI_EXEC_BACKEND = "local")
 ```
 
-legacy 中央 shiny-server 部署默认拒绝本地执行（所有作业都会以共享运行账号执行）；
-只有确认接受该代价时才设 `LOCAL_ALLOW_SHARED <- TRUE`。
 
 本版不做：原生二进制（不用容器）、云执行器、Windows、PBS/LSF。本地模式仅支持
 Linux，且和 Slurm 模式一样仍然需要 Apptainer/Singularity 与 `.sif` 镜像。
@@ -261,8 +283,9 @@ v1.11 及更早的旧注册表按 Slurm 记录读取。
   新手图文教程，单文件完全离线可用。
 - [`docs/DIANN_GUI_技术手册.md`](docs/DIANN_GUI_技术手册.md) ——
   完整技术手册：架构、控件详解、标准工作流、通知机制、故障排查。
-- [`inst/docs/DIANN_param_reference.md`](inst/docs/DIANN_param_reference.md) ——
-  应用内参数速查页的数据源。
+- **应用内参数速查**：v1.13 起 DIA-NN 文档快照不再随包分发（版权归 DIA-NN
+  作者、条款不允许再分发）。如需启用应用内参数速查，请自行从官方仓库获取
+  命令行参考，存为工作目录下的 `DIANN_param_reference.md`——GUI 会自动读取。
 
 ## 测试
 
@@ -311,20 +334,14 @@ crontab 示例（每月 1 日统计上月）：
 0 9 1 * *  Rscript -e 'diann.gui::usage_report(month = format(Sys.Date() - 1, "%Y-%m"), out_dir = "/path/to/reports")'
 ```
 
-## legacy：中央 shiny-server 部署（不推荐）
+## v1.13 已移除：legacy 中央 shiny-server 部署
 
-一个共享实例、所有作业以 shiny-server 的 `run_as` 用户运行——**没有用户隔离**，
-且所有用户共享同一份通知记录。该部署下本地执行默认被拒绝（所有作业都会以共享
-账号运行）；`LOCAL_ALLOW_SHARED <- TRUE` 才放行并给出警告。仅在无法每用户安装时
-使用。入口：
+v1.13 删除了 legacy 中央 shiny-server 共享账号部署（一个共享实例、所有作业以
+`run_as` 用户运行——没有用户隔离）。请改用每用户自托管：每个用户把包装进自己的
+库、在自己的 R 会话里运行 `diann.gui::run_app()`，作业以本人身份提交。同事需要
+读取输出目录时，用标准 Unix 组/ACL 授权即可。确需中央部署请继续使用 v1.12 或
+`central-shiny-server` 分支（保留作历史存档）。
 
-```r
-# 站点目录下的 app.R（同目录需有 config.R）
-diann.gui::run_app(app_only = TRUE)
-```
-
-站点配置示例（已脱敏）见
-[`docs/legacy/shiny-server-config.example.R`](docs/legacy/shiny-server-config.example.R)。
 
 ## 许可证
 

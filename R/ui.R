@@ -25,8 +25,10 @@ sif_req_chain <- HTML(sprintf(paste0(
   "验证链: 文件存在/可读 → SIF 魔数 → 运行时版本 (<b>%s</b>) ",
   "→ apptainer inspect → 容器内启动 diann-linux。"), htmltools::htmlEscape(sif_min_txt)))
 ui <- dashboardPage(
-  dashboardHeader(title = span("DIA-NN 控制台", tags$small(GUI_VERSION),
-                               tags$small(sprintf(" · 执行后端: %s", backend_cn)))),
+  dashboardHeader(title = span(
+    "DIA-NN 控制台", tags$small(GUI_VERSION),
+    if (is_local) tags$span(class = "label label-success", "本地单机")
+    else tags$span(class = "label label-primary", "Slurm 集群"))),
   dashboardSidebar(
     sidebarMenu(
       menuItem("提交分析", tabName = "analysis", icon = icon("play-circle")),
@@ -40,6 +42,17 @@ ui <- dashboardPage(
     tabItems(
       # ==================== 提交分析 ====================
       tabItem(tabName = "analysis",
+        fluidRow(
+          column(12, div(id = "backend_banner", class = if (is_local) "alert alert-success" else "alert alert-info",
+            style = "margin: 0 0 10px 0; padding: 8px 12px;",
+            HTML(if (is_local) paste0(
+              "<b>当前执行后端：本地单机（无 Slurm）</b> — 作业在本 GUI 所在主机直接运行；",
+              "关闭浏览器不影响作业；日志为 <code>local-&lt;作业ID&gt;.out/.err</code>；",
+              "并发上限见 LOCAL_MAX_JOBS。")
+            else paste0(
+              "<b>当前执行后端：Slurm 集群</b> — 作业提交到队列，需排队；",
+              "日志为 <code>slurm-&lt;作业ID&gt;.out/.err</code>；进度在「任务队列」页查看。"))))
+        ),
         fluidRow(
           box(title = "1. apptainer 运行环境", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(4,
@@ -73,9 +86,9 @@ ui <- dashboardPage(
           box(title = "2. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(6,
                 selectInput("sif_version",
-                            sprintf("版本 (自动扫描 diann*.sif, 共 %d 个):", length(cfg_get("sif_choices"))),
+                            sprintf("镜像 (扫描 SIF_DIRS 下所有 *.sif, 文件名无关, 共 %d 个):", length(cfg_get("sif_choices"))),
                             choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected")),
-                helpText("不同版本通过不同 sif 镜像实现；若下拉为空请检查 config.R 中的 SIF_DIRS。"),
+                helpText("版本来自容器内实测 (选中未识别镜像会自动识别); 若下拉为空请检查 config.R 中的 SIF_DIRS。"),
                 checkboxInput("use_custom_sif", "浏览/手动指定其他镜像", FALSE),
                 conditionalPanel("input.use_custom_sif == 1",
                   shinyFilesButton("sif_pick", "选择 SIF 镜像文件", "在数据卷内选择 .sif 镜像 (单个)", multiple = FALSE),
@@ -85,10 +98,12 @@ ui <- dashboardPage(
               ),
               column(6,
                 tags$label("当前生效镜像:"), br(),
+                uiOutput("sif_version_info"),
                 verbatimTextOutput("sif_display"),
                 actionButton("verify_sif", "验证镜像可用性 (快速)", icon = icon("check-circle"), width = "100%",
                              style = "color:#fff; background-color:#00a65a; border-color:#008d4d"),
-                actionButton("verify_sif_deep", "深度验证 (容器内启动, 较慢)", icon = icon("microscope"), width = "100%"),
+                actionButton("verify_sif_deep", "识别版本并深度验证 (容器内启动, 较慢)", icon = icon("microscope"), width = "100%"),
+                actionButton("sif_identify_all", "识别所有未识别镜像", icon = icon("tasks"), width = "100%"),
                 helpText(sif_req_chain),
                 uiOutput("sif_verify_result")
               )
@@ -197,7 +212,8 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = "7. 命令预览与提交", status = "danger", solidHeader = TRUE, width = 12,
+          box(title = if (is_local) "7. 命令预览与提交 (本地执行)" else "7. 命令预览与提交 (Slurm 提交)",
+              status = "danger", solidHeader = TRUE, width = 12,
               fluidRow(
                 column(4,
                   textInput("notify_email", "邮箱通知 (可选):", placeholder = "someone@126.com, someone2@126.com"),
@@ -235,6 +251,18 @@ ui <- dashboardPage(
 
       # ==================== 任务队列 ====================
       tabItem(tabName = "monitor",
+        fluidRow(
+          column(12, div(id = "backend_banner_monitor",
+                         class = if (is_local) "alert alert-success" else "alert alert-info",
+                         style = "margin: 0 0 10px 0; padding: 8px 12px;",
+                         HTML(if (is_local) paste0(
+                           "<b>当前执行后端：本地单机（无 Slurm）</b> — 本地作业状态来自本机状态文件，",
+                           "无 Slurm 记账；日志为 <code>local-&lt;作业ID&gt;.out</code>。")
+                         else paste0(
+                           "<b>当前执行后端：Slurm 集群</b> — 队列/记账数据来自 squeue/sacct；",
+                           "日志为 <code>slurm-&lt;作业ID&gt;.out</code>。"))),
+                 uiOutput("local_state_note"))
+        ),
         if (!is_local) {
           fluidRow(
             box(title = "集群节点资源 (sinfo)", status = "info", solidHeader = TRUE, width = 12,
