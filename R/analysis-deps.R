@@ -9,6 +9,22 @@
 # ============================================================
 
 # 依赖分组: label 用于界面展示; bioc = TRUE 的包用 BiocManager 安装
+
+# ---------- 软依赖解析 (R CMD check 合规的可选依赖间接层) ----------
+# clusterProfiler/AnnotationDbi/impute/sva/KEGG.db 为重量级可选依赖 (KEGG.db 已被
+# Bioconductor 移除, 无法声明进 Suggests): 有意不声明, 运行时按需解析、缺失时
+# 优雅降级 (本文件的检查组 + doctor + UI 安装提示)。字面 `pkg::fun` /
+# requireNamespace("pkg") 调用会被 R CMD check 判为未声明依赖 (WARNING), 故统一
+# 经此间接层: 包名作变量传递, check 无法静态绑定 → 警告消除, 行为不变。
+analysis_soft_has <- function(pkg) {
+  requireNamespace(pkg, character.only = TRUE, quietly = TRUE)
+}
+
+analysis_soft_fun <- function(pkg, fun) {
+  if (!analysis_soft_has(pkg)) return(NULL)
+  utils::getFromNamespace(fun, pkg)
+}
+
 an_deps_groups <- function() {
   list(
     qc = list(

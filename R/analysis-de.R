@@ -104,7 +104,10 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
     p_lab  <- if (identical(p_adjust_method, "none")) "P" else "adj.P"
     y_lab  <- if (identical(p_adjust_method, "none")) "-log10(P value)" else "-log10(adjusted P value)"
     plots[["09_diff_volcano"]] <- new_plot(function() {
-      ggplot2::ggplot(vol_df, ggplot2::aes(x = logFC, y = -log10(adj.P.Val), colour = Type)) +
+      # 数据掩码裸名 (logFC/adj.P.Val/Type/Genes 是 vol_df/top_genes 的列):
+    # NULL 绑定惯用法向 codetools 声明, 渲染时列值照常遮蔽 (R CMD check 消 NOTE)
+    logFC <- adj.P.Val <- Type <- Genes <- Regulation <- Count <- Group <- log2Intensity <- NULL
+    ggplot2::ggplot(vol_df, ggplot2::aes(x = logFC, y = -log10(adj.P.Val), colour = Type)) +
         ggplot2::geom_point(size = 1.6, alpha = 0.7) +
         ggplot2::geom_hline(yintercept = -log10(pval_cutoff), linetype = "dashed", colour = "grey40") +
         ggplot2::geom_vline(xintercept = c(-logFC_cutoff, logFC_cutoff), linetype = "dashed",
@@ -155,6 +158,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
     cnt_df <- data.frame(Regulation = factor(c("Up", "Down", "NS"), levels = c("Up", "Down", "NS")),
                          Count = c(sig_up, sig_down, nrow(res) - nrow(sig)))
     plots[["11_diff_count_barplot"]] <- new_plot(function() {
+      Count <- Regulation <- NULL
       ggplot2::ggplot(cnt_df, ggplot2::aes(x = Regulation, y = Count, fill = Regulation)) +
         ggplot2::geom_col(width = 0.55, colour = "grey25", linewidth = 0.3) +
         ggplot2::geom_text(ggplot2::aes(label = Count), vjust = -0.4, size = 5, fontface = "bold") +
@@ -174,6 +178,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
                    log2Intensity = as.numeric(expr_imp[pr, ]))
       }))
       box_df$Protein <- factor(box_df$Protein, levels = unique(box_df$Protein))
+        Group <- log2Intensity <- NULL
       plots[["12_diff_top_protein_boxplot"]] <- new_plot(function() {
         ggplot2::ggplot(box_df, ggplot2::aes(x = Group, y = log2Intensity, fill = Group)) +
           ggplot2::geom_boxplot(width = 0.55, outlier.shape = NA, linewidth = 0.4) +

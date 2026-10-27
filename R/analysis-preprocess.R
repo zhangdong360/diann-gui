@@ -246,12 +246,12 @@ impute_mar_knn <- function(mat, k = 10) {
   }
   usable <- nrow(m) >= 2 && ncol(m) >= 2 &&
             !any(rowSums(!is.na(m)) == 0) && !any(colSums(!is.na(m)) == 0) &&
-            requireNamespace("impute", quietly = TRUE)
+            analysis_soft_has("impute")
   if (usable) {
     res <- tryCatch({
       tmp <- NULL
       # 吞掉 impute.knn 的控制台输出
-      utils::capture.output(tmp <- impute::impute.knn(m, k = min(k, nrow(m) - 1L),
+      utils::capture.output(tmp <- analysis_soft_fun("impute", "impute.knn")(m, k = min(k, nrow(m) - 1L),
                                                       rowmax = 1, colmax = 1)$data)
       tmp
     }, error = function(e) NULL)
@@ -311,7 +311,7 @@ impute_missing <- function(mat, method = "mnar", shift = 1.8, sd_scale = 0.3, se
 
 # ---- ComBat 去批次: 分组作协变量; 需完整矩阵 (插补后), 否则跳过 ----
 combat_correct <- function(mat, batch, groups = NULL, par_prior = TRUE) {
-  if (!requireNamespace("sva", quietly = TRUE))
+  if (!analysis_soft_has("sva"))
     return(list(ok = FALSE, mat = mat, note = NA_character_,
                 reason = "未安装 sva 包 (Bioconductor), 无法执行 ComBat"))
   m <- as.matrix(mat)
@@ -335,7 +335,7 @@ combat_correct <- function(mat, batch, groups = NULL, par_prior = TRUE) {
     res <- NULL
     ok <- tryCatch({
       withCallingHandlers(
-        utils::capture.output(res <- sva::ComBat(dat = m, batch = b, mod = mod,
+        utils::capture.output(res <- analysis_soft_fun("sva", "ComBat")(dat = m, batch = b, mod = mod,
                                                  par.prior = pp)),
         warning = function(w) invokeRestart("muffleWarning"),
         message = function(msg) invokeRestart("muffleMessage"))

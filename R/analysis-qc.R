@@ -5,12 +5,16 @@
 
 # 中位数归一化前后箱线图 (预处理页签与 QC 共用)
 median_norm_boxplot <- function(p) {
+  # aes 数据掩码裸名声明 (R CMD check 消 NOTE)
+  Group <- Sample <- Value <- NULL
   before <- as.matrix(p$expr_imp_raw %||% p$expr_imp)
   after  <- as.matrix(p$expr_imp)
   sn <- p$snames; grp <- p$groups; tgt <- p$median_target
   ax <- sample_axis_style(length(sn))
   rng <- range(c(before, after), na.rm = TRUE)
   one <- function(m, ttl) {
+    # aes 数据掩码裸名声明 (R CMD check 消 NOTE; 渲染时掩码列照常遮蔽)
+    Group <- Sample <- Value <- NULL
     d <- data.frame(Sample = factor(rep(sn, each = nrow(m)), levels = sn),
                     Group  = rep(grp, each = nrow(m)),
                     Value  = as.numeric(m))
@@ -36,6 +40,8 @@ median_norm_boxplot <- function(p) {
 # 缺失值分布概况 (辅助判断 MAR / MNAR): A 平均丰度 vs 缺失率, B 不同缺失率分箱的丰度分布
 # 输入取 expr_norm (log2、插补前、保留 NA), 丰度均为 log2 尺度
 missing_profile_plots <- function(p) {
+  # aes 数据掩码裸名声明 (R CMD check 消 NOTE)
+  Abundance <- Bin <- MissingRate <- NULL
   m <- as.matrix(p$expr_norm)
   if (!nrow(m) || !ncol(m)) return(NULL)
   rate  <- rowMeans(is.na(m))
@@ -56,6 +62,8 @@ missing_profile_plots <- function(p) {
                   x = "Mean log2 abundance", y = "Missing rate (%)") +
     theme_proteo()
   if (nrow(df) >= 20) {
+    # aes 数据掩码裸名声明 (R CMD check 消 NOTE; 渲染时掩码列照常遮蔽)
+    Abundance <- Bin <- MissingRate <- NULL
     pA <- pA + ggplot2::geom_smooth(method = "loess", formula = y ~ x, se = TRUE,
                                     colour = "#D9534F", fill = "#F3C0BE", linewidth = 0.7)
   }
@@ -88,6 +96,8 @@ missing_profile_plots <- function(p) {
 }
 
 qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
+  # aes 数据掩码裸名声明 (R CMD check 消 NOTE)
+  Detected <- Group <- MissingRate <- PC1 <- PC2 <- Sample <- CV <- CVpct <- NULL
   if (is.null(prep)) return(NULL)
   warnings <- character(0)
   add_warning <- function(m) warnings <<- c(warnings, m)
@@ -114,6 +124,8 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
 
   # ---- 6.1 蛋白/样本检出数 ----
   plots[["01_qc_detected_counts"]] <- new_plot(function() {
+    # aes 数据掩码裸名声明 (R CMD check 消 NOTE; 渲染时掩码列照常遮蔽)
+    Detected <- Group <- MissingRate <- PC1 <- PC2 <- Sample <- CV <- CVpct <- NULL
     p1a <- ggplot2::ggplot(data.frame(Sample = factor(p$snames, levels = p$snames),
                                       Group = p$groups, Detected = p$det_sample),
                            ggplot2::aes(x = Sample, y = Detected, fill = Group)) +
@@ -214,7 +226,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
 
     # ---- 6.5 样本层次聚类 ----
     hc   <- stats::hclust(stats::dist(t(expr_complete)), method = "complete")
-    dend <- as.dendrogram(hc)
+    dend <- stats::as.dendrogram(hc)
     plots[["05_qc_sample_clustering"]] <- new_plot(function() {
       plot(dend, main = "Hierarchical clustering of samples",
            xlab = "Sample", ylab = "Distance", cex.main = 1.2)

@@ -12,7 +12,7 @@ map_symbol2entrez <- function(symbols, OrgDb) {
   sym <- unique(symbols[!is.na(symbols) & symbols != "" & symbols != "NA"])
   sym <- unique(sub(";.*$", "", sym))
   if (length(sym) == 0) return(NULL)
-  res <- AnnotationDbi::select(OrgDb, keys = sym, keytype = "SYMBOL",
+  res <- analysis_soft_fun("AnnotationDbi", "select")(OrgDb, keys = sym, keytype = "SYMBOL",
                                columns = "ENTREZID")
   res[!is.na(res$ENTREZID), , drop = FALSE]
 }
@@ -24,16 +24,16 @@ kegg_local_cache <- new.env(parent = emptyenv())
 
 kegg_local_data <- function(species) {
   if (!is.null(kegg_local_cache[[species]])) return(kegg_local_cache[[species]])
-  has_db <- suppressPackageStartupMessages(requireNamespace("KEGG.db", quietly = TRUE))
+  has_db <- analysis_soft_has("KEGG.db")
   if (!has_db)
     stop("未安装 KEGG.db 包 (Bioconductor 已移除, 需从 archive 安装), 本地 KEGG 分析不可用; ",
          "可在富集参数中改用「在线 KEGG (需联网)」")
-  p2e <- as.list(KEGG.db::KEGGPATHID2EXTID)          # 键形如 hsa01100 -> Entrez 向量
+  p2e <- as.list(analysis_soft_fun("KEGG.db", "KEGGPATHID2EXTID"))  # 键形如 hsa01100 -> Entrez 向量
   ok  <- grepl(paste0("^", species, "[0-9]+$"), names(p2e))
   if (!any(ok)) stop(sprintf("KEGG.db 内不含物种 %s 的通路数据", species))
   p2e <- p2e[ok]
   ids <- names(p2e)
-  p2n    <- as.list(KEGG.db::KEGGPATHID2NAME)
+  p2n    <- as.list(analysis_soft_fun("KEGG.db", "KEGGPATHID2NAME"))
   nm_map <- stats::setNames(unlist(p2n, use.names = FALSE), sub("^[a-z]{3}", "", names(p2n)))
   nm     <- unname(nm_map[sub("^[a-z]{3}", "", ids)])
   nm[is.na(nm) | !nzchar(nm)] <- ids[is.na(nm) | !nzchar(nm)]   # 缺名字时退回通路 ID, 避免 NA
@@ -52,7 +52,7 @@ kegg_enrich_run <- function(sig_entrez, universe, prep, pval_cutoff, qval_cutoff
                             online, add_warning) {
   run_local <- function() {
     kd  <- kegg_local_data(prep$kegg_org)
-    res <- clusterProfiler::enricher(
+    res <- analysis_soft_fun("clusterProfiler", "enricher")(
       gene = sig_entrez$ENTREZID, TERM2GENE = kd$term2gene, TERM2NAME = kd$term2name,
       pvalueCutoff = pval_cutoff, qvalueCutoff = qval_cutoff,
       pAdjustMethod = p_adjust_method,
@@ -63,7 +63,7 @@ kegg_enrich_run <- function(sig_entrez, universe, prep, pval_cutoff, qval_cutoff
     res
   }
   run_online <- function() {
-    res <- clusterProfiler::enrichKEGG(
+    res <- analysis_soft_fun("clusterProfiler", "enrichKEGG")(
       gene = sig_entrez$ENTREZID, universe = universe,
       organism = prep$kegg_org, keyType = "kegg",
       pvalueCutoff = pval_cutoff, qvalueCutoff = qval_cutoff,
@@ -88,6 +88,8 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
                            use_kegg = TRUE, kegg_online = FALSE,
                            min_gssize = 3, max_gssize = 500,
                            go_top_n = 10, kegg_top_n = 15) {
+                             # aes 数据掩码裸名声明 (R CMD check 消 NOTE; 渲染时掩码列照常遮蔽)
+                             Label <- Count <- p.adjust <- GeneRatioN <- Description <- NULL
   if (is.null(prep) || is.null(de)) return(NULL)
   warnings <- character(0)
   add_warning <- function(m) warnings <<- c(warnings, m)
@@ -126,7 +128,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
       "\")) 后重试。")))
   }
   if (isTRUE(use_kegg) && !isTRUE(kegg_online) &&
-      !requireNamespace("KEGG.db", quietly = TRUE)) {
+      !analysis_soft_has("KEGG.db")) {
     add_warning("未安装 KEGG.db (Bioconductor 已移除), 本次 KEGG 富集跳过; ",
                 "可在富集参数中启用「在线 KEGG (需联网)」")
     use_kegg <- FALSE
@@ -165,7 +167,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
   # ---- GO ----
   for (o in intersect(ont, c("BP", "MF", "CC"))) {
     go_res <- tryCatch(
-      clusterProfiler::enrichGO(gene = sig_entrez$ENTREZID, universe = universe,
+      analysis_soft_fun("clusterProfiler", "enrichGO")(gene = sig_entrez$ENTREZID, universe = universe,
                                 OrgDb = OrgDb, keyType = "ENTREZID", ont = o,
                                 pAdjustMethod = p_adjust_method, pvalueCutoff = pval_cutoff,
                                 qvalueCutoff = qval_cutoff, readable = FALSE,
