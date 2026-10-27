@@ -247,13 +247,42 @@ local_pid_tree <- function() {
   out
 }
 
+local_sig_of <- function(sig) {
+  switch(sig, KILL = tools::SIGKILL, STOP = tools::SIGSTOP, tools::SIGTERM)
+}
+
+# 进程组 kill 的可移植实现。两条歧路都实测失败过:
+#   - system("kill -TERM -- -<pgid>"): /bin/sh 的 kill 内建在 dash (Ubuntu) 下
+#     对 "--"/负 pid 静默失败;
+#   - tools::pskill(-pgid): R 拒绝非正 pid, 返回 FALSE 不发信号。
+# 因此枚举 /proc, 对 pgrp == pgid 的活进程逐个正 pid pskill — 纯 R, 无外部依赖。
+local_kill_group <- function(pgid, sig = "TERM") {
+  pgid <- suppressWarnings(as.integer(pgid))
+  if (is.na(pgid) || pgid <= 0) return(invisible(0L))
+  signal <- local_sig_of(sig)
+  n <- 0L
+  for (d in list.files("/proc", pattern = "^[0-9]+$")) {
+    p <- suppressWarnings(as.integer(d))
+    if (is.na(p) || p <= 1) next
+    f <- local_proc_stat_fields(p)
+    if (length(f) >= 3 && identical(f[3], as.character(pgid)) &&
+        !identical(f[1], "Z")) {
+      sent <- try(tools::pskill(p, signal), silent = TRUE)
+      if (isTRUE(sent)) n <- n + 1L
+    }
+  }
+  invisible(n)
+}
+
 local_kill_tree <- function(pid, sig = "TERM", tree = NULL) {
   pid <- suppressWarnings(as.integer(pid))
   if (is.na(pid) || pid <= 1) return(invisible(FALSE))
   if (is.null(tree)) tree <- local_pid_tree()
   kids <- tree[[as.character(pid)]] %||% integer(0)
   for (k in kids) local_kill_tree(k, sig, tree)
-  try(system(sprintf("kill -%s %d 2>/dev/null", sig, pid)), silent = TRUE)
+  # tools::pskill 直发信号, 不经 /bin/sh: dash/busybox 的 kill 内建对 "--"/负 pid
+  # 支持不一, system("kill ...") 曾在 Ubuntu runner 上静默失败 (GUI 取消失效)
+  try(tools::pskill(pid, local_sig_of(sig)), silent = TRUE)
   invisible(TRUE)
 }
 
@@ -342,6 +371,9 @@ local_job_alive <- function(rec) {
   if (is.na(pid) || pid <= 0) return(FALSE)
   start <- local_proc_starttime(pid)
   if (is.na(start)) return(FALSE)
+  # 僵尸 (state Z) 已终止, 只是等父进程收尸 — 其 /proc 条目仍在且 cmdline 为空,
+  # 会让下面的检查误判为活; 对取消/判活语义僵尸就是死 (CI 实测)
+  if (identical(local_proc_stat_fields(pid)[1], "Z")) return(FALSE)
   ps <- rec$pid_start
   if (is.null(ps) || length(ps) != 1 || !is.finite(ps)) ps <- NA_real_
   if (!is.na(ps) && !isTRUE(all.equal(start, as.numeric(ps)))) return(FALSE)  # PID 复用
@@ -637,7 +669,7 @@ local_cancel <- function(job_id) {
   pid <- suppressWarnings(as.integer(rec$pid))
   pgid <- local_proc_pgid(pid)
   if (!is.na(pgid) && pgid == pid) {
-    try(system(sprintf("kill -TERM -- -%d 2>/dev/null", pid)), silent = TRUE)
+    local_kill_group(pgid, "TERM")
   } else {
     local_kill_tree(pid, "TERM")
   }
@@ -646,7 +678,7 @@ local_cancel <- function(job_id) {
     Sys.sleep(0.5)
   }
   if (!is.na(pgid) && pgid == pid) {
-    try(system(sprintf("kill -KILL -- -%d 2>/dev/null", pid)), silent = TRUE)
+    local_kill_group(pgid, "KILL")
   } else {
     local_kill_tree(pid, "KILL")
   }
