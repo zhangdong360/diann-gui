@@ -124,3 +124,46 @@ test_that("prep_run: 全缺失样本列硬阻断并点名样本", {
                                     impute_method = "mnar"))
   expect_false(anyNA(p2$expr_imp))
 })
+
+# ---------- v1.14.1: ComBat 数值回归 (此前无任何数值测试) ----------
+
+test_that("combat_correct: 批次效应去除且组间差异保留 (数值)", {
+  skip_if_not_installed("sva")
+  set.seed(7)
+  n_prot <- 200
+  grp   <- c(rep("A", 4), rep("B", 4))
+  batch <- c("b1", "b2", "b1", "b2", "b1", "b2", "b1", "b2")
+  base  <- 2 ^ stats::rnorm(n_prot, 20, 1)
+  eff   <- rep(1, n_prot); eff[seq_len(50)] <- 4   # B 组上调 log2FC=2
+  m <- sapply(seq_len(8), function(i) {
+    g <- if (grp[i] == "B") eff else 1
+    b <- if (batch[i] == "b2") 2 else 1             # 批次效应 log2FC=1 (加性)
+    base * g * b * 2 ^ stats::rnorm(n_prot, 0, 0.1)
+  })
+  ml <- log2(m)
+  res <- combat_correct(ml, batch, grp)
+  expect_true(res$ok)
+  out <- as.matrix(res$mat)
+  # ① 批次效应去除: 仅看 A 组 (组效应不受混杂), b2-b1 的逐蛋白差异中位数从 ~1 降到 ~0
+  iA <- grp == "A"
+  bef <- stats::median(apply(ml[, iA], 1, function(v) diff(tapply(v, batch[iA], mean))))
+  aft <- stats::median(apply(out[, iA], 1, function(v) diff(tapply(v, batch[iA], mean))))
+  expect_gt(abs(bef), 0.5)
+  expect_lt(abs(aft), 0.2)
+  # ② 组间效应保留: 设计效应蛋白 B-A 中位 log2FC 仍接近 2, 非效应蛋白接近 0
+  fc <- rowMeans(out[, grp == "B"]) - rowMeans(out[, grp == "A"])
+  expect_gt(stats::median(fc[seq_len(50)]), 1.5)
+  expect_lt(abs(stats::median(fc[51:n_prot])), 0.3)
+})
+
+test_that("combat_correct: <2 批次 / 含缺失 / 完全混淆 拒绝执行并给原因", {
+  skip_if_not_installed("sva")
+  m <- matrix(stats::rnorm(20), nrow = 5)
+  r1 <- combat_correct(m, rep("b1", 5), NULL)
+  expect_false(r1$ok); expect_match(r1$reason, "批次")
+  r2 <- combat_correct(`[<-`(m, 1, 1, value = NA), c("b1", "b2", "b1", "b2", "b1"), NULL)
+  expect_false(r2$ok); expect_match(r2$reason, "缺失")
+  r3 <- combat_correct(m, c("b1", "b1", "b1", "b1", "b2"),
+                       c("A", "A", "A", "A", "B"))   # 批次与分组完全混淆
+  expect_false(r3$ok); expect_match(r3$reason, "完全混杂")
+})

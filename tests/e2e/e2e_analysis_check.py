@@ -33,6 +33,11 @@ def wait_text_contains(drv, by, ident, needle, timeout=90):
                              if d.find_elements(by, ident) else ""))
 
 
+def _text(drv, ident):
+    els = drv.find_elements(By.ID, ident)
+    return els[0].text if els else ""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
@@ -72,6 +77,20 @@ def main():
         wait_text_contains(drv, By.ID, "analysis-infer_status", "自动推断成功")
         print("[e2e-analysis] 分组自动推断 OK")
 
+        # ---- 2.5 勾选富集模块 (v1.14.1: e2e 此前不开 ②⑤, 漏掉富集页 en 未定义回归) ----
+        for el in drv.find_elements(By.CSS_SELECTOR,
+                                    'input[name="analysis-modules"][value="enrich"]'):
+            if not el.is_selected():
+                drv.execute_script("arguments[0].click();", el)
+        time.sleep(1)
+
+        # ---- 2.7 ② 预处理页渲染 (处理明细 + 告警) ----
+        click_tab(drv, "② 预处理")
+        WebDriverWait(drv, 60).until(lambda d: _text(d, "analysis-prep_stats"))
+        prep_txt = _text(drv, "analysis-prep_stats")
+        assert "污染" in prep_txt or "蛋白" in prep_txt, f"预处理明细异常: {prep_txt[:120]}"
+        print("[e2e-analysis] ② 预处理渲染 OK")
+
         # ---- 3. QC 图渲染 (SVG img 出现) ----
         click_tab(drv, "③ QC 可视化")
         WebDriverWait(drv, 120).until(
@@ -83,6 +102,17 @@ def main():
                     .find_elements(By.CSS_SELECTOR, "img"))
         assert n_img >= 8, f"QC 图数量不足: {n_img}"
         print(f"[e2e-analysis] QC 图渲染 OK ({n_img} 张)")
+
+        # ---- 3.5 ⑤ 功能富集页: DE 成功状态下必须渲染提示或结果, 不得报错 ----
+        # (v1.14.1 回归: renderUI 引用未赋值的 en, 此状态下曾必然渲染 Shiny 错误面板)
+        click_tab(drv, "⑤ 功能富集")
+        WebDriverWait(drv, 60).until(lambda d: _text(d, "analysis-enrich_content"))
+        en_txt = _text(drv, "analysis-enrich_content")
+        assert "not found" not in en_txt and "找不到对象" not in en_txt, \
+            f"富集页渲染出 Shiny 错误: {en_txt[:200]}"
+        assert ("富集依赖缺失" in en_txt) or ("未勾选" in en_txt) or ("显著条目" in en_txt), \
+            f"富集页内容异常: {en_txt[:200]}"
+        print(f"[e2e-analysis] ⑤ 功能富集渲染 OK ({en_txt[:60].strip()}…)")
 
         # ---- 4. 生成报告 ----
         click_tab(drv, "⑥ 生成报告")
