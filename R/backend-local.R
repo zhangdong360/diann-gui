@@ -33,15 +33,21 @@ local_jobs_empty <- function() list(recs = list())
 
 # v1.13: 损坏不再静默返回空 — 备份 .corrupt-<ts> + 落状态日志 + 设置一次性 UI/doctor
 # 告警 (.cfg$LOCAL_JOBS_WARN) 后返回空表; 逐条记录校验, 坏记录丢弃并计数。
-local_jobs_note_corrupt <- function(f, why) {
+# rename_fn 可注入 (测试 copy 兜底分支; file.rename 不是命名空间绑定, 无法 mock)。
+local_jobs_note_corrupt <- function(f, why, rename_fn = file.rename) {
   stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   bak <- sprintf("%s.corrupt-%s", f, stamp)
-  ok <- file.rename(f, bak)
-  if (!ok) {  # 重名 .N; 再失败退化为 copy
+  ok <- rename_fn(f, bak)
+  if (!ok) {  # 重名 .N; 再失败退化为 copy + 删原件
     n <- 0L
     repeat { cand <- sprintf("%s.%d", bak, n); if (!file.exists(cand)) break; n <- n + 1L }
     ok <- try(file.copy(f, cand, overwrite = TRUE), silent = TRUE)
-    bak <- if (isTRUE(ok)) cand else "(备份失败)"
+    if (isTRUE(ok)) {
+      bak <- cand
+      # v1.14.1: copy 成功后删除损坏原件 — 此前原件留存, 每次轮询 (10s) 都会
+      # 重新检测损坏并再备一份 .corrupt-<ts>, 无上限累积
+      unlink(f, force = TRUE)
+    } else bak <- "(备份失败)"
   }
   logf <- file.path(local_state_dir(), "diann_gui_local_state.log")
   try(cat(sprintf("%s local_jobs_load: %s; 备份: %s\n",
@@ -121,6 +127,14 @@ local_seq_next <- function() {
     existing <- suppressWarnings(as.integer(vapply(
       local_jobs_load()$recs, function(r) as.character(r$jobid)[1], character(1))))
     existing <- existing[!is.na(existing)]
+    # v1.14.1: 注册表里的 local 记录一并计入 — 状态文件全丢 (损坏备份后为空) 且
+    # 序列文件同损时, 此前会从 1000001 重新发号, 撞历史作业 (误取消/误日志)。
+    # jobs_registry_load() 只读无锁, 在 local_with_lock 内调用安全。
+    reg <- tryCatch(jobs_registry_load(), error = function(e) NULL)
+    if (!is.null(reg) && nrow(reg) && "backend" %in% names(reg)) {
+      reg_local <- suppressWarnings(as.integer(reg$jobid[!is.na(reg$backend) & reg$backend == "local"]))
+      existing <- c(existing, reg_local[!is.na(reg_local)])
+    }
     mx <- if (length(existing)) max(existing) else 0L
     if (is.na(cur) || cur <= mx) {
       if (file.exists(f)) {
