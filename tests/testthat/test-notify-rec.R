@@ -104,7 +104,8 @@ test_that("diann_notify_tick(snapshot=): local 记录按 rc/产物合成成功�
   diann.gui::set_core_const("MAIL_PYTHON", mail_sh)
   expect_true(diann_notify_add(list(jobid = jid, to = "a@b.c", task = "L", out_dir = td,
                                     out_file = rep_ok, sif = "/x.sif", script_path = sp,
-                                    desc_file = "", backend = "local", log_out = lf)))
+                                    desc_file = "", backend = "local", log_out = lf,
+                                    ver = "2.7.0")))
 
   # 作业仍在队列里 (snapshot 注入) -> 本轮跳过, 不发信
   expect_false(isTRUE(diann_notify_tick(snapshot = list(squeue_map = list("1000301" = "RUNNING")))))
@@ -124,6 +125,9 @@ test_that("diann_notify_tick(snapshot=): local 记录按 rc/产物合成成功�
   expect_true("--status-label" %in% args)
   expect_true("成功" %in% args)
   expect_true("--rc" %in% args)
+  # v1.14.1: 容器实测版本经 --diann-ver 传给邮件脚本
+  expect_true("--diann-ver" %in% args)
+  expect_true("2.7.0" %in% args)
   # local 记录全程没有调用 Slurm 命令
   expect_false(file.exists(marker))
 })

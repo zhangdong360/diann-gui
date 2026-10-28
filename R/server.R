@@ -1201,7 +1201,8 @@ server <- function(input, output, session) {
         try(diann_notify_add(list(jobid = jid, to = p$notify_email, task = job_name,
                                   out_dir = p$out_dir, out_file = p$out_file, sif = p$sif,
                                   script_path = sh_path, desc_file = desc_path,
-                                  backend = backend, log_out = res$log_out)), silent = TRUE)
+                                  backend = backend, log_out = res$log_out,
+                                  ver = p$ver)), silent = TRUE)
         try(ensure_diann_watcher(), silent = TRUE)
       }
       showNotification(sprintf("✔ 提交成功, %s JobID: %s\n脚本: %s", backend_cn, jid, sh_path),

@@ -75,6 +75,26 @@ class SummaryTest(unittest.TestCase):
             self.assertNotIn("<script>", joined)
 
 
+class BuildHtmlTest(unittest.TestCase):
+    def _html(self, **kw):
+        a = ns(**kw)
+        return mail.build_html(a, [], [], {}, "")
+
+    def test_diann_ver_flag_rendered(self):
+        # v1.14.1: 容器实测版本经 --diann-ver 显示 (不再用文件名)
+        html = self._html(diann_ver="2.10.0", sif="/x/diann_latest.sif")
+        self.assertIn("2.10.0", html)
+        self.assertNotIn("diann_latest.sif", html)
+
+    def test_diann_ver_missing_falls_back_to_sif_basename(self):
+        html = self._html(diann_ver="", sif="/x/diann-2.7.0.sif")
+        self.assertIn("diann-2.7.0.sif", html)
+
+    def test_diann_ver_and_sif_both_missing(self):
+        html = self._html(diann_ver="", sif="")
+        self.assertIn("<td>-</td>", html)
+
+
 class StatusViewTest(unittest.TestCase):
     def test_labels(self):
         self.assertEqual(mail.status_view(ns(status_label="成功"))[1], "完成")

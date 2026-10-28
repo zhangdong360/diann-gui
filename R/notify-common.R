@@ -384,6 +384,9 @@ diann_notify_tick <- function(snapshot = NULL) {
               "--out-file", shQuote(r$out_file), "--sif", shQuote(r$sif),
               "--script", shQuote(r$script_path), "--desc-file", shQuote(r$desc_file),
               "--config", shQuote(cfg_get("MAIL_CONF")), "--strict")
+    # v1.14.1: 邮件「DIA-NN 版本」显示容器实测值 (旧记录无 ver 字段时脚本回退文件名)
+    verv <- as.character(r$ver %||% "")[1]
+    if (!is.na(verv) && nzchar(verv)) args <- c(args, "--diann-ver", shQuote(verv))
     if (!is.na(rc)) args <- c(args, "--rc", as.character(rc))
     if (!is.null(st)) {
       if (nzchar(st$state)) args <- c(args, "--state", shQuote(st$state))

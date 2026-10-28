@@ -216,6 +216,8 @@ def build_html(a, out_files_html, metrics_html, inputs, project_desc):
             inputs_rows.append('<tr><td style="background:#f5f5f5;"><b>%s</b></td><td>%s</td></tr>'
                                % (label, shown))
     icon, word, status_line, _ok = status_view(a)
+    # v1.14.1: 优先容器实测版本 (--diann-ver), 旧调用/旧记录回退 sif 文件名
+    ver = (a.diann_ver or "").strip()
     return HTML_TMPL.format(
         status_icon=icon,
         status_word=word,
@@ -225,7 +227,7 @@ def build_html(a, out_files_html, metrics_html, inputs, project_desc):
         elapsed_row=("" if a.elapsed is None else
                      '<tr><td style="background:#f5f5f5;"><b>耗时</b></td><td>%s</td></tr>'
                      % fmt_elapsed(a.elapsed)),
-        diann_ver=html.escape(os.path.basename(a.sif)) if a.sif else "-",
+        diann_ver=html.escape(ver if ver else (os.path.basename(a.sif) if a.sif else "-")),
         inputs_rows="".join(inputs_rows),
         out_dir=html.escape(str(a.out_dir or "-")),
         project_desc=html.escape(project_desc or "(未填写)"),
@@ -280,6 +282,8 @@ def main():
     ap.add_argument("--elapsed", type=int, default=None,
                     help="运行秒数 (未知时邮件省略耗时行)")
     ap.add_argument("--sif", default="")
+    ap.add_argument("--diann-ver", default="", dest="diann_ver",
+                    help="容器实测的 DIA-NN 版本 (v1.14.1 起 watcher 传入; 缺失时回退 sif 文件名)")
     ap.add_argument("--self-test", action="store_true", help="发一封简单测试邮件")
     ap.add_argument("--check", action="store_true", help="只测 SMTP 连通性, 不登录不发信")
     ap.add_argument("--strict", action="store_true", help="发送失败时以非零退出码结束 (供轮询方记录)")

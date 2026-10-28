@@ -149,8 +149,12 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     out[ok] <- ifelse(h > 0, sprintf("%d时%02d分%02d秒", h, m, sec), sprintf("%d分%02d秒", m, sec))
     out
   }
+  # v1.14.1: 逐作业表补「版本」列 (注册表 v2 起就记录容器实测版本, 月报此前一直没显示)
+  ver_col <- col_or_na(gui, "版本")
+  ver_col[is.na(ver_col) | !nzchar(ver_col)] <- "未识别"
   tab <- data.frame(
-    JobID = as.character(gui$jobid), 任务名 = as.character(gui$任务名), 状态 = gui$label,
+    JobID = as.character(gui$jobid), 任务名 = as.character(gui$任务名), 版本 = ver_col,
+    状态 = gui$label,
     后端 = ifelse(gui$backend == "local", "本地", "Slurm"),
     耗时 = fmt_elapsed(gui$elapsed_s), 提交时间 = as.character(gui$提交时间),
     邮箱 = ifelse(nzchar(gui$email), gui$email, "-"), stringsAsFactors = FALSE)
