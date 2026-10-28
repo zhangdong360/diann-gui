@@ -356,8 +356,14 @@ chmod 600 ~/.diann_gui/mail_config.txt
 - `smtp_port` `465` uses SSL, any other port uses STARTTLS (a failed STARTTLS
   aborts instead of sending credentials in clear text). Use an SMTP
   **authorization code**, not the login password.
-- When the file is absent the whole feature is dormant: no queueing, no
-  watcher daemon, and the submit form simply notes that mail is disabled.
+- `python3` must be on `PATH` (the sender script `mail_notify.py` needs it;
+  on WSL2/Ubuntu install with `sudo apt install python3`), or set `MAIL_PYTHON`
+  in `~/.diann_gui/config.R`. Missing either one disables the feature.
+- When disabled the app is **no longer silent** (v1.14.1): `run_app()` prints
+  the reason and setup command at startup, submitting with an email address
+  pops a warning notification, and the validation panel plus `doctor()` repeat
+  the hint. Credentials live in `~/.diann_gui/mail_config.txt`, not in
+  `config.R`.
 - Self-test: `python3 mail_notify.py --check` / `--self-test` (the script path is
   `system.file("python", "mail_notify.py", package = "diann.gui")`);
   `Rscript -e 'diann.gui::watch_daemon(once = TRUE)'` runs one watcher tick.

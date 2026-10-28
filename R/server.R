@@ -734,8 +734,11 @@ server <- function(input, output, session) {
     if (nz_str(p$notify_email)) {
       # perl=TRUE 必需: POSIX TRE 引擎不识别字符类内的 \s, 会把 [^@,\s] 当作排除字母 s, 含 s 的邮箱被误判
       if (grepl("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+(\\s*,\\s*[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+)*$", p$notify_email, perl = TRUE)) {
-        if (!file.exists(cfg_get("MAIL_CONF"))) {
-          warn <- c(warn, sprintf("ℹ 已填写邮箱, 但未找到邮件配置 %s, 将不会发送通知邮件 (参考 mail_config.example.txt)", cfg_get("MAIL_CONF")))
+        # v1.14.1: 门控改看 MAIL_ENABLED 等价条件 (mail_gate_info), 补上缺 python3
+        # 时也提示的盲区 (此前只查 MAIL_CONF 是否存在)
+        mg <- mail_gate_info()
+        if (!mg$enabled) {
+          warn <- c(warn, sprintf("ℹ 已填写邮箱, 但%s, 将不会发送通知邮件。%s", mg$reason, mg$hint))
         }
       } else {
         msgs <- c(msgs, "✗ 邮箱通知格式不正确 (多个邮箱用英文逗号分隔)")
@@ -1153,6 +1156,14 @@ server <- function(input, output, session) {
                             ver = p$ver, backend = backend, pid = res$pid,
                             log = res$log_out), silent = TRUE)
       if (nz_str(p$notify_email)) {
+        # v1.14.1: 邮件未启用时不再静默丢弃——提交成功的同时显式告知原因与配置方法
+        mg <- mail_gate_info()
+        if (!mg$enabled) {
+          showNotification(
+            HTML(paste0("⚠ 已提交, 但不会发送邮件通知: ", htmltools::htmlEscape(mg$reason),
+                        "。", htmltools::htmlEscape(mg$hint))),
+            type = "warning", duration = 20)
+        }
         try(diann_notify_add(list(jobid = jid, to = p$notify_email, task = job_name,
                                   out_dir = p$out_dir, out_file = p$out_file, sif = p$sif,
                                   script_path = sh_path, desc_file = desc_path,

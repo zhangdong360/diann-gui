@@ -594,8 +594,12 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 - 465 端口走 SMTP_SSL；587 走 STARTTLS。
 - 建议 `chmod 600`（文件里是 SMTP 凭据）；**必须使用 SMTP 授权码**，切勿填邮箱主密码。
 - STARTTLS 失败会直接报错，不会回退明文发送凭据（v1.11 起）。
+- 发送脚本 `mail_notify.py` 依赖 `python3`（默认取 `Sys.which("python3")`，可在
+  `config.R` 用 `MAIL_PYTHON` 指定）。WSL2/Ubuntu 上需先 `sudo apt install python3`。
 - 自测：`python3 mail_notify.py --check`（只测 SMTP 连通）；`--self-test`（发测试邮件）；`Rscript -e 'diann.gui::watch_daemon(once = TRUE)'`（手动补发一轮）。
-- 缺少 `mail_config.txt` 时 GUI 会以金色 ⚠ 提示「已填写邮箱, 但未找到邮件配置」，作业照常提交只是不发邮件。
+- 邮件功能停用（缺 `mail_config.txt` **或缺 python3**）时不再静默（v1.14.1）：
+  `run_app()` 启动控制台打印停用原因与配置命令；提交时填了邮箱会弹 ⚠ 通知
+  （20 秒）；提交校验面板与 `doctor()` 同步提示。作业照常提交，只是不发邮件。
 
 ---
 
