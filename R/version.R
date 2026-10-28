@@ -1,1 +1,1 @@
-GUI_VERSION <- sprintf("v%s.%s", packageVersion("diann.gui")[1, 1], packageVersion("diann.gui")[1, 2])
+GUI_VERSION <- sprintf("v%s.%s", utils::packageVersion("diann.gui")[1, 1], utils::packageVersion("diann.gui")[1, 2])

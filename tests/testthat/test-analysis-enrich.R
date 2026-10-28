@@ -48,3 +48,32 @@ test_that("enrich_save_all: 跳过态不产出文件", {
   on.exit(unlink(out, recursive = TRUE), add = TRUE)
   expect_length(enrich_save_all(en, out), 0)
 })
+
+# v1.14.1 回归: 本地 KEGG ORA 必须传 universe (与 GO / 在线 KEGG 同用检出蛋白背景;
+# 此前用 KEGG.db 全库做背景, 本地/在线开关下 p 值口径不一致, 本地偏显著)
+test_that("kegg_enrich_run(online=FALSE): enricher 收到 universe", {
+  t2g <- list(hsa00010 = c("1", "2", "3"), hsa04110 = c("2", "3", "4"))
+  t2n <- list(hsa00010 = "Glycolysis", hsa04110 = "Cell cycle")
+  captured <- new.env()
+  local_mocked_bindings(
+    analysis_soft_has = function(pkg) TRUE,
+    analysis_soft_fun = function(pkg, fun) {
+      if (pkg == "KEGG.db" && identical(fun, "KEGGPATHID2EXTID")) return(t2g)
+      if (pkg == "KEGG.db" && identical(fun, "KEGGPATHID2NAME")) return(t2n)
+      if (pkg == "clusterProfiler" && identical(fun, "enricher"))
+        return(function(gene, universe = NULL, TERM2GENE, TERM2NAME, ...) {
+          captured$gene <- gene
+          captured$universe <- universe
+          NULL
+        })
+      stop(sprintf("mock: 未预期的调用 %s::%s", pkg, fun))
+    })
+  prep <- list(kegg_org = "hsa")
+  res <- kegg_enrich_run(
+    data.frame(ENTREZID = c("1", "2")), universe = c("1", "2", "3", "4", "5"), prep,
+    pval_cutoff = 0.05, qval_cutoff = 0.2, p_adjust_method = "BH",
+    min_gssize = 3, max_gssize = 500, online = FALSE, add_warning = function(m) NULL)
+  expect_null(res)                                   # 假 enricher 返回 NULL
+  expect_setequal(as.character(captured$gene), c("1", "2"))
+  expect_setequal(as.character(captured$universe), c("1", "2", "3", "4", "5"))
+})

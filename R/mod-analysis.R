@@ -745,6 +745,9 @@ mod_analysis_server <- function(id, volumes, matrix_req = reactive(NULL)) {
         else "差异分析依赖缺失（见 ④ 差异分析页提示）。"
         return(div(class = "an-err", icon("circle-info"), why))
       }
+      # v1.14.1 修复: 此处引用了从未赋值的 en — 恰在预处理+DE 都成功 (富集最有意义的
+      # 状态) 时必然抛 "object 'en' not found", 用户看到 Shiny 错误面板。补上赋值。
+      en <- enrich_res()
       if (is.null(en))
         return(div(class = "an-err", icon("circle-info"),
                    if (!"enrich" %in% mods()) "未勾选「GO/KEGG 功能富集」模块。"

@@ -147,7 +147,7 @@ RC=${PIPESTATUS[0]}
 [ "$RC" = "0" ] && pass "doctor 自检无 fail 项" || fail "doctor 自检存在 fail 项 (RC=$RC, 见上方 doctor 表格)"
 
 step 10 "启动冒烟 (run_app + curl 200)"
-PORT=48673
+PORT="${DIANN_SMOKE_PORT:-48673}"   # 48673 被占用/防火墙限制时可换端口
 Rscript --vanilla -e "diann.gui::run_app(port = $PORT, host = '127.0.0.1', launch.browser = FALSE)" \
   > /tmp/diann_smoke_app.log 2>&1 &
 APP_PID=$!
@@ -172,11 +172,15 @@ fi
 if [ "$WITH_TESTS" = "1" ]; then
   step 12 "完整单元测试 (testthat, 约 1-3 分钟)"
   if [ -n "${REPO_DIR:-}" ]; then
-    Rscript -e 'res <- testthat::test_dir("tests/testthat", stop_on_failure = FALSE)
+    # testthat 不在任何安装步骤里: --with-tests 时补装 (v1.14.1 修: 全新机器此前必报错)
+    CRAN_URL="$CRAN" PKGS="testthat" r_install \
+      || fail "testthat 安装失败 (跳过单元测试)"
+    # test_dir 用相对路径: 必须先 cd 到源码目录 (v1.14.1 修: 其他目录调用必失败)
+    (cd "$REPO_DIR" && Rscript -e 'res <- testthat::test_dir("tests/testthat", stop_on_failure = FALSE)
       df <- as.data.frame(res)
       cat(sprintf("TESTS pass=%d fail=%d error=%d skip=%d\n",
           sum(df$passed), sum(df$failed), sum(df$error), sum(df$skipped)))
-      quit(status = if (any(df$error) || sum(df$failed) > 0) 1 else 0)' 2>&1 | tail -6
+      quit(status = if (any(df$error) || sum(df$failed) > 0) 1 else 0)' 2>&1 | tail -6)
     [ "${PIPESTATUS[0]}" = "0" ] && pass "单元测试全绿" || fail "单元测试存在失败"
   fi
 fi

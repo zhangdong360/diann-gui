@@ -2,8 +2,9 @@
 # 作业完成邮件通知 - 共享逻辑
 # 被 app.R/server 与 watch_daemon() 共用。邮件相关值 (MAIL_PY/MAIL_CONF/MAIL_PYTHON/
 # MAIL_ENABLED/NOTIFY_*) 由 R/config.R 的 diann_load_config() 装入包配置环境 .cfg,
-# 本模块函数经 cfg_get() 读取。MAIL_CONF 不存在时 MAIL_ENABLED=FALSE,
-# 整个邮件功能静默停用。
+# 本模块函数经 cfg_get() 读取。MAIL_CONF 不存在或缺 python3 时 MAIL_ENABLED=FALSE,
+# 邮件功能停用; v1.14.1 起未启用的原因经 mail_gate_info() 在 提交校验/提交后通知/
+# 启动控制台/doctor 四处显式提示, 不再静默。
 # 机制: 提交时把待通知作业写入状态文件 (RDS); watcher 每 60s 查 squeue,
 #       作业离开队列后解析 slurm-<id>.out 的退出码并调用 mail_notify.py 发送
 #       (邮件从可访问 SMTP 服务器的节点发出; 计算节点常无出网, 不依赖 Slurm --mail-user)。
@@ -79,6 +80,37 @@ diann_notify_save <- function(state) {
                  error = function(e) FALSE, warning = function(w) FALSE)
   if (!identical(ok, TRUE)) try(unlink(tmp), silent = TRUE)
   invisible(ok)
+}
+
+# ---------- 邮件门控信息 (v1.14.1) ----------
+# MAIL_ENABLED (config.R) = MAIL_PYTHON 非空 && MAIL_CONF 存在; 停用时整个链路
+# (diann_notify_add / ensure_diann_watcher) 直接 return。历史上只有提交校验面板
+# 一行小字且只检查配置文件存在, 缺 python3 (WSL2 常见) 时填写邮箱零提示零发送。
+# 本函数是门控的单一事实来源, 四个消费方共用同一文案:
+#   server 提交校验 / 提交成功后通知 / run_app 启动控制台 / doctor。
+mail_gate_info <- function() {
+  conf <- as.character(cfg_get("MAIL_CONF") %||% "")
+  py <- as.character(cfg_get("MAIL_PYTHON") %||% "")
+  has_conf <- nzchar(conf) && file.exists(conf)
+  has_python <- nzchar(py)
+  enabled <- has_python && has_conf && isTRUE(cfg_get("MAIL_ENABLED"))
+  info <- list(enabled = enabled, has_conf = has_conf, has_python = has_python,
+               conf_path = conf, reason = "", hint = "")
+  if (enabled) return(info)
+  if (!has_conf) {
+    ex <- system.file("config", "mail_config.example.txt", package = "diann.gui")
+    info$reason <- sprintf("未找到邮件配置 %s", conf)
+    info$hint <- sprintf(paste0("在 R 里执行 file.copy('%s', '%s') 并填写 smtp_host/smtp_user/smtp_pass",
+                                " (终端: cp <示例> %s && chmod 600 %s) 后重启应用"),
+                         ex, conf, conf, conf)
+  } else if (!has_python) {
+    info$reason <- sprintf("未找到 python3 (发送脚本 mail_notify.py 依赖), 配置文件 %s 已就绪", conf)
+    info$hint <- "安装 python3 (Ubuntu/WSL2: sudo apt install python3), 或在 config.R 设 MAIL_PYTHON 指向可用解释器"
+  } else {
+    info$reason <- "MAIL_ENABLED 为 FALSE (配置在启动后未重新加载)"
+    info$hint <- "重新运行 diann.gui::diann_load_config() 并重启应用"
+  }
+  info
 }
 
 diann_notify_add <- function(rec) {
@@ -352,6 +384,9 @@ diann_notify_tick <- function(snapshot = NULL) {
               "--out-file", shQuote(r$out_file), "--sif", shQuote(r$sif),
               "--script", shQuote(r$script_path), "--desc-file", shQuote(r$desc_file),
               "--config", shQuote(cfg_get("MAIL_CONF")), "--strict")
+    # v1.14.1: 邮件「DIA-NN 版本」显示容器实测值 (旧记录无 ver 字段时脚本回退文件名)
+    verv <- as.character(r$ver %||% "")[1]
+    if (!is.na(verv) && nzchar(verv)) args <- c(args, "--diann-ver", shQuote(verv))
     if (!is.na(rc)) args <- c(args, "--rc", as.character(rc))
     if (!is.null(st)) {
       if (nzchar(st$state)) args <- c(args, "--state", shQuote(st$state))

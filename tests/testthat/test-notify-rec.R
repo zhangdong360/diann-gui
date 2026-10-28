@@ -104,7 +104,8 @@ test_that("diann_notify_tick(snapshot=): local 记录按 rc/产物合成成功�
   diann.gui::set_core_const("MAIL_PYTHON", mail_sh)
   expect_true(diann_notify_add(list(jobid = jid, to = "a@b.c", task = "L", out_dir = td,
                                     out_file = rep_ok, sif = "/x.sif", script_path = sp,
-                                    desc_file = "", backend = "local", log_out = lf)))
+                                    desc_file = "", backend = "local", log_out = lf,
+                                    ver = "2.7.0")))
 
   # 作业仍在队列里 (snapshot 注入) -> 本轮跳过, 不发信
   expect_false(isTRUE(diann_notify_tick(snapshot = list(squeue_map = list("1000301" = "RUNNING")))))
@@ -124,6 +125,9 @@ test_that("diann_notify_tick(snapshot=): local 记录按 rc/产物合成成功�
   expect_true("--status-label" %in% args)
   expect_true("成功" %in% args)
   expect_true("--rc" %in% args)
+  # v1.14.1: 容器实测版本经 --diann-ver 传给邮件脚本
+  expect_true("--diann-ver" %in% args)
+  expect_true("2.7.0" %in% args)
   # local 记录全程没有调用 Slurm 命令
   expect_false(file.exists(marker))
 })
@@ -154,4 +158,54 @@ test_that("diann_notify_tick: 旧 slurm 记录 (无 backend 字段) 仍按 slurm
   st <- diann_notify_load()$recs[[1]]
   expect_false(isTRUE(st$done))
   expect_true(nzchar(as.character(st$backend)))
+})
+
+# ---------- v1.14.1: mail_gate_info 门控三态 (WSL2 缺 python3 盲区) ----------
+
+test_that("mail_gate_info: 缺配置/缺 python3/齐备 三态与可操作提示", {
+  old <- list(conf = diann.gui::cfg_get("MAIL_CONF"),
+              py = diann.gui::cfg_get("MAIL_PYTHON"),
+              en = diann.gui::cfg_get("MAIL_ENABLED"))
+  on.exit({
+    diann.gui::set_core_const("MAIL_CONF", old$conf)
+    diann.gui::set_core_const("MAIL_PYTHON", old$py)
+    diann.gui::set_core_const("MAIL_ENABLED", old$en)
+  }, add = TRUE)
+  td <- file.path(tempdir(), sprintf("mailgate_%d", Sys.getpid()))
+  dir.create(td, showWarnings = FALSE, recursive = TRUE)
+  conf <- file.path(td, "mail_config.txt")
+
+  # ① 配置缺失 (WSL2 新装最常见): enabled=FALSE, 提示给示例复制命令
+  diann.gui::set_core_const("MAIL_CONF", conf)
+  diann.gui::set_core_const("MAIL_PYTHON", "/usr/bin/python3")
+  diann.gui::set_core_const("MAIL_ENABLED", FALSE)
+  g <- mail_gate_info()
+  expect_false(g$enabled)
+  expect_false(g$has_conf)
+  expect_true(g$has_python)
+  expect_match(g$reason, conf, fixed = TRUE)
+  expect_match(g$hint, "file.copy(", fixed = TRUE)
+  expect_match(g$hint, "mail_config.example.txt", fixed = TRUE)
+
+  # ② 配置在但缺 python3 (v1.14 前的盲区: 只查文件存在会漏报)
+  writeLines("smtp_host=x", conf)
+  diann.gui::set_core_const("MAIL_PYTHON", "")
+  diann.gui::set_core_const("MAIL_ENABLED", FALSE)
+  g2 <- mail_gate_info()
+  expect_false(g2$enabled)
+  expect_true(g2$has_conf)
+  expect_false(g2$has_python)
+  expect_match(g2$reason, "python3", fixed = TRUE)
+  expect_match(g2$hint, "apt install python3", fixed = TRUE)
+
+  # ③ 三要素齐备 (文件 + python + MAIL_ENABLED): enabled=TRUE 且无提示文案
+  diann.gui::set_core_const("MAIL_PYTHON", "/usr/bin/python3")
+  diann.gui::set_core_const("MAIL_ENABLED", TRUE)
+  g3 <- mail_gate_info()
+  expect_true(g3$enabled)
+  expect_equal(g3$reason, "")
+  expect_equal(g3$hint, "")
+  expect_equal(g3$conf_path, conf)
+
+  unlink(td, recursive = TRUE, force = TRUE)
 })

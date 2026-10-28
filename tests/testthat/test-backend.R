@@ -286,3 +286,45 @@ test_that("seq 损坏/落后: 自愈为 max(existing)+1, 不撞号", {
   expect_equal(nid, cur + 51L)                           # max(existing)+1, 不撞号
   expect_true(length(Sys.glob(paste0(snap$sf_path, ".corrupt-*"))) >= 1)
 })
+
+# ---------- v1.14.1: 损坏备份不循环累积 / seq 自愈计入注册表 local 记录 ----------
+
+test_that("RDS 损坏且 rename 失败: copy 备份后删除原件, 不再每轮轮询重复备份", {
+  snap <- snapshot_local_state(); on.exit(restore_local_state(snap), add = TRUE)
+  jf <- local_jobs_file()
+  writeLines("this is not an RDS file", jf)
+  # rename_fn 注入 FALSE = 强制走 copy 兜底分支 (file.rename 非命名空间绑定, 不可 mock)
+  local_jobs_note_corrupt(jf, "测试: rename 失败走 copy 兜底", rename_fn = function(...) FALSE)
+  expect_length(Sys.glob(paste0(jf, ".corrupt-*")), 1)       # 备份恰一份
+  expect_false(file.exists(jf))                              # 原件已删 (阻断重复检测)
+  x <- local_jobs_load()                                     # 10s 轮询模拟: 不再新增备份
+  expect_identical(x$recs, list())
+  expect_length(Sys.glob(paste0(jf, ".corrupt-*")), 1)
+})
+
+test_that("seq 自愈计入注册表 local 记录: 状态全丢时不再从 1000001 撞历史作业", {
+  snap <- snapshot_local_state()
+  rf <- jobs_registry_file()
+  old_reg <- if (file.exists(rf)) jobs_registry_load() else NULL
+  on.exit({
+    restore_local_state(snap)
+    if (is.null(old_reg)) unlink(rf) else saveRDS(old_reg, rf)
+    try(diann.gui::set_core_const("LOCAL_JOBS_WARN", NULL), silent = TRUE)
+  }, add = TRUE)
+  # 场景: jobs RDS 全丢 (损坏备份后为空) + 序列文件损坏; 注册表仍有 local 历史 1000005
+  jf <- local_jobs_file(); if (file.exists(jf)) unlink(jf)
+  reg <- jobs_registry_empty()
+  reg[nrow(reg) + 1L, ] <- NA_character_
+  reg$jobid <- "1000005"; reg$任务名 <- "old"; reg$backend <- "local"
+  saveRDS(reg, rf)
+  writeLines("garbage", snap$sf_path)
+  nid <- local_seq_next()
+  expect_equal(nid, 1000006L)   # 此前会发 1000001, 撞注册表历史作业
+  # slurm 记录不参与: 只有 backend=="local" 的 jobid 抬高下界
+  reg2 <- jobs_registry_empty()
+  reg2[nrow(reg2) + 1L, ] <- NA_character_
+  reg2$jobid <- "2000000"; reg2$任务名 <- "s"; reg2$backend <- "slurm"
+  saveRDS(reg2, rf)
+  writeLines("garbage", snap$sf_path)
+  expect_equal(local_seq_next(), 1000001L)   # slurm 2000000 不抬高 local 序列
+})

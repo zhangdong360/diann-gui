@@ -65,6 +65,9 @@ test_that("注册表 v1 (无 v2 列) 仍可读并回退启发式", {
   txt <- paste(readLines(f, warn = FALSE), collapse = "\n")
   row <- grep("\\| 999001 \\|", readLines(f, warn = FALSE), value = TRUE)[1]
   expect_match(row, "成功")
+  # v1.14.1: 无版本列的旧记录在明细表里标「未识别」(不再留空白)
+  expect_match(row, "未识别")
+  expect_true(any(grepl("^\\| JobID \\| 任务名 \\| 版本 \\|", readLines(f, warn = FALSE))))
 })
 
 test_that("失败作业进入失败明细", {
@@ -145,6 +148,10 @@ test_that("usage_report 混合记录: 按记录后端分派状态来源, 明细�
   expect_match(row_s, "Slurm")
   expect_match(row_l, "成功")
   expect_match(row_s, "成功")
+  # v1.14.1: 明细表含「版本」列并显示注册表记录的容器实测版本
+  expect_match(row_l, "2.7.0")
+  expect_match(row_s, "2.7.0")
+  expect_true(any(grepl("^\\| JobID \\| 任务名 \\| 版本 \\|", lines)))
   expect_true(grepl("本地", txt, fixed = TRUE) && grepl("Slurm", txt, fixed = TRUE))
 })
 

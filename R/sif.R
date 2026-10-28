@@ -89,9 +89,10 @@ sif_identify <- function(sif, apptainer_bin, timeout = 60, runner = apptainer_ru
                   error = function(e) paste("exec 出错:", conditionMessage(e)))
   exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
   raw <- if (is.character(exe)) exe[nzchar(exe)] else character(0)
-  # system2(timeout=) 超时返回 character(0) + attr(,"status")==124, 没有 "timed out" 文本;
-  # 必须按状态属性判定, 否则超时会被误归为 no_version 且落失败缓存 (不再自动重试)
-  tstat <- if (is.character(exe) && !length(exe)) attr(exe, "status") else NULL
+  # system2(timeout=) 超时返回已产出的部分输出 + attr(,"status")==124, 没有 "timed out" 文本;
+  # 必须无条件读状态属性 (v1.14.1 修: 此前只在输出为空时读, 容器挂死前吐出部分输出
+  # 时 124 被忽略, 超时被误归为 no_version 且落失败缓存, 不再自动重试)
+  tstat <- if (is.character(exe)) attr(exe, "status") else NULL
   timed_out <- (!is.null(tstat) && all(as.integer(tstat) == 124L)) ||
     grepl("timed out", exe_txt, fixed = TRUE)
   if (timed_out) {
@@ -170,6 +171,35 @@ sif_probe_record <- function(probe, path, size, mtime, ver = "", ok = FALSE,
   invisible(probe)
 }
 
+# 带锁的缓存读-改-写 (v1.14.1): 两个 Shiny 会话同时识别时, 无锁的 load→record→save
+# 会 last-writer-wins 互相丢条目。与通知状态文件共用同一把每用户 mkdir 锁;
+# 配置未加载 (NOTIFY_LOCK_DIR 缺失, 仅测试/边缘场景) 时退化为无锁写。
+sif_probe_update <- function(path, size, mtime, ver = "", ok = FALSE,
+                             message = "", reason = "", file = sif_probe_file()) {
+  locked <- tryCatch(isTRUE(notify_lock_acquire(timeout = 5)), error = function(e) FALSE)
+  on.exit(if (locked) try(notify_lock_release(), silent = TRUE), add = TRUE)
+  probe <- sif_probe_load(file)
+  probe <- sif_probe_record(probe, path, size, mtime, ver = ver, ok = ok,
+                            message = message, reason = reason)
+  sif_probe_save(probe, file)
+  invisible(probe)
+}
+
+# 识别单个镜像并把结果写入缓存 (v1.14.1 从 server 的 sif_identify_path 提出纯逻辑:
+# 超时可调 + 带锁写缓存, 可离线单测)。runner 可注入; file 可注入 (测试隔离)。
+sif_identify_cache <- function(path, apptainer_bin, timeout = 60, runner = apptainer_run,
+                               file = sif_probe_file()) {
+  p <- trimws(as.character(path %||% ""))
+  res <- sif_identify(p, apptainer_bin, timeout = timeout, runner = runner)
+  if (nzchar(p)) {
+    fi <- file.info(p)
+    sif_probe_update(p, unname(fi$size), as.numeric(fi$mtime),
+                     ver = res$version, ok = res$ok,
+                     message = res$message, reason = res$reason, file = file)
+  }
+  res
+}
+
 # ---------- 合并 / 排序 / 标签 ----------
 
 # 批量排序键: 先经 as.numeric_version 解析 (非法 -> NA -> "~", 排在已识别之后),
@@ -240,8 +270,13 @@ sif_merge_probe <- function(scan, probe) {
 sif_choice_labels <- function(df) {
   if (!nrow(df)) return(character(0))
   d <- df[sif_display_order(df), , drop = FALSE]
-  vs <- if (is.null(d$verified)) rep(FALSE, nrow(d)) else d$verified
-  lab <- ifelse(vs, sprintf("v%s · %s", d$ver, d$path), sprintf("未识别 · %s", d$path))
+  vs <- if (is.null(d$verified)) rep(FALSE, nrow(d)) else as.logical(d$verified)
+  vs[is.na(vs)] <- FALSE
+  vv <- if (is.null(d$ver)) rep("", nrow(d)) else as.character(d$ver)
+  vv[is.na(vv)] <- ""
+  # verified 但缺版本串的残缺行按未识别标注 (API 健壮性; sif_merge_probe 自身不会产生)
+  vs <- vs & nzchar(vv)
+  lab <- ifelse(vs, sprintf("v%s · %s", vv, d$path), sprintf("未识别 · %s", d$path))
   stats::setNames(d$path, lab)
 }
 

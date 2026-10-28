@@ -181,7 +181,11 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     add(groups[6], "邮件配置", if (world_bits == 0L) "ok" else "warn",
         sprintf("%s (%s)", mail_conf, if (world_bits == 0L) "权限 600, 安全" else "权限过宽, 建议 chmod 600"))
   } else {
-    add(groups[6], "邮件配置", "warn", "未找到 (邮件通知停用; 参考 inst/config/mail_config.example.txt)")
+    # v1.14.1: 缺配置时给出确切路径与复制命令 (与 mail_gate_info 文案一致)
+    ex <- system.file("config", "mail_config.example.txt", package = "diann.gui")
+    add(groups[6], "邮件配置", "warn",
+        sprintf("未找到 %s, 邮件通知停用 (file.copy('%s', '%s') 后填写 SMTP 账号, 建议 chmod 600)",
+                mail_conf, ex, mail_conf))
   }
 
   if (is.null(state_dir)) state_dir <- dirname(cfg_get("NOTIFY_STATE") %||% tempdir())

@@ -222,8 +222,10 @@ impute_mnar_gaussian <- function(mat, shift = 1.8, sd_scale = 0.3, seed = 42) {
   for (j in seq_len(ncol(out))) {
     idx_na <- is.na(out[, j])
     if (!any(idx_na)) next
-    mu <- mean(out[!idx_na, j], na.rm = TRUE)
-    sd <- stats::sd(out[!idx_na, j], na.rm = TRUE)
+    obs <- out[!idx_na, j]
+    if (!length(obs)) next   # 整列全 NA: 无观测无从估计分布, 保留 NA (上游校验已硬阻断)
+    mu <- mean(obs)
+    sd <- stats::sd(obs)
     if (is.na(sd) || sd == 0) sd <- 0.5
     out[idx_na, j] <- stats::rnorm(sum(idx_na), mean = mu - shift * sd,
                                    sd = sd_scale * sd)
@@ -481,6 +483,12 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   miss_per_prot   <- rowMeans(is.na(expr_raw))
   miss_df <- data.frame(Sample = snames, Group = groups,
                         MissingRate = round(miss_per_sample * 100, 2))
+  # v1.14.1: 全缺失样本列硬阻断 — 此前零检出样本会得到 NaN 插补并带病进入 limma。
+  # 不做自动剔除 (会悄悄改变分组设计), 列出样本让用户检查原始文件/分组映射。
+  dead_samples <- miss_per_sample >= 1
+  if (any(dead_samples))
+    stop(sprintf("以下样本无任何蛋白定量值 (全缺失), 请检查原始文件或样本映射后重试: %s",
+                 paste(snames[dead_samples], collapse = ", ")))
 
   # ---- log2 变换 (归一化在插补之后) ----
   expr_log2 <- log2(expr_raw)
@@ -510,7 +518,11 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
     add_warning(sprintf("缺失值处理方式：不填补（保留 %d 个缺失值，占 %.2f%%）；已停用差异分析与功能富集",
                         n_missing, n_missing / (nrow(expr_imp) * ncol(expr_imp)) * 100))
   } else if (identical(impute_method, "mar")) {
-    add_warning("缺失值插补：随机缺失型（k 近邻, k=10）")
+    # v1.14.1: 如实描述 — impute 包缺失时 mar 静默回退行中位数, 此前仍标注 "k 近邻"
+    add_warning(if (analysis_soft_has("impute"))
+                  "缺失值插补：随机缺失型（k 近邻, k=10）"
+                else paste0("缺失值插补：随机缺失型 — 未安装 impute 包, 实际回退为行中位数填充",
+                            "（安装 impute 后重跑可得 k 近邻插补）"))
   }
   add_warning(sprintf("样本中位数归一化：各样本中位数对齐到最大值 %.2f（平移 %.2f ~ %.2f）",
                       median_target, min(median_shift), max(median_shift)))

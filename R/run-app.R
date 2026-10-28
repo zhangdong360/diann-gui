@@ -76,6 +76,10 @@ run_app <- function(port = NULL, host = "127.0.0.1",
     n_sif <- nrow(.cfg$sif_df)
     message(sprintf("SIF 镜像: %d 个 (已识别 %d 个)", n_sif,
                     if (n_sif) sum(.cfg$sif_df$verified) else 0L))
+    # v1.14.1: 邮件停用原因在启动时即告知 (不再只靠 doctor/提交校验)
+    mg <- mail_gate_info()
+    message(sprintf("邮件通知: %s", if (mg$enabled) "已启用 (作业完成自动发信)"
+                    else sprintf("停用 — %s。%s", mg$reason, mg$hint)))
   }
   message(sprintf("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)"))
   message(sprintf("访问地址: http://%s:%s/", host, if (is.null(port)) "(随机)" else port))

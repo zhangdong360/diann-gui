@@ -91,7 +91,7 @@ ui <- dashboardPage(
           box(title = "2. DIA-NN 版本 (sif 镜像)", status = "primary", solidHeader = TRUE, width = 12, collapsible = TRUE,
               column(6,
                 selectInput("sif_version",
-                            sprintf("镜像 (扫描 SIF_DIRS 下所有 *.sif, 文件名无关, 共 %d 个):", length(cfg_get("sif_choices"))),
+                            "镜像 (扫描 SIF_DIRS 下所有 *.sif, 文件名无关):",
                             choices = cfg_get("sif_choices"), selected = cfg_get("sif_selected")),
                 helpText("版本来自容器内实测 (选中未识别镜像会自动识别); 若下拉为空请检查 config.R 中的 SIF_DIRS。"),
                 checkboxInput("use_custom_sif", "浏览/手动指定其他镜像", FALSE),
@@ -109,6 +109,11 @@ ui <- dashboardPage(
                              style = "color:#fff; background-color:#00a65a; border-color:#008d4d"),
                 actionButton("verify_sif_deep", "识别版本并深度验证 (容器内启动, 较慢)", icon = icon("microscope"), width = "100%"),
                 actionButton("sif_identify_all", "识别所有未识别镜像", icon = icon("tasks"), width = "100%"),
+                conditionalPanel("output.sif_identify_progress.length > 0 && output.sif_identify_progress != ''",
+                  actionButton("sif_identify_cancel", "取消识别", icon = icon("stop"), width = "100%",
+                               style = "color:#fff; background-color:#dd4b39; border-color:#d73925"),
+                  verbatimTextOutput("sif_identify_progress")
+                ),
                 helpText(sif_req_chain),
                 uiOutput("sif_verify_result")
               )
@@ -367,7 +372,8 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = sprintf("GUI 更新日志 (当前 %s)", GUI_VERSION), status = "primary",
+          box(title = sprintf("GUI 更新日志 (当前 v%s)",
+                              utils::packageVersion("diann.gui")), status = "primary",
               solidHeader = TRUE, width = 12,
               uiOutput("gui_changelog")
           )

@@ -297,7 +297,12 @@ chmod 600 ~/.diann_gui/mail_config.txt
 
 - `smtp_port` 为 `465` 走 SSL，其他端口走 STARTTLS（STARTTLS 失败会直接报错，
   不会回退明文发送凭据）；126/163/QQ 邮箱请填 SMTP **授权码**而非登录密码。
-- 不存在 `mail_config.txt` 时整个功能静默停用：不入队、不拉起 watcher。
+- 需要 `python3` 在 `PATH` 上（发送脚本 `mail_notify.py` 依赖；WSL2/Ubuntu 用
+  `sudo apt install python3` 安装），或在 `~/.diann_gui/config.R` 里设
+  `MAIL_PYTHON` 指向可用解释器。两者缺其一时邮件功能停用。
+- 功能停用时**不再静默**（v1.14.1）：`run_app()` 启动控制台打印停用原因与配置
+  方法；提交时填了邮箱会弹出警告通知；提交校验面板与 `doctor()` 同步提示。
+  配置文件不在 `config.R`——邮件凭据独立存放于 `~/.diann_gui/mail_config.txt`。
 - 自测：`python3 mail_notify.py --check` / `--self-test`（脚本路径见
   `system.file("python", "mail_notify.py", package = "diann.gui")`）；
   `Rscript -e 'diann.gui::watch_daemon(once = TRUE)'` 手动跑一轮。

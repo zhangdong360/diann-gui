@@ -189,3 +189,42 @@ test_that("an_deps: 分组检查与安装提示", {
                   c("sva", "impute", "KEGG.db", "org.Hs.eg.db", "org.Mm.eg.db",
                     "org.Rn.eg.db", "org.Dr.eg.db"))
 })
+
+# ---------- v1.14.1: 退化数据报告占位 + cv_bins 真正接入直方图 ----------
+
+test_that("report_build: 退化数据下 PCA/相关性关键数占位「未生成」", {
+  skip_analysis_report()
+  # 复用降级夹具: 完全检出行仅 2 个 (<3) -> pca_var/cor_range 为 NULL
+  set.seed(9)
+  m <- 2 ^ matrix(rnorm(12 * 6, 20, 0.3), nrow = 12)
+  for (i in seq_len(10)) m[i, (i %% 6) + 1] <- NA_real_
+  df <- data.frame(
+    Protein.Group = sprintf("P%02d_HUMAN", seq_len(12)),
+    Protein.Names = sprintf("Protein_%02d_HUMAN", seq_len(12)),
+    PG.Genes = paste0("GENE", seq_len(12)),
+    First.Protein.Description = sprintf("Protein_%02d (Homo sapiens)", seq_len(12)),
+    m, check.names = FALSE, stringsAsFactors = FALSE)
+  colnames(df)[5:10] <- c("A1", "A2", "A3", "B1", "B2", "B3")
+  p <- prep_run(df, params = list(impute_method = "none"))
+  qc <- qc_compute(p)
+  expect_null(qc$stats$pca_var)              # 前置: 退化场景确实无 PCA 方差
+  out_root <- file.path(tempdir(), sprintf("anrep_deg_%d", as.integer(Sys.time())))
+  on.exit(unlink(out_root, recursive = TRUE), add = TRUE)
+  res <- report_build(out_root, p, qc, NULL, NULL, list(), modules = c("qc"))
+  html <- paste(readLines(res$html, warn = FALSE), collapse = "\n")
+  expect_match(html, "未生成")
+  expect_false(grepl("解释方差 ，", html, fixed = TRUE))   # 病句回归
+})
+
+test_that("qc_compute: cv_bins 参数真正改变直方图分箱 (死控件修复)", {
+  skip_analysis_qc(); skip_if_not_installed("svglite")
+  p <- prep_run(make_fixture_pg_matrix(seed = 11), params = list())
+  out <- file.path(tempdir(), sprintf("ancvb_%d", as.integer(Sys.time())))
+  dir.create(out, showWarnings = FALSE, recursive = TRUE)
+  on.exit(unlink(out, recursive = TRUE), add = TRUE)
+  f5 <- save_plot_obj(qc_compute(p, cv_bins = 5)$plots[["01_qc_detected_counts"]], out, "b5")
+  f50 <- save_plot_obj(qc_compute(p, cv_bins = 50)$plots[["01_qc_detected_counts"]], out, "b50")
+  expect_true(file.exists(f5)); expect_true(file.exists(f50))
+  # cv_bins 接线前两份 SVG 完全相同 (参数被忽略); 接线后分箱不同 -> 图形不同
+  expect_false(identical(readLines(f5, warn = FALSE), readLines(f50, warn = FALSE)))
+})

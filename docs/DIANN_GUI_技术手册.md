@@ -577,7 +577,7 @@ DIA-NN 官方推荐、也是本实验室的标准流程（v1.6 起校验按此�
 
 ### 6.2 邮件内容
 
-主题「【DIA-NN GUI】<任务名> (Job <id>) 分析完成/失败」；正文含：✅/❌ 状态、JobID、退出码、耗时、DIA-NN 版本（取 sif 文件名）、输入文件列表（从提交脚本反提）、项目简介、结果简介（输出目录文件数与总大小、文件清单前 25 项、`report.tsv` 数据行数、matrix 行数）。**结果文件需登录集群在输出目录查看/下载**，邮件不携带附件。
+主题「【DIA-NN GUI】<任务名> (Job <id>) 分析完成/失败」；正文含：✅/❌ 状态、JobID、退出码、耗时、DIA-NN 版本（v1.14.1 起显示容器实测版本，未识别时回退 sif 文件名）、输入文件列表（从提交脚本反提）、项目简介、结果简介（输出目录文件数与总大小、文件清单前 25 项、`report.tsv` 数据行数、matrix 行数）。**结果文件需登录集群在输出目录查看/下载**，邮件不携带附件。
 
 ### 6.3 配置（管理员）
 
@@ -594,8 +594,12 @@ mail_from = xxx@126.com        # 可选，默认同 smtp_user
 - 465 端口走 SMTP_SSL；587 走 STARTTLS。
 - 建议 `chmod 600`（文件里是 SMTP 凭据）；**必须使用 SMTP 授权码**，切勿填邮箱主密码。
 - STARTTLS 失败会直接报错，不会回退明文发送凭据（v1.11 起）。
+- 发送脚本 `mail_notify.py` 依赖 `python3`（默认取 `Sys.which("python3")`，可在
+  `config.R` 用 `MAIL_PYTHON` 指定）。WSL2/Ubuntu 上需先 `sudo apt install python3`。
 - 自测：`python3 mail_notify.py --check`（只测 SMTP 连通）；`--self-test`（发测试邮件）；`Rscript -e 'diann.gui::watch_daemon(once = TRUE)'`（手动补发一轮）。
-- 缺少 `mail_config.txt` 时 GUI 会以金色 ⚠ 提示「已填写邮箱, 但未找到邮件配置」，作业照常提交只是不发邮件。
+- 邮件功能停用（缺 `mail_config.txt` **或缺 python3**）时不再静默（v1.14.1）：
+  `run_app()` 启动控制台打印停用原因与配置命令；提交时填了邮箱会弹 ⚠ 通知
+  （20 秒）；提交校验面板与 `doctor()` 同步提示。作业照常提交，只是不发邮件。
 
 ---
 

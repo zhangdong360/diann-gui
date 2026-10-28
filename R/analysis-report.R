@@ -204,13 +204,17 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
 
   # QC 关键数
   if (!is.null(qc)) {
-    s$pca_pc1 <- sprintf("%.1f%%", qc$stats$pca_var[1])
-    s$pca_pc2 <- sprintf("%.1f%%", qc$stats$pca_var[2])
+    # v1.14.1: 退化数据 (<3 完整蛋白) 下 pca_var/cor_range 为 NULL — 占位"未生成",
+    # 不再让 sprintf 产出 character(0) 渲染成 "PC1 解释方差 ，" 这类缺数字句子
+    pv <- qc$stats$pca_var %||% c(NA_real_, NA_real_)
+    s$pca_pc1 <- if (is.finite(pv[1])) sprintf("%.1f%%", pv[1]) else "未生成"
+    s$pca_pc2 <- if (is.finite(pv[2])) sprintf("%.1f%%", pv[2]) else "未生成"
     s$cv_text <- paste(sprintf("%s=%.1f%%", names(qc$stats$cv_median),
                                qc$stats$cv_median * 100), collapse = ", ")
     s$det_text <- paste(sprintf("%s=%d", names(qc$stats$det_sample),
                                 as.integer(qc$stats$det_sample)), collapse = ", ")
-    s$cor_text <- sprintf("%.3f ~ %.3f", qc$stats$cor_range[1], qc$stats$cor_range[2])
+    cr <- qc$stats$cor_range %||% c(NA_real_, NA_real_)
+    s$cor_text <- if (all(is.finite(cr))) sprintf("%.3f ~ %.3f", cr[1], cr[2]) else "未生成"
     s$cv_summary <- qc$stats$cv_summary
   } else {
     s$pca_pc1 <- s$pca_pc2 <- s$cv_text <- s$det_text <- s$cor_text <- "（未执行 QC 模块）"
@@ -594,7 +598,7 @@ param_table_html <- function(s, prep) {
     grp("3. 质量控制"),
     row("相关性方法", s$cor_method),
     row("相关性热图色阶下限", p$cor_min %||% "0.8"),
-    row("CV 分布分箱数", p$cv_bins %||% "40"),
+    row("QC 直方图分箱数", p$cv_bins %||% "40"),
     grp("4. 差异分析"),
     row("分析模式", if (identical(s$mode, "multi")) "多组（全局 F + 两两对比）"
                     else if (identical(s$mode, "single")) "单对比" else "未执行"),
