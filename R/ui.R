@@ -372,7 +372,8 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(title = sprintf("GUI 更新日志 (当前 %s)", GUI_VERSION), status = "primary",
+          box(title = sprintf("GUI 更新日志 (当前 v%s)",
+                              utils::packageVersion("diann.gui")), status = "primary",
               solidHeader = TRUE, width = 12,
               uiOutput("gui_changelog")
           )
