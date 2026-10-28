@@ -152,3 +152,24 @@ test_that("虚拟工作流·analysis_only 独立服务器: 模块在独立模式
     expect_false(is.null(session$input))
   })
 })
+
+# v1.14.1 回归: renderUI 引用未赋值的 en — 恰在 DE 成功 (富集最有意义的状态) 时
+# 必抛 "object 'en' not found"; e2e 不开富集页, 此前无单测渲染该输出, 全绿仍漏
+test_that("虚拟工作流·富集页: DE 成功后 enrich_content 渲染提示而非报错", {
+  skip_analysis_de()
+  mat <- write_fixture_matrix(make_fixture_pg_matrix(seed = 42),
+                              file.path(tempdir(), "anmod_enrich.tsv"))
+  shiny::testServer(mod_server(), args = list(volumes = an_mod_vol), {
+    session$setInputs(matrix_path = mat, matrix_load = 1,
+                      modules = c("qc", "de", "enrich"),
+                      de_logFC = 1, de_pval = 0.05, de_padj = "BH",
+                      de_topn_label = 12, de_topn_box = 9, de_heatmap_max = 200,
+                      min_detect_frac = 0.5, min_group_detect = 0,
+                      impute_method = "mnar", species = "auto", source = "diann",
+                      en_padj = "BH", en_use_kegg = FALSE)
+    expect_identical(de_res()$mode, "single")   # 原触发条件: 预处理+DE 都成功
+    html <- as.character(output$enrich_content$html %||% "")
+    expect_true(nzchar(html))                    # 有内容 (依赖缺失提示或富集结果)
+    expect_match(html, "富集")                   # 缺依赖 -> "富集依赖缺失"; 有依赖 -> 结果块
+  })
+})

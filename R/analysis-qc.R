@@ -136,7 +136,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
       theme_proteo() +
       ggplot2::theme(axis.text.x = ggplot2::element_text(angle = x_ang, hjust = x_hj, size = x_sz))
     p1b <- ggplot2::ggplot(data.frame(Detected = p$det_prot), ggplot2::aes(x = Detected)) +
-      ggplot2::geom_histogram(bins = 40, fill = "#3B6FB5", colour = "white", linewidth = 0.3) +
+      ggplot2::geom_histogram(bins = cv_bins, fill = "#3B6FB5", colour = "white", linewidth = 0.3) +
       ggplot2::labs(title = "Distribution of protein detection frequency",
                     x = "# Samples where protein detected", y = "# Proteins") +
       theme_proteo()
@@ -156,7 +156,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
       ggplot2::theme(axis.text.x = ggplot2::element_text(angle = x_ang, hjust = x_hj, size = x_sz))
     p2b <- ggplot2::ggplot(data.frame(MissingRate = p$miss_per_prot * 100),
                            ggplot2::aes(x = MissingRate)) +
-      ggplot2::geom_histogram(bins = 40, fill = "#D9534F", colour = "white", linewidth = 0.3) +
+      ggplot2::geom_histogram(bins = cv_bins, fill = "#D9534F", colour = "white", linewidth = 0.3) +
       ggplot2::labs(title = "Distribution of protein missing rate",
                     x = "Missing rate per protein (%)", y = "# Proteins") +
       theme_proteo()

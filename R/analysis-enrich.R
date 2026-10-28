@@ -52,8 +52,11 @@ kegg_enrich_run <- function(sig_entrez, universe, prep, pval_cutoff, qval_cutoff
                             online, add_warning) {
   run_local <- function() {
     kd  <- kegg_local_data(prep$kegg_org)
+    # v1.14.1: 本地 ORA 补传 universe (与 GO / 在线 KEGG 同用检出蛋白背景) —
+    # 此前用 KEGG.db 全库做背景, 本地/在线开关下同一数据 p 值不同, 本地偏显著
     res <- analysis_soft_fun("clusterProfiler", "enricher")(
-      gene = sig_entrez$ENTREZID, TERM2GENE = kd$term2gene, TERM2NAME = kd$term2name,
+      gene = sig_entrez$ENTREZID, universe = universe,
+      TERM2GENE = kd$term2gene, TERM2NAME = kd$term2name,
       pvalueCutoff = pval_cutoff, qvalueCutoff = qval_cutoff,
       pAdjustMethod = p_adjust_method,
       minGSSize = min_gssize, maxGSSize = max_gssize)
@@ -162,6 +165,10 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
   }
 
   universe <- unique(entrez$ENTREZID)
+  # v1.14.1: 多基因形式 ID ("A;B") 映射时静默截断为首基因 — 显式告知, 不再无声
+  n_multi <- sum(grepl(";", annot$Genes %||% character(0), fixed = TRUE))
+  if (n_multi > 0)
+    add_warning(sprintf("%d 个基因 ID 为多基因形式 (如 \"A;B\"), ID 映射只取第一个基因", n_multi))
   enrich_list <- list()
 
   # ---- GO ----

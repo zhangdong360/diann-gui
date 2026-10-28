@@ -73,8 +73,6 @@ analysis_ui <- function(id) {
                                         "KNN (MAR)", "seqKNN 顺序 KNN"),
                      choiceValues = list("none", "mnar", "mar", "seq"),
                      selected = "mnar", inline = TRUE),
-        actionButton(ns("miss_profile"), "缺失机制诊断图", icon = icon("chart-area"),
-                     class = "btn-sm btn-default"),
         helpText("LoD: 检测限左删失 (逐样本列, 偏移 1.8 SD / 缩放 0.3 SD / 种子 42);",
                  "选「不填补」时差异分析与功能富集自动停用。"),
         uiOutput(ns("control_ui")),
@@ -140,7 +138,7 @@ analysis_ui <- function(id) {
           fluidRow(
             column(4, numericInput(ns("cor_min"), "相关性热图色阶下限",
                                    value = 0.8, min = -1, max = 1, step = 0.01)),
-            column(4, numericInput(ns("cv_bins"), "CV 分布直方图分箱数",
+            column(4, numericInput(ns("cv_bins"), "QC 直方图分箱数 (检出频率/缺失率分布)",
                                    value = 40, min = 10, max = 100, step = 5))
           )
         ),

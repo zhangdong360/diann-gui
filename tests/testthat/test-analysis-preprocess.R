@@ -106,3 +106,21 @@ test_that("detect_species: UniProt 后缀与默认回退", {
   expect_match(sp$species, "default")
   expect_true(!is.null(sp$warn))
 })
+
+# v1.14.1: 全缺失样本列硬阻断 (此前 NaN 插补带病进入 limma)
+test_that("prep_run: 全缺失样本列硬阻断并点名样本", {
+  df <- make_fixture_pg_matrix(n_prot = 30, seed = 21)
+  df[["B3"]] <- NA_real_          # 整列清空 (零检出样本)
+  err <- tryCatch(prep_run(df, params = list(source = "diann", min_detect_frac = 0.5,
+                                             impute_method = "mnar")),
+                  error = function(e) e)
+  expect_s3_class(err, "error")
+  expect_match(conditionMessage(err), "全缺失", fixed = TRUE)
+  expect_match(conditionMessage(err), "B3", fixed = TRUE)
+  # 部分缺失 (非全缺) 不受影响
+  df2 <- make_fixture_pg_matrix(n_prot = 30, seed = 21)
+  df2[["B3"]][seq_len(10)] <- NA_real_
+  p2 <- prep_run(df2, params = list(source = "diann", min_detect_frac = 0.5,
+                                    impute_method = "mnar"))
+  expect_false(anyNA(p2$expr_imp))
+})
