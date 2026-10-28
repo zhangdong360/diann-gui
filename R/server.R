@@ -121,18 +121,14 @@ server <- function(input, output, session) {
   }
 
   # 识别单个镜像并落缓存; 返回 sif_identify() 结果
-  sif_identify_path <- function(path) {
+  # v1.14.1: 识别+带锁写缓存提取为 sif_identify_cache() (R/sif.R, 可离线单测),
+  # 本函数只叠加 reactive 刷新; timeout 可调 (批量识别用短超时, 单个识别保持 60s)
+  sif_identify_path <- function(path, timeout = 60) {
     p <- trimws(as.character(path %||% ""))
     if (!nzchar(p)) return(list(ok = FALSE, version = "", stage = "", reason = "missing",
                                 message = "未选择镜像", inspect = "", raw_version_lines = character(0)))
-    res <- sif_identify(p, sif_pick_apptainer())
-    fi <- file.info(p)
-    probe <- sif_probe_load()
-    probe <- sif_probe_record(probe, p, unname(fi$size), as.numeric(fi$mtime),
-                              ver = res$version, ok = res$ok,
-                              message = res$message, reason = res$reason)
-    sif_probe_save(probe)
-    sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+    res <- sif_identify_cache(p, sif_pick_apptainer(), timeout = timeout)
+    sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), sif_probe_load()))
     sif_probe_bump(sif_probe_bump() + 1L)
     sif_refresh_choices()
     res
@@ -159,30 +155,69 @@ server <- function(input, output, session) {
     }
   })
 
+  # v1.14.1: 「识别所有未识别镜像」由同步 for 循环改为每拍处理一个镜像的队列。
+  # 此前单个 withProgress 里的 N 次同步识别 (每次 inspect 15s + exec 60s) 会把
+  # 单进程 Shiny 的**所有会话**冻结 N×75s, withProgress 不让出事件循环; 队列化后
+  # 镜像之间回到事件循环 — 其他会话可操作, 本会话可取消 (批量单镜像限时 20s)。
+  sif_identify_queue <- reactiveVal(character(0))
+  sif_identify_state <- reactiveVal(list(total = 0L, done = 0L, ok = 0L, fails = character(0)))
+  sif_identify_running <- reactiveVal(FALSE)
+
   observeEvent(input$sif_identify_all, {
+    if (isTRUE(sif_identify_running())) return(invisible(NULL))  # 运行中再点无效 (取消用专用按钮)
     r <- sif_rows()
     todo <- r$path[!r$verified]
     if (!length(todo)) {
       showNotification("没有未识别的镜像", type = "message")
       return(invisible(NULL))
     }
-    ok_n <- 0L; fails <- character(0)
-    withProgress(message = sprintf("识别未识别镜像 0/%d…", length(todo)), value = 0, {
-      for (i in seq_along(todo)) {
-        incProgress(1 / length(todo), message = sprintf("识别未识别镜像 %d/%d…", i, length(todo)))
-        res <- sif_identify_path(todo[i])
-        if (isTRUE(res$ok)) ok_n <- ok_n + 1L
-        else fails <- c(fails, sprintf("%s — %s", basename(todo[i]), substr(res$message, 1, 100)))
+    sif_identify_state(list(total = length(todo), done = 0L, ok = 0L, fails = character(0)))
+    sif_identify_running(TRUE)
+    sif_identify_queue(todo)
+  })
+
+  observeEvent(input$sif_identify_cancel, {
+    if (!isTRUE(sif_identify_running())) return(invisible(NULL))
+    st <- sif_identify_state()
+    left <- length(sif_identify_queue())
+    sif_identify_queue(character(0))
+    showNotification(sprintf("已取消识别 (完成 %d / %d, 跳过 %d)", st$done, st$total, left),
+                     type = "warning", duration = 8)
+  })
+
+  # 队列泵: 每次失效只识别一个镜像然后结束 — 两次调用之间 Shiny 回到事件循环,
+  # 可调度其他会话的请求与本会话的取消/渲染 (同步 for 循环做不到)。
+  observe({
+    q <- sif_identify_queue()
+    if (!length(q)) {
+      if (isTRUE(sif_identify_running())) {
+        sif_identify_running(FALSE)
+        st <- sif_identify_state()
+        if (length(st$fails)) {
+          showNotification(HTML(htmltools::htmlEscape(
+            sprintf("识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
+                    st$ok, length(st$fails), paste(st$fails, collapse = "\n")))),
+            type = "warning", duration = 20)
+        } else if (st$done > 0L) {
+          showNotification(sprintf("识别完成: 成功 %d / %d", st$ok, st$done), type = "message")
+        }
       }
-    })
-    if (length(fails)) {
-      showNotification(HTML(htmltools::htmlEscape(
-        sprintf("识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
-                ok_n, length(fails), paste(fails, collapse = "\n")))),
-        type = "warning", duration = 20)
-    } else {
-      showNotification(sprintf("识别完成: 成功 %d / %d", ok_n, length(todo)), type = "message")
+      return(invisible(NULL))
     }
+    res <- sif_identify_path(q[1], timeout = 20)
+    st <- sif_identify_state()
+    st$done <- st$done + 1L
+    if (isTRUE(res$ok)) st$ok <- st$ok + 1L else
+      st$fails <- c(st$fails, sprintf("%s — %s", basename(q[1]), substr(res$message, 1, 100)))
+    sif_identify_state(st)
+    sif_identify_queue(if (length(q) > 1L) q[-1] else character(0))
+  })
+
+  output$sif_identify_progress <- renderText({
+    if (!isTRUE(sif_identify_running())) return("")
+    st <- sif_identify_state()
+    if (st$total <= 0L) return("")
+    sprintf("识别中 %d/%d (剩余 %d)…", st$done, st$total, length(sif_identify_queue()))
   })
 
   output$sif_version_info <- renderUI({
@@ -497,14 +532,13 @@ server <- function(input, output, session) {
       ver_num <- sub("^([0-9]+(?:\\.[0-9]+)*).*", "\\1", ver_real, perl = TRUE)
       add_row("ok", sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
       # v1.13: 深度验证解析到版本 → 写入识别缓存 (下拉/回显/提交记账共用)
+      # v1.14.1: 带锁写 (sif_probe_update), 与识别路径共用同一互斥语义
       try({
         fi <- file.info(sif)
-        probe <- sif_probe_load()
-        probe <- sif_probe_record(probe, sif, unname(fi$size), as.numeric(fi$mtime),
-                                  ver = ver_num, ok = TRUE,
-                                  message = sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
-        sif_probe_save(probe)
-        sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), probe))
+        sif_probe_update(sif, unname(fi$size), as.numeric(fi$mtime),
+                         ver = ver_num, ok = TRUE,
+                         message = sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver_real))
+        sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), sif_probe_load()))
         sif_probe_bump(sif_probe_bump() + 1L)
         sif_refresh_choices()
       }, silent = TRUE)

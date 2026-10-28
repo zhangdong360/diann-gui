@@ -93,6 +93,74 @@ test_that("sif_identify: 成功/静态失败/无运行时/超时/无 diann-linux
   expect_false(r5$ok); expect_equal(r5$reason, "no_version")
 })
 
+# v1.14.1 回归: 超时 + 部分输出 (system2 会返回已产出的行 + status 124)。
+# 此前只在输出为空时读状态属性, 这种形态被误归 no_version 并永久落缓存。
+test_that("sif_identify: 超时带部分输出仍判为 timeout (不再误归 no_version)", {
+  f <- mk_fake_sif(file.path(tempdir(), "partial_timeout.sif"))
+  r <- sif_identify(f, fake_ap, runner = function(bin, args, timeout = 30) {
+    if (length(args) >= 1 && identical(args[1], "inspect"))
+      return(c("org.label-schema.usage.singularity.deffile.from: docker://ubuntu:22.04", ""))
+    out <- c("DIA-NN starting", "loading image")   # 挂死前已吐出的部分输出 (无版本)
+    attr(out, "status") <- 124L
+    out
+  })
+  expect_false(r$ok)
+  expect_equal(r$reason, "timeout")
+  expect_match(r$message, "超时")
+})
+
+# v1.14.1: sif_identify_cache — 识别+带锁写缓存一体, 超时/缓存文件可注入
+test_that("sif_identify_cache: 成功落缓存/timeout 不落缓存/连续更新不丢条目", {
+  f <- mk_fake_sif(file.path(tempdir(), "identify_cache.sif"))
+  pf <- file.path(tempdir(), sprintf("probe_cache_%d.rds", Sys.getpid()))
+  unlink(pf, force = TRUE)
+
+  res <- sif_identify_cache(f, fake_ap, runner = mk_runner(), file = pf)
+  expect_true(res$ok)
+  fi <- file.info(f)
+  e <- sif_probe_lookup(sif_probe_load(pf), f, unname(fi$size), as.numeric(fi$mtime))
+  expect_false(is.null(e))
+  expect_true(isTRUE(e$ok))
+  expect_equal(e$ver, "2.7.0")
+
+  # timeout 结果不落缓存 (瞬时原因): 不得覆盖上一步的成功条目
+  res2 <- sif_identify_cache(f, fake_ap,
+                             runner = function(bin, args, timeout = 30) {
+                               out <- character(0); attr(out, "status") <- 124L; out
+                             }, file = pf)
+  expect_equal(res2$reason, "timeout")
+  probe <- sif_probe_load(pf)
+  # 上一步成功条目仍在 (timeout 未覆盖它)
+  expect_false(is.null(sif_probe_lookup(probe, f, unname(fi$size), as.numeric(fi$mtime))))
+
+  # 连续两次不同镜像的带锁更新: 两个条目都在 (锁内 load→record→save 不互相覆盖)
+  f2 <- mk_fake_sif(file.path(tempdir(), "identify_cache2.sif"))
+  f3 <- mk_fake_sif(file.path(tempdir(), "identify_cache3.sif"))
+  sif_identify_cache(f2, fake_ap, runner = mk_runner(), file = pf)
+  sif_identify_cache(f3, fake_ap, runner = mk_runner(out = "DIA-NN 2.9.1 x"), file = pf)
+  probe2 <- sif_probe_load(pf)
+  fi2 <- file.info(f2); fi3 <- file.info(f3)
+  expect_false(is.null(sif_probe_lookup(probe2, f2, unname(fi2$size), as.numeric(fi2$mtime))))
+  expect_false(is.null(sif_probe_lookup(probe2, f3, unname(fi3$size), as.numeric(fi3$mtime))))
+  unlink(pf, force = TRUE)
+})
+
+# v1.14.1: 残缺行 (verified 但无版本串) 按未识别标注, 不再渲染 "vNA ·"
+test_that("sif_choice_labels: verified 但 ver 缺失/NA 时标为未识别", {
+  df <- data.frame(
+    path = c("/x/a.sif", "/x/b.sif", "/x/c.sif"),
+    name = c("a.sif", "b.sif", "c.sif"),
+    size = 1, mtime = 1,
+    ver = c("2.7.0", NA, ""),
+    verified = c(TRUE, TRUE, FALSE),
+    probe_message = "", stringsAsFactors = FALSE)
+  lab <- sif_choice_labels(df)
+  # 按路径断言 (display_order 会重排; b 因 ver=NA 落 "~" 键排在已识别组最前)
+  expect_match(names(lab)[unname(lab) == "/x/a.sif"], "v2.7.0 · /x/a.sif", fixed = TRUE)
+  expect_false(any(grepl("vNA", names(lab), fixed = TRUE)))
+  expect_true(sum(grepl("未识别 · /x/", names(lab))) == 2)
+})
+
 test_that("probe 缓存: size+mtime 命中、变化失效、no_apptainer 不落缓存、损坏不崩", {
   f <- mk_fake_sif(file.path(tempdir(), "cache_me.sif"))
   fi <- file.info(f)
