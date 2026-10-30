@@ -178,8 +178,18 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   if (nzchar(mail_conf) && file.exists(mail_conf)) {
     mode_dec <- as.integer(file.info(mail_conf)$mode)
     world_bits <- bitwAnd(mode_dec, 63L)   # 组/其他用户权限位
-    add(groups[6], "邮件配置", if (world_bits == 0L) "ok" else "warn",
-        sprintf("%s (%s)", mail_conf, if (world_bits == 0L) "权限 600, 安全" else "权限过宽, 建议 chmod 600"))
+    perm_msg <- sprintf("%s (%s)", mail_conf,
+                        if (world_bits == 0L) "权限 600, 安全" else "权限过宽, 建议 chmod 600")
+    # v1.14.2: 配置在但缺 python3 时也告警 — 此前显示"权限 600, 安全"而邮件实际
+    # 停用 (WSL2 盲区); 门控判据与 mail_gate_info 一致 (python3 非空)
+    py <- as.character(cfg_get("MAIL_PYTHON") %||% "")
+    if (!nzchar(py)) {
+      add(groups[6], "邮件配置", "warn",
+          sprintf("%s, 但未找到 python3, 邮件通知停用 (安装: sudo apt install python3; 或在 config.R 设 MAIL_PYTHON)",
+                  perm_msg))
+    } else {
+      add(groups[6], "邮件配置", if (world_bits == 0L) "ok" else "warn", perm_msg)
+    }
   } else {
     # v1.14.1: 缺配置时给出确切路径与复制命令 (与 mail_gate_info 文案一致)
     ex <- system.file("config", "mail_config.example.txt", package = "diann.gui")
