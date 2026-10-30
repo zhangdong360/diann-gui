@@ -1285,6 +1285,14 @@ server <- function(input, output, session) {
     d
   }, striped = TRUE, bordered = TRUE, na = "-")
   output$jobs_table <- renderTable(jobs$jobs, striped = TRUE, bordered = TRUE)
+  # v1.14.3: 邮件停用常驻横幅 — 监控页在通知面板上方始终可见停用原因与配置方法
+  # (启用时返回 NULL 不占位; 文案与启动控制台/提交校验同源, 均出自 mail_gate_info)
+  output$mail_gate_banner <- renderUI({
+    mg <- mail_gate_info()
+    if (mg$enabled) return(NULL)
+    tags$div(class = "alert alert-warning", style = "margin: 0 0 10px 0; padding: 8px 12px;",
+             HTML(htmltools::htmlEscape(sprintf("⚠ 邮件通知停用: %s。%s", mg$reason, mg$hint))))
+  })
   output$notify_status <- renderText({
     if (isTRUE(input$auto_refresh)) invalidateLater(15000)
     try(ensure_diann_watcher(), silent = TRUE)  # 页面打开期间 watcher 失联的自愈

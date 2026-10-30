@@ -227,7 +227,8 @@ ui <- dashboardPage(
               fluidRow(
                 column(4,
                   textInput("notify_email", "邮箱通知 (可选):", placeholder = "someone@126.com, someone2@126.com"),
-                  helpText("作业结束时自动发送邮件, 含项目简介与结果简介; 多个邮箱用英文逗号分隔。")
+                  helpText("作业结束时自动发送邮件, 含项目简介与结果简介; 多个邮箱用英文逗号分隔。",
+                           "需在服务器配置邮件凭据与 python3 (未配置时提交会提示, 不影响作业)。")
                 ),
                 column(8,
                   textAreaInput("project_desc", "项目简介 (可选, 随完成邮件发送):",
@@ -323,6 +324,7 @@ ui <- dashboardPage(
         fluidRow(
           box(title = "本会话提交记录", status = "info", solidHeader = TRUE, width = 12,
               tableOutput("jobs_table"),
+              uiOutput("mail_gate_banner"),   # v1.14.3: 邮件停用常驻横幅 (直达监控页的用户也可见)
               verbatimTextOutput("notify_status")
           )
         ),
