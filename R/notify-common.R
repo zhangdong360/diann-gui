@@ -103,6 +103,10 @@ mail_gate_info <- function() {
     info$hint <- sprintf(paste0("在 R 里执行 file.copy('%s', '%s') 并填写 smtp_host/smtp_user/smtp_pass",
                                 " (终端: cp <示例> %s && chmod 600 %s) 后重启应用"),
                          ex, conf, conf, conf)
+    # v1.14.3: 双缺一次说全 — 面向初阶实验人员, 建好配置后不再被第二次提示拦住
+    if (!has_python)
+      info$hint <- paste0(info$hint,
+                          "; 注意该功能还需 python3 发送邮件 (无则: sudo apt install python3, WSL2 同)")
   } else if (!has_python) {
     info$reason <- sprintf("未找到 python3 (发送脚本 mail_notify.py 依赖), 配置文件 %s 已就绪", conf)
     info$hint <- "安装 python3 (Ubuntu/WSL2: sudo apt install python3), 或在 config.R 设 MAIL_PYTHON 指向可用解释器"

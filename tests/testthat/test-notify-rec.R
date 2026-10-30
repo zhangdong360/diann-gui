@@ -175,7 +175,17 @@ test_that("mail_gate_info: 缺配置/缺 python3/齐备 三态与可操作提示
   dir.create(td, showWarnings = FALSE, recursive = TRUE)
   conf <- file.path(td, "mail_config.txt")
 
-  # ① 配置缺失 (WSL2 新装最常见): enabled=FALSE, 提示给示例复制命令
+  # ⓪ 双缺 (配置与 python3 都没有): 一次性给全两步, 不再分两次拦 (v1.14.3)
+  diann.gui::set_core_const("MAIL_CONF", conf)
+  diann.gui::set_core_const("MAIL_PYTHON", "")
+  diann.gui::set_core_const("MAIL_ENABLED", FALSE)
+  g0 <- mail_gate_info()
+  expect_false(g0$enabled)
+  expect_match(g0$hint, "file.copy(", fixed = TRUE)
+  expect_match(g0$hint, "apt install python3", fixed = TRUE)
+  expect_match(g0$hint, "python3 发送邮件", fixed = TRUE)
+
+  # ① 配置缺失 (python3 在): enabled=FALSE, 提示给示例复制命令 (不夹带 python3 内容)
   diann.gui::set_core_const("MAIL_CONF", conf)
   diann.gui::set_core_const("MAIL_PYTHON", "/usr/bin/python3")
   diann.gui::set_core_const("MAIL_ENABLED", FALSE)
@@ -186,6 +196,7 @@ test_that("mail_gate_info: 缺配置/缺 python3/齐备 三态与可操作提示
   expect_match(g$reason, conf, fixed = TRUE)
   expect_match(g$hint, "file.copy(", fixed = TRUE)
   expect_match(g$hint, "mail_config.example.txt", fixed = TRUE)
+  expect_false(grepl("apt install python3", g$hint, fixed = TRUE))
 
   # ② 配置在但缺 python3 (v1.14 前的盲区: 只查文件存在会漏报)
   writeLines("smtp_host=x", conf)
