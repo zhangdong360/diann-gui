@@ -254,3 +254,51 @@ test_that("sif_version_of: 命中缓存返回版本, 否则空", {
   expect_equal(sif_version_of(f, probe = probe), "2.3.1")
   expect_equal(sif_version_of("/no/such.sif"), "")
 })
+
+# ---------- v1.14.2: 识别永不抛出 (队列泵依赖) + 锁竞争重试 ----------
+
+test_that("sif_identify_safe: 内层异常归一为失败结果, 不落缓存", {
+  f <- mk_fake_sif(file.path(tempdir(), "safe_throw.sif"))
+  pf <- file.path(tempdir(), sprintf("probe_safe_%d.rds", Sys.getpid()))
+  unlink(pf, force = TRUE)
+  # sif_identify 内层已把 runner 异常归为 no_version; 护栏针对的是穿透 sif_identify
+  # 的未知异常 (磁盘/对象损坏等) — 直接 mock sif_identify 抛错验证契约
+  real_identify <- sif_identify   # 先捕获原函数 (mock 后同名指向的是抛错桩)
+  local_mocked_bindings(sif_identify = function(...) stop("模拟穿透异常"))
+  res <- sif_identify_safe(f, fake_ap, file = pf)
+  expect_false(res$ok)
+  expect_equal(res$reason, "error")
+  expect_match(res$message, "识别异常")
+  expect_match(res$message, "模拟穿透异常")
+  expect_identical(sif_probe_load(pf)$entries, list())   # 异常不写缓存
+  # 正常路径不受影响 (mock 只在当前 test 内生效, 恢复需显式放回原函数)
+  local_mocked_bindings(sif_identify = real_identify)
+  res2 <- sif_identify_safe(f, fake_ap, runner = mk_runner(), file = pf)
+  expect_true(res2$ok)
+  expect_equal(res2$version, "2.7.0")
+  unlink(pf, force = TRUE)
+})
+
+test_that("sif_probe_update: 锁被持有时重试后仍正确写入 (无锁降级路径)", {
+  f <- mk_fake_sif(file.path(tempdir(), "lock_retry.sif"))
+  pf <- file.path(tempdir(), sprintf("probe_lock_%d.rds", Sys.getpid()))
+  unlink(pf, force = TRUE)
+  # 先持锁模拟并发竞争方 → 更新拿不到锁 (重试耗尽) → 无锁写必须仍成功且条目正确
+  expect_true(notify_lock_acquire(timeout = 2))
+  on.exit(try(notify_lock_release(), silent = TRUE), add = TRUE)
+  fi <- file.info(f)
+  invisible(sif_probe_update(f, unname(fi$size), as.numeric(fi$mtime),
+                             ver = "2.10.0", ok = TRUE, message = "ok",
+                             file = pf, lock_tries = 2, lock_timeout = 1))
+  e <- sif_probe_lookup(sif_probe_load(pf), f, unname(fi$size), as.numeric(fi$mtime))
+  expect_false(is.null(e))
+  expect_equal(e$ver, "2.10.0")
+  # 锁释放后再次更新: 持锁路径同样正确
+  notify_lock_release()
+  invisible(sif_probe_update(f, unname(fi$size), as.numeric(fi$mtime),
+                             ver = "2.10.1", ok = TRUE, message = "ok2",
+                             file = pf, lock_tries = 2, lock_timeout = 5))
+  e2 <- sif_probe_lookup(sif_probe_load(pf), f, unname(fi$size), as.numeric(fi$mtime))
+  expect_equal(e2$ver, "2.10.1")
+  unlink(pf, force = TRUE)
+})

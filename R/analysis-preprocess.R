@@ -259,7 +259,11 @@ impute_mar_knn <- function(mat, k = 10) {
     }, error = function(e) NULL)
     if (!is.null(res) && !anyNA(res)) return(as.data.frame(res, check.names = FALSE))
   }
-  as.data.frame(fallback(m), check.names = FALSE)
+  # v1.14.2: 回退不再无声 — 包缺失或 impute.knn 运行期失败都打标记,
+  # 预处理告警与报告据此如实描述 (此前运行期失败仍标注 "k 近邻")
+  out <- as.data.frame(fallback(m), check.names = FALSE)
+  attr(out, "knn_fallback") <- TRUE
+  out
 }
 
 # 顺序 KNN (SeqKNN): 按缺失率从低到高逐蛋白插补, 已插补的蛋白参与后续距离计算
@@ -518,11 +522,13 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
     add_warning(sprintf("缺失值处理方式：不填补（保留 %d 个缺失值，占 %.2f%%）；已停用差异分析与功能富集",
                         n_missing, n_missing / (nrow(expr_imp) * ncol(expr_imp)) * 100))
   } else if (identical(impute_method, "mar")) {
-    # v1.14.1: 如实描述 — impute 包缺失时 mar 静默回退行中位数, 此前仍标注 "k 近邻"
-    add_warning(if (analysis_soft_has("impute"))
+    # v1.14.2: 如实描述 — knn_fallback 标记覆盖两种回退 (impute 包缺失 / impute.knn
+    # 运行期失败), 此前运行期失败时仍标注 "k 近邻"
+    fb <- isTRUE(attr(expr_imp_raw, "knn_fallback"))
+    add_warning(if (!fb)
                   "缺失值插补：随机缺失型（k 近邻, k=10）"
-                else paste0("缺失值插补：随机缺失型 — 未安装 impute 包, 实际回退为行中位数填充",
-                            "（安装 impute 后重跑可得 k 近邻插补）"))
+                else paste0("缺失值插补：随机缺失型 — k 近邻不可用, 实际回退为行中位数填充",
+                            "（安装 impute 包后重跑可得 k 近邻插补）"))
   }
   add_warning(sprintf("样本中位数归一化：各样本中位数对齐到最大值 %.2f（平移 %.2f ~ %.2f）",
                       median_target, min(median_shift), max(median_shift)))

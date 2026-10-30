@@ -162,9 +162,14 @@ server <- function(input, output, session) {
   sif_identify_queue <- reactiveVal(character(0))
   sif_identify_state <- reactiveVal(list(total = 0L, done = 0L, ok = 0L, fails = character(0)))
   sif_identify_running <- reactiveVal(FALSE)
+  sif_identify_cancelled <- reactiveVal(FALSE)   # v1.14.2: 取消后泵不再补发"识别完成"汇总
 
   observeEvent(input$sif_identify_all, {
-    if (isTRUE(sif_identify_running())) return(invisible(NULL))  # 运行中再点无效 (取消用专用按钮)
+    if (isTRUE(sif_identify_running())) {
+      # v1.14.2: 运行中重点击不再静默忽略
+      showNotification("识别已在进行中 (可点「取消识别」终止)", type = "message", duration = 5)
+      return(invisible(NULL))
+    }
     r <- sif_rows()
     todo <- r$path[!r$verified]
     if (!length(todo)) {
@@ -172,6 +177,7 @@ server <- function(input, output, session) {
       return(invisible(NULL))
     }
     sif_identify_state(list(total = length(todo), done = 0L, ok = 0L, fails = character(0)))
+    sif_identify_cancelled(FALSE)
     sif_identify_running(TRUE)
     sif_identify_queue(todo)
   })
@@ -180,6 +186,7 @@ server <- function(input, output, session) {
     if (!isTRUE(sif_identify_running())) return(invisible(NULL))
     st <- sif_identify_state()
     left <- length(sif_identify_queue())
+    sif_identify_cancelled(TRUE)
     sif_identify_queue(character(0))
     showNotification(sprintf("已取消识别 (完成 %d / %d, 跳过 %d)", st$done, st$total, left),
                      type = "warning", duration = 8)
@@ -187,24 +194,28 @@ server <- function(input, output, session) {
 
   # 队列泵: 每次失效只识别一个镜像然后结束 — 两次调用之间 Shiny 回到事件循环,
   # 可调度其他会话的请求与本会话的取消/渲染 (同步 for 循环做不到)。
+  # v1.14.2: 单镜像识别经 sif_identify_safe() 永不抛出 — 否则泵在弹出该镜像前
+  # 中止, 队列残留但失效已消费, running 卡住只能靠取消按钮解围。
   observe({
     q <- sif_identify_queue()
     if (!length(q)) {
       if (isTRUE(sif_identify_running())) {
         sif_identify_running(FALSE)
-        st <- sif_identify_state()
-        if (length(st$fails)) {
-          showNotification(HTML(htmltools::htmlEscape(
-            sprintf("识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
-                    st$ok, length(st$fails), paste(st$fails, collapse = "\n")))),
-            type = "warning", duration = 20)
-        } else if (st$done > 0L) {
-          showNotification(sprintf("识别完成: 成功 %d / %d", st$ok, st$done), type = "message")
+        if (!isTRUE(sif_identify_cancelled())) {   # 取消路径的通知由取消观察者发, 不重复
+          st <- sif_identify_state()
+          if (length(st$fails)) {
+            showNotification(HTML(htmltools::htmlEscape(
+              sprintf("识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
+                      st$ok, length(st$fails), paste(st$fails, collapse = "\n")))),
+              type = "warning", duration = 20)
+          } else if (st$done > 0L) {
+            showNotification(sprintf("识别完成: 成功 %d / %d", st$ok, st$done), type = "message")
+          }
         }
       }
       return(invisible(NULL))
     }
-    res <- sif_identify_path(q[1], timeout = 20)
+    res <- sif_identify_safe(q[1], sif_pick_apptainer(), timeout = 20)
     st <- sif_identify_state()
     st$done <- st$done + 1L
     if (isTRUE(res$ok)) st$ok <- st$ok + 1L else

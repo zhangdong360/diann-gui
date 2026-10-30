@@ -174,9 +174,17 @@ sif_probe_record <- function(probe, path, size, mtime, ver = "", ok = FALSE,
 # 带锁的缓存读-改-写 (v1.14.1): 两个 Shiny 会话同时识别时, 无锁的 load→record→save
 # 会 last-writer-wins 互相丢条目。与通知状态文件共用同一把每用户 mkdir 锁;
 # 配置未加载 (NOTIFY_LOCK_DIR 缺失, 仅测试/边缘场景) 时退化为无锁写。
+# v1.14.2: 锁竞争不再一次超时就静默退化 — 重试 lock_tries×lock_timeout 秒
+# (watcher 持锁仅做 RDS 读写, 窗口极短, 重试几乎必得); 仍失败才无锁写
+# (可用性优先, 原子 rename 保证文件不损坏)。参数可注入 (测试缩短等待)。
 sif_probe_update <- function(path, size, mtime, ver = "", ok = FALSE,
-                             message = "", reason = "", file = sif_probe_file()) {
-  locked <- tryCatch(isTRUE(notify_lock_acquire(timeout = 5)), error = function(e) FALSE)
+                             message = "", reason = "", file = sif_probe_file(),
+                             lock_tries = 3L, lock_timeout = 5) {
+  locked <- FALSE
+  for (i in seq_len(max(1L, as.integer(lock_tries)))) {
+    locked <- tryCatch(isTRUE(notify_lock_acquire(timeout = lock_timeout)), error = function(e) FALSE)
+    if (locked) break
+  }
   on.exit(if (locked) try(notify_lock_release(), silent = TRUE), add = TRUE)
   probe <- sif_probe_load(file)
   probe <- sif_probe_record(probe, path, size, mtime, ver = ver, ok = ok,
@@ -198,6 +206,16 @@ sif_identify_cache <- function(path, apptainer_bin, timeout = 60, runner = appta
                      message = res$message, reason = res$reason, file = file)
   }
   res
+}
+
+# 永不抛出的识别入口 (v1.14.2): 队列泵依赖"每次调用必有结果"才能弹出该镜像并
+# 继续处理后续 — 内层任何异常 (磁盘/反应式/未知) 都归一为失败结果, 进度与取消不受影响。
+sif_identify_safe <- function(path, apptainer_bin, timeout = 60, runner = apptainer_run,
+                              file = sif_probe_file()) {
+  tryCatch(sif_identify_cache(path, apptainer_bin, timeout = timeout, runner = runner, file = file),
+           error = function(e) list(ok = FALSE, version = "", stage = "", reason = "error",
+                                    message = sprintf("识别异常: %s", conditionMessage(e)),
+                                    inspect = "", raw_version_lines = character(0)))
 }
 
 # ---------- 合并 / 排序 / 标签 ----------

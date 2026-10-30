@@ -224,3 +224,28 @@ test_that("v1.13: doctor 只读 — 不创建/修改 SIF probe 与本地作业�
   after <- list.files(tempdir(), all.files = TRUE)
   expect_setequal(before, after)   # 不在 tempdir 留下 probe 文件等
 })
+
+# ---------- v1.14.2: doctor 补上"配置在但缺 python3"的告警 (WSL2 盲区) ----------
+
+test_that("doctor: 邮件配置就绪但缺 python3 时告警并给安装命令", {
+  old_py <- diann.gui::cfg_get("MAIL_PYTHON")
+  on.exit(diann.gui::set_core_const("MAIL_PYTHON", old_py), add = TRUE)
+  d <- tempfile("domail2"); dir.create(d, showWarnings = FALSE)
+  mc <- file.path(d, "mail_config.txt")
+  writeLines("smtp_host=x", mc)
+  Sys.chmod(mc, "0600")
+  diann.gui::set_core_const("MAIL_PYTHON", "")
+  df <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
+                   slurm_cmds = mk_fake_slurm("sbatch"), sif_dirs = character(0),
+                   mail_conf = mc, state_dir = tempdir(), backend = "slurm", deps = character(0))
+  row <- df[df$check == "邮件配置", ]
+  expect_equal(row$status, "warn")
+  expect_match(row$detail, "python3")
+  expect_match(row$detail, "apt install python3")
+  # python3 就绪时恢复 ok (不受本测试污染)
+  diann.gui::set_core_const("MAIL_PYTHON", "/usr/bin/python3")
+  df2 <- run_doctor(apptainer_cands = empty_cands(), partitions = "compute",
+                    slurm_cmds = mk_fake_slurm("sbatch"), sif_dirs = character(0),
+                    mail_conf = mc, state_dir = tempdir(), backend = "slurm", deps = character(0))
+  expect_equal(df2[df2$check == "邮件配置", "status"], "ok")
+})
