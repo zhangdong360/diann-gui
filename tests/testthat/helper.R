@@ -68,6 +68,14 @@ sif_version_key <- diann.gui:::sif_version_key
 sif_display_order <- diann.gui:::sif_display_order
 sif_merge_probe <- diann.gui:::sif_merge_probe
 sif_choice_labels <- diann.gui:::sif_choice_labels
+sif_identify_cache <- diann.gui:::sif_identify_cache
+sif_identify_safe <- diann.gui:::sif_identify_safe
+sif_probe_update <- diann.gui:::sif_probe_update
+local_jobs_note_corrupt <- diann.gui:::local_jobs_note_corrupt
+jobs_registry_file <- diann.gui:::jobs_registry_file
+jobs_registry_empty <- diann.gui:::jobs_registry_empty
+jobs_registry_load <- diann.gui:::jobs_registry_load
+mail_gate_info <- diann.gui:::mail_gate_info
 sif_default_index <- diann.gui:::sif_default_index
 sif_version_of <- diann.gui:::sif_version_of
 diann_notify_elapsed <- diann.gui:::diann_notify_elapsed

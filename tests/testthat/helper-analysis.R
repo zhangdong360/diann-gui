@@ -3,7 +3,8 @@
 # 内部函数别名 (与 helper.R 同风格)
 for (f in c("prep_run", "qc_compute", "de_compute", "enrich_compute",
             "report_build", "auto_annot_cols", "resolve_groups", "validate_group_map",
-            "validate_batch_map", "read_input_file", "impute_missing", "detect_species",
+            "validate_batch_map", "read_input_file", "impute_missing", "impute_mar_knn",
+            "detect_species",
             "qc_save_all", "de_save_all", "enrich_save_all", "de_stem", "safe_tag",
             "de_safe_levels", "an_deps_check", "an_deps_status", "an_deps_install_hint",
             "an_deps_groups", "an_deps_optional", "theme_proteo", "new_plot",
