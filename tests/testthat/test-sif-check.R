@@ -264,7 +264,8 @@ test_that("sif_identify_safe: 内层异常归一为失败结果, 不落缓存", 
   # sif_identify 内层已把 runner 异常归为 no_version; 护栏针对的是穿透 sif_identify
   # 的未知异常 (磁盘/对象损坏等) — 直接 mock sif_identify 抛错验证契约
   real_identify <- sif_identify   # 先捕获原函数 (mock 后同名指向的是抛错桩)
-  local_mocked_bindings(sif_identify = function(...) stop("模拟穿透异常"))
+  local_mocked_bindings(sif_identify = function(...) stop("模拟穿透异常"),
+                        .package = "diann.gui")
   res <- sif_identify_safe(f, fake_ap, file = pf)
   expect_false(res$ok)
   expect_equal(res$reason, "error")
@@ -272,7 +273,7 @@ test_that("sif_identify_safe: 内层异常归一为失败结果, 不落缓存", 
   expect_match(res$message, "模拟穿透异常")
   expect_identical(sif_probe_load(pf)$entries, list())   # 异常不写缓存
   # 正常路径不受影响 (mock 只在当前 test 内生效, 恢复需显式放回原函数)
-  local_mocked_bindings(sif_identify = real_identify)
+  local_mocked_bindings(sif_identify = real_identify, .package = "diann.gui")
   res2 <- sif_identify_safe(f, fake_ap, runner = mk_runner(), file = pf)
   expect_true(res2$ok)
   expect_equal(res2$version, "2.7.0")

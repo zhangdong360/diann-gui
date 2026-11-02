@@ -124,6 +124,17 @@ server <- function(input, output, session) {
     invisible(NULL)
   }
 
+  # 识别结果落缓存后刷新三件 reactive 视图 (行表/回显 bump/下拉标签)。
+  # v1.15.0 修复: v1.14.2 把队列泵的 sif_identify_path 换成 sif_identify_safe
+  # (异常护栏) 时丢掉了这三步 — 识别成功写缓存但「已识别(缓存)」回显与下拉
+  # 版本标签都不更新, e2e 等 90s 超时 (识别泵 v1.14.2 起静默回归)。
+  sif_views_refresh <- function() {
+    sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), sif_probe_load()))
+    sif_probe_bump(sif_probe_bump() + 1L)
+    sif_refresh_choices()
+    invisible(NULL)
+  }
+
   # 识别单个镜像并落缓存; 返回 sif_identify() 结果
   # v1.14.1: 识别+带锁写缓存提取为 sif_identify_cache() (R/sif.R, 可离线单测),
   # 本函数只叠加 reactive 刷新; timeout 可调 (批量识别用短超时, 单个识别保持 60s)
@@ -132,9 +143,7 @@ server <- function(input, output, session) {
     if (!nzchar(p)) return(list(ok = FALSE, version = "", stage = "", reason = "missing",
                                 message = tr_("未选择镜像"), inspect = "", raw_version_lines = character(0)))
     res <- sif_identify_cache(p, sif_pick_apptainer(), timeout = timeout)
-    sif_rows(sif_merge_probe(scan_sif_images(cfg_get("SIF_DIRS")), sif_probe_load()))
-    sif_probe_bump(sif_probe_bump() + 1L)
-    sif_refresh_choices()
+    sif_views_refresh()
     res
   }
 
@@ -220,6 +229,7 @@ server <- function(input, output, session) {
       return(invisible(NULL))
     }
     res <- sif_identify_safe(q[1], sif_pick_apptainer(), timeout = 20)
+    sif_views_refresh()   # v1.15.0: 识别后必须刷新回显/下拉 (v1.14.2 回归)
     st <- sif_identify_state()
     st$done <- st$done + 1L
     if (isTRUE(res$ok)) st$ok <- st$ok + 1L else

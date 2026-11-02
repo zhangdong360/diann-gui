@@ -173,7 +173,10 @@ test_that("combat_correct: <2 批次 / 含缺失 / 完全混淆 拒绝执行并�
 test_that("impute_mar_knn: 回退打 knn_fallback 标记, 成功路径不打", {
   m <- matrix(c(1, 2, NA, 4, 5, 6, 7, 8, 9), nrow = 3)
   # ① impute 包缺失 → 回退 + 标记
-  local_mocked_bindings(analysis_soft_has = function(pkg) pkg != "impute")
+  # .package: CI 为安装态 (R CMD INSTALL + test_dir), 无 pkgload 会话;
+  # 显式指包才能改命名空间绑定 (本地 load_all 与安装态两种环境都成立)
+  local_mocked_bindings(analysis_soft_has = function(pkg) pkg != "impute",
+                        .package = "diann.gui")
   r1 <- impute_mar_knn(m)
   expect_false(anyNA(r1))
   expect_true(isTRUE(attr(r1, "knn_fallback")))
@@ -181,7 +184,7 @@ test_that("impute_mar_knn: 回退打 knn_fallback 标记, 成功路径不打", {
   local_mocked_bindings(analysis_soft_has = function(pkg) pkg == "impute",
                         analysis_soft_fun = function(pkg, fun) {
                           stop("模拟 impute.knn 崩溃")
-                        })
+                        }, .package = "diann.gui")
   r2 <- impute_mar_knn(m)
   expect_false(anyNA(r2))
   expect_true(isTRUE(attr(r2, "knn_fallback")))
@@ -189,14 +192,15 @@ test_that("impute_mar_knn: 回退打 knn_fallback 标记, 成功路径不打", {
   local_mocked_bindings(analysis_soft_has = function(pkg) pkg == "impute",
                         analysis_soft_fun = function(pkg, fun) {
                           function(m, k, rowmax, colmax) list(data = { mm <- m; mm[is.na(mm)] <- 3.5; mm })
-                        })
+                        }, .package = "diann.gui")
   r3 <- impute_mar_knn(m)
   expect_false(anyNA(r3))
   expect_null(attr(r3, "knn_fallback"))
 })
 
 test_that("prep_run(mar): 回退时告警如实描述 (不再标注 k 近邻)", {
-  local_mocked_bindings(analysis_soft_has = function(pkg) pkg != "impute")
+  local_mocked_bindings(analysis_soft_has = function(pkg) pkg != "impute",
+                        .package = "diann.gui")
   p <- prep_run(make_fixture_pg_matrix(n_prot = 20, seed = 31),
                 params = list(source = "diann", min_detect_frac = 0.5, impute_method = "mar"))
   expect_false(anyNA(p$expr_imp))

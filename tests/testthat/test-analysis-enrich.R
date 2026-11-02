@@ -67,7 +67,7 @@ test_that("kegg_enrich_run(online=FALSE): enricher 收到 universe", {
           NULL
         })
       stop(sprintf("mock: 未预期的调用 %s::%s", pkg, fun))
-    })
+    }, .package = "diann.gui")
   prep <- list(kegg_org = "hsa")
   res <- kegg_enrich_run(
     data.frame(ENTREZID = c("1", "2")), universe = c("1", "2", "3", "4", "5"), prep,
