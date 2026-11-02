@@ -7,6 +7,10 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.15.1", date = "2026-11-02", items = c(
+    "修复: 「识别所有未识别镜像」识别成功后, 「已识别(缓存)」回显与下拉里的版本标签不再刷新 (v1.14.2 引入的静默回归)——队列泵换用 sif_identify_safe 异常护栏时丢掉了 reactive 刷新, 现抽取 sif_views_refresh() (行表 + bump + 下拉) 供泵与单个识别共用; CI e2e 以「识别步骤 90s 超时」暴露",
+    "测试: 修复 CI r-tests 自 v1.14.1 起一直失败的两类问题——① helper 补齐 9 个内部函数别名 (sif_identify_cache/sif_identify_safe/sif_probe_update/local_jobs_note_corrupt/jobs_registry_file/jobs_registry_empty/jobs_registry_load/mail_gate_info/impute_mar_knn), 测试里的裸调用在安装态 (R CMD INSTALL + test_dir) 找不到函数; ② local_mocked_bindings 显式传 .package = \"diann.gui\", 安装态没有 pkgload 会话, 不传必报错; 修复后 9 个此前从未真正执行的用例全部跑通 (PASS 1034→1090)"
+  )),
   list(ver = "v1.15.0", date = "2026-11-02", items = c(
     "新增: 界面中英文切换——标题栏右上角语言下拉, 切换写回 ~/.diann_gui/config.R 的 LANG 键并自动刷新页面; 默认英文 (LANG = \"en\"), 可选 \"zh\"; 环境变量 DIANN_GUI_LANG 优先于配置 (部署方钉死语言用); 语言解析顺序 DIANN_GUI_LANG > LANG > \"en\"",
     "新增: 基于 shiny.i18n 的翻译基础设施——翻译表 inst/i18n/translations.json (key = 中文原文, 1160+ 条整句英文译文, sprintf 占位符逐条校验); 内部 tr_() 无状态查表, 未命中 key 回退中文原文, 不因缺译文中断; 术语表 inst/i18n/GLOSSARY.md 统一译名",
