@@ -16,6 +16,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# 既有用例断言中文输出: 在加载被测模块前钉默认语言 (外部已显式设置时尊重之)
+os.environ.setdefault("DIANN_GUI_LANG", "zh")
 _spec = importlib.util.spec_from_file_location("mail_notify", ROOT / "inst" / "python" / "mail_notify.py")
 mail = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mail)
@@ -106,6 +108,57 @@ class StatusViewTest(unittest.TestCase):
         self.assertTrue(mail.status_view(ns(rc=0))[3])
         self.assertFalse(mail.status_view(ns(rc=2))[3])
         self.assertFalse(mail.status_view(ns(rc=None))[3])
+
+
+class LangEnTest(unittest.TestCase):
+    """en 模式: 状态词映射 (label/key 保持中文协议常量) 与主题行/正文模板渲染。"""
+
+    def setUp(self):
+        self._old_lang = mail._LANG
+        self._old_tab = (mail._I18N_TABLE, mail._I18N_TABLE_LOADED)
+        mail.set_lang("en")
+        # 注入最小翻译表: 真实表仅在安装布局 <pkg>/i18n/ 下存在; 源码树缺失/缺
+        # key 时 _() 回退中文原文 (与 R 侧 tr_ 语义一致), 故注入以保证断言确定
+        mail._I18N_TABLE = {
+            "【DIA-NN GUI】%s (Job %s) 分析%s": "[DIA-NN GUI] %s (Job %s) analysis %s",
+            "DIA-NN 分析%s": "DIA-NN analysis %s",
+        }
+        mail._I18N_TABLE_LOADED = True
+
+    def tearDown(self):
+        mail.set_lang(self._old_lang)
+        mail._I18N_TABLE, mail._I18N_TABLE_LOADED = self._old_tab
+
+    def test_status_words_en_map(self):
+        # label (协议常量) 不译; word 值经内置 STATUS_WORDS_EN; "完成"→"completed"
+        self.assertEqual(mail.status_view(ns(status_label="成功")), ("✅", "Success", "成功", True))
+        self.assertEqual(mail.status_view(ns(status_label="失败"))[1], "Failed")
+        self.assertEqual(mail.status_view(ns(status_label="未知"))[1], "Unknown")
+        self.assertEqual(mail.status_view(ns(status_label="超时"))[1], "Timed out")
+        self.assertEqual(mail.status_view(ns(rc=0))[1], "completed")
+        self.assertEqual(mail.status_view(ns(rc=2))[1], "Failed")
+        # 判定比较不受语言影响
+        self.assertTrue(mail.status_view(ns(status_label="成功"))[3])
+        self.assertFalse(mail.status_view(ns(status_label="已取消"))[3])
+
+    def test_subject_and_h2_en_rendering(self):
+        self.assertEqual(mail.build_subject("T1", "7", "completed"),
+                         "[DIA-NN GUI] T1 (Job 7) analysis completed")
+        html = mail.build_html(ns(status_label="成功", task="T1", job_id="7",
+                                  elapsed=60, diann_ver="2.10.0"),
+                               [], [], {}, "")
+        self.assertIn("DIA-NN analysis Success", html)  # label 成功 → STATUS_WORDS_EN
+        # 注入表未收录的 key 回退中文原文 (与 R 侧 tr_ 语义一致)
+        self.assertIn("任务名称", html)
+        # rc 回退路径: word 完成经 STATUS_WORDS_EN 映射为 "completed"
+        html_rc = mail.build_html(ns(rc=0, diann_ver=""), [], [], {}, "")
+        self.assertIn("DIA-NN analysis completed", html_rc)
+
+    def test_fallback_to_zh_without_table(self):
+        mail._I18N_TABLE, mail._I18N_TABLE_LOADED = None, True
+        self.assertEqual(mail._("任务名称"), "任务名称")
+        self.assertEqual(mail.build_subject("T", "1", "completed"),
+                         "【DIA-NN GUI】T (Job 1) 分析completed")
 
 
 class StartTlsTest(unittest.TestCase):

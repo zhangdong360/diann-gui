@@ -52,29 +52,29 @@ normalize_sample_map <- function(x) {
                     Group  = rep(names(x), lengths(x)),
                     stringsAsFactors = FALSE)
   } else {
-    stop("sample_group_map 须为 NULL / data.frame(Sample,Group) / 命名 list")
+    stop(tr_("sample_group_map 须为 NULL / data.frame(Sample,Group) / 命名 list"))
   }
   if (!identical(colnames(m), c("Sample", "Group")))
-    stop("sample_group_map 必须包含 Sample 与 Group 两列")
+    stop(tr_("sample_group_map 必须包含 Sample 与 Group 两列"))
   m <- m[!is.na(m$Sample) & !is.na(m$Group) & m$Sample != "" & m$Group != "", , drop = FALSE]
   if (anyDuplicated(m$Sample))
-    stop("sample_group_map 中存在重复的 Sample: ",
-         paste(m$Sample[duplicated(m$Sample)], collapse = ", "))
-  if (nrow(m) == 0) stop("sample_group_map 为空, 请检查填写内容")
+    stop(tr_("sample_group_map 中存在重复的 Sample: %s",
+             paste(m$Sample[duplicated(m$Sample)], collapse = ", ")))
+  if (nrow(m) == 0) stop(tr_("sample_group_map 为空, 请检查填写内容"))
   m
 }
 
 # ---- 分组校验: 返回 NULL 或中文原因; 界面与编排层共用 ----
 validate_group_map <- function(df) {
-  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return("分组表为空。")
-  if (!all(c("Sample", "Group") %in% colnames(df))) return("分组表缺少 Sample / Group 列。")
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(tr_("分组表为空。"))
+  if (!all(c("Sample", "Group") %in% colnames(df))) return(tr_("分组表缺少 Sample / Group 列。"))
   g <- trimws(as.character(df$Group))
-  if (any(is.na(g) | g == "")) return("存在空组名。")
+  if (any(is.na(g) | g == "")) return(tr_("存在空组名。"))
   tb <- table(g)
-  if (length(tb) < 2) return("至少需要 2 个分组。")
+  if (length(tb) < 2) return(tr_("至少需要 2 个分组。"))
   if (any(tb < 2))
-    return(sprintf("每个分组至少需要 2 个样本；当前 %s 组仅 1 个样本。",
-                   paste(names(tb)[tb < 2], collapse = ", ")))
+    return(tr_("每个分组至少需要 2 个样本；当前 %s 组仅 1 个样本。",
+               paste(names(tb)[tb < 2], collapse = ", ")))
   NULL
 }
 
@@ -88,33 +88,33 @@ normalize_batch_map <- function(x) {
                     Batch  = rep(names(x), lengths(x)),
                     stringsAsFactors = FALSE)
   } else {
-    stop("sample_batch_map 须为 NULL / data.frame(Sample,Batch) / 命名 list")
+    stop(tr_("sample_batch_map 须为 NULL / data.frame(Sample,Batch) / 命名 list"))
   }
   if (!identical(colnames(m), c("Sample", "Batch")))
-    stop("sample_batch_map 必须包含 Sample 与 Batch 两列")
+    stop(tr_("sample_batch_map 必须包含 Sample 与 Batch 两列"))
   m <- m[!is.na(m$Sample) & !is.na(m$Batch) & m$Sample != "" & m$Batch != "", , drop = FALSE]
   if (anyDuplicated(m$Sample))
-    stop("sample_batch_map 中存在重复的 Sample: ",
-         paste(m$Sample[duplicated(m$Sample)], collapse = ", "))
-  if (nrow(m) == 0) stop("sample_batch_map 为空, 请检查填写内容")
+    stop(tr_("sample_batch_map 中存在重复的 Sample: %s",
+             paste(m$Sample[duplicated(m$Sample)], collapse = ", ")))
+  if (nrow(m) == 0) stop(tr_("sample_batch_map 为空, 请检查填写内容"))
   m
 }
 
 # ---- 批次校验: 批次名非空、>=2 批、每批 >=2 样本 ----
 validate_batch_map <- function(df, snames = NULL) {
-  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return("批次表为空。")
-  if (!all(c("Sample", "Batch") %in% colnames(df))) return("批次表缺少 Sample / Batch 列。")
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(tr_("批次表为空。"))
+  if (!all(c("Sample", "Batch") %in% colnames(df))) return(tr_("批次表缺少 Sample / Batch 列。"))
   b <- trimws(as.character(df$Batch))
-  if (any(is.na(b) | b == "")) return("存在空批次名。")
+  if (any(is.na(b) | b == "")) return(tr_("存在空批次名。"))
   tb <- table(b)
-  if (length(tb) < 2) return("至少需要 2 个批次（全部样本同属一批时无需去批次）。")
+  if (length(tb) < 2) return(tr_("至少需要 2 个批次（全部样本同属一批时无需去批次）。"))
   if (any(tb < 2))
-    return(sprintf("每个批次至少需要 2 个样本；当前 %s 批仅 1 个样本。",
-                   paste(names(tb)[tb < 2], collapse = ", ")))
+    return(tr_("每个批次至少需要 2 个样本；当前 %s 批仅 1 个样本。",
+               paste(names(tb)[tb < 2], collapse = ", ")))
   if (!is.null(snames)) {
     miss <- setdiff(snames, as.character(df$Sample))
     if (length(miss) > 0)
-      return(paste0("批次表未覆盖以下样本：", paste(miss, collapse = ", ")))
+      return(tr_("批次表未覆盖以下样本：%s", paste(miss, collapse = ", ")))
   }
   NULL
 }
@@ -149,10 +149,8 @@ resolve_groups <- function(sample_cols, sample_map, sample_rename = NULL) {
   if (is.null(map)) {
     infer <- infer_groups(snames)
     if (is.null(infer)) {
-      stop("无法从样本列名自动推断分组 (已尝试\"尾部序号\"与\"末段后缀\"两种命名约定, ",
-           "仍得不到 >=2 组且每组 >=2 样本)。\n",
-           "  样本列: ", paste(sample_cols, collapse = ", "), "\n",
-           "  请在「分组设置」中显式指定 样本->组 映射")
+      stop(tr_("无法从样本列名自动推断分组 (已尝试\"尾部序号\"与\"末段后缀\"两种命名约定, 仍得不到 >=2 组且每组 >=2 样本)。\n  样本列: %s\n  请在「分组设置」中显式指定 样本->组 映射",
+               paste(sample_cols, collapse = ", ")))
     }
     groups  <- infer
     map_src <- "auto"
@@ -166,11 +164,11 @@ resolve_groups <- function(sample_cols, sample_map, sample_rename = NULL) {
     grp_by_col <- stats::setNames(map$Group, vapply(map$Sample, match_col, character(1)))
     miss <- is.na(names(grp_by_col))
     if (any(miss))
-      stop("分组表中的以下样本未在数据列中找到: ",
-           paste(map$Sample[miss], collapse = ", "))
+      stop(tr_("分组表中的以下样本未在数据列中找到: %s",
+               paste(map$Sample[miss], collapse = ", ")))
     miss2 <- setdiff(sample_cols, names(grp_by_col))
     if (length(miss2) > 0)
-      stop("数据中以下样本列未被分组表覆盖: ", paste(miss2, collapse = ", "))
+      stop(tr_("数据中以下样本列未被分组表覆盖: %s", paste(miss2, collapse = ", ")))
     groups  <- unname(grp_by_col[sample_cols])
     map_src <- "explicit"
   }
@@ -195,7 +193,7 @@ detect_species <- function(annot) {
     list(species = "Danio rerio", org_pkg = "org.Dr.eg.db", kegg_org = "dre")
   } else {
     list(species = "Homo sapiens (default)", org_pkg = "org.Hs.eg.db", kegg_org = "hsa",
-         warn = "未检测到明确物种标识，默认按 Human (org.Hs.eg.db) 注释")
+         warn = tr_("未检测到明确物种标识，默认按 Human (org.Hs.eg.db) 注释"))
   }
 }
 
@@ -319,20 +317,20 @@ impute_missing <- function(mat, method = "mnar", shift = 1.8, sd_scale = 0.3, se
 combat_correct <- function(mat, batch, groups = NULL, par_prior = TRUE) {
   if (!analysis_soft_has("sva"))
     return(list(ok = FALSE, mat = mat, note = NA_character_,
-                reason = "未安装 sva 包 (Bioconductor), 无法执行 ComBat"))
+                reason = tr_("未安装 sva 包 (Bioconductor), 无法执行 ComBat")))
   m <- as.matrix(mat)
   if (anyNA(m))
     return(list(ok = FALSE, mat = mat, note = NA_character_,
-                reason = "矩阵含缺失值, ComBat 需要完整矩阵 (请先选择一种插补方法)"))
+                reason = tr_("矩阵含缺失值, ComBat 需要完整矩阵 (请先选择一种插补方法)")))
   b <- factor(as.character(batch), levels = unique(as.character(batch)))
   if (nlevels(b) < 2)
-    return(list(ok = FALSE, mat = mat, note = NA_character_, reason = "批次数 < 2"))
+    return(list(ok = FALSE, mat = mat, note = NA_character_, reason = tr_("批次数 < 2")))
   # 完全混杂 (每批只含一组) 会抹掉组间差异, 直接拒绝
   if (!is.null(groups)) {
     g_by_b <- split(as.character(groups), as.character(batch))
     if (all(vapply(g_by_b, function(g) length(unique(g)) == 1L, logical(1))))
       return(list(ok = FALSE, mat = mat, note = NA_character_,
-                  reason = "批次与分组完全混杂（每个批次只含一个分组），去批次会连组间差异一起抹掉"))
+                  reason = tr_("批次与分组完全混杂（每个批次只含一个分组），去批次会连组间差异一起抹掉")))
   }
   mod <- if (is.null(groups)) NULL else stats::model.matrix(~ factor(groups))
 
@@ -349,14 +347,14 @@ combat_correct <- function(mat, batch, groups = NULL, par_prior = TRUE) {
     }, error = function(e) NULL)
     if (isTRUE(ok) && is.matrix(res) && !anyNA(res)) res else NULL
   }
-  res <- run(TRUE); note <- "参数经验贝叶斯"
-  if (is.null(res)) { res <- run(FALSE); note <- "非参数经验贝叶斯" }
+  res <- run(TRUE); note <- tr_("参数经验贝叶斯")
+  if (is.null(res)) { res <- run(FALSE); note <- tr_("非参数经验贝叶斯") }
   if (is.null(res))
     return(list(ok = FALSE, mat = mat, note = NA_character_,
-                reason = "ComBat 计算失败（批次与分组可能完全混杂, 或存在零方差蛋白）"))
+                reason = tr_("ComBat 计算失败（批次与分组可能完全混杂, 或存在零方差蛋白）")))
   if (!identical(dim(res), dim(m)))
     return(list(ok = FALSE, mat = mat, note = NA_character_,
-                reason = "ComBat 返回矩阵维度异常, 已放弃校正"))
+                reason = tr_("ComBat 返回矩阵维度异常, 已放弃校正")))
   dimnames(res) <- dimnames(m)          # ComBat 保持行序/列序, 这里再对齐一次
   list(ok = TRUE, mat = as.data.frame(res, check.names = FALSE), note = note,
        reason = NA_character_)
@@ -397,22 +395,22 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
     N.Proteotypic.Sequences   = take_col("N.Proteotypic.Sequences"),
     stringsAsFactors = FALSE)
   if (all(is.na(annot$Protein.Group)))
-    stop("未能识别蛋白 ID 注释列。请检查输入列名, 或在「高级设置」中指定 ID 列。")
+    stop(tr_("未能识别蛋白 ID 注释列。请检查输入列名, 或在「高级设置」中指定 ID 列。"))
   if (all(is.na(annot$Genes)))
-    add_warning("未识别到 Genes 注释列, 基因注释相关输出(火山图标注/富集)将受限")
+    add_warning(tr_("未识别到 Genes 注释列, 基因注释相关输出(火山图标注/富集)将受限"))
 
   # ---- 样本列 = 全部非注释列 ----
   annot_used <- unlist(annot_map[!is.na(unlist(annot_map))])
   sample_cols <- setdiff(colnames(raw), annot_used)
-  if (length(sample_cols) < 2) stop("未识别到样本定量列，请检查输入格式")
+  if (length(sample_cols) < 2) stop(tr_("未识别到样本定量列，请检查输入格式"))
   # 判据: 只看"有值却无法转数值"的比例, NA 不计入
   num_ratio <- vapply(sample_cols, function(s) {
     v <- raw[[s]]
     mean(!is.na(v) & is.na(suppressWarnings(as.numeric(v))))
   }, numeric(1))
   if (any(num_ratio > 0.5))
-    stop("以下列既不是注释列也非数值样本列, 请检查输入:\n  ",
-         paste(sample_cols[num_ratio > 0.5], collapse = ", "))
+    stop(tr_("以下列既不是注释列也非数值样本列, 请检查输入:\n  %s",
+             paste(sample_cols[num_ratio > 0.5], collapse = ", ")))
 
   # ---- 样本/分组解析 ----
   parsed <- resolve_groups(sample_cols, sample_group_map, sample_rename = sample_rename)
@@ -420,7 +418,7 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   groups       <- parsed$groups
   group_levels <- parsed$group_levels
   n_groups     <- parsed$n_groups
-  if (n_groups < 2) stop("需要至少两个分组才能进行差异分析")
+  if (n_groups < 2) stop(tr_("需要至少两个分组才能进行差异分析"))
   names(sample_cols) <- snames
 
   # ---- 对照组 (默认第一组) ----
@@ -441,7 +439,7 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
                           ignore.case = TRUE)
   n_contam <- sum(is_contaminant)
   if (n_contam > 0)
-    add_warning(sprintf("过滤了 %d 条污染/反库(REV/DECOY)条目", n_contam))
+    add_warning(tr_("过滤了 %d 条污染/反库(REV/DECOY)条目", n_contam))
 
   keep <- !is_contaminant
   expr_raw <- expr_raw[keep, , drop = FALSE]
@@ -454,8 +452,8 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   annot    <- annot[keep2, , drop = FALSE]
   detect_frac <- detect_frac[keep2]
   n_final <- nrow(expr_raw)
-  add_warning(sprintf("低检出过滤 (>=%.0f%%检出) 剔除 %d 个蛋白", min_detect_frac * 100, n_low))
-  if (n_final == 0) stop("过滤后无剩余蛋白，请降低低检出过滤阈值 (min_detect_frac)")
+  add_warning(tr_("低检出过滤 (>=%.0f%%检出) 剔除 %d 个蛋白", min_detect_frac * 100, n_low))
+  if (n_final == 0) stop(tr_("过滤后无剩余蛋白，请降低低检出过滤阈值 (min_detect_frac)"))
 
   # ---- 过滤: 分组内最少检测样本数 (0 = 不启用; 任一分组达到阈值即保留) ----
   min_group_detect <- suppressWarnings(as.numeric(params$min_group_detect %||% 0)[1])
@@ -475,10 +473,10 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
     expr_raw    <- expr_raw[keep_g, , drop = FALSE]
     annot       <- annot[keep_g, , drop = FALSE]
     detect_frac <- detect_frac[keep_g]
-    add_warning(sprintf("分组内最少检测样本数过滤 (任一分组 >= %d 个样本检出) 剔除 %d 个蛋白",
-                        min_group_detect, n_group_low))
+    add_warning(tr_("分组内最少检测样本数过滤 (任一分组 >= %d 个样本检出) 剔除 %d 个蛋白",
+                    min_group_detect, n_group_low))
     if (nrow(expr_raw) == 0)
-      stop("分组内最少检测样本数过滤后无剩余蛋白，请降低该阈值")
+      stop(tr_("分组内最少检测样本数过滤后无剩余蛋白，请降低该阈值"))
     n_final <- nrow(expr_raw)
   }
 
@@ -491,8 +489,8 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   # 不做自动剔除 (会悄悄改变分组设计), 列出样本让用户检查原始文件/分组映射。
   dead_samples <- miss_per_sample >= 1
   if (any(dead_samples))
-    stop(sprintf("以下样本无任何蛋白定量值 (全缺失), 请检查原始文件或样本映射后重试: %s",
-                 paste(snames[dead_samples], collapse = ", ")))
+    stop(tr_("以下样本无任何蛋白定量值 (全缺失), 请检查原始文件或样本映射后重试: %s",
+             paste(snames[dead_samples], collapse = ", ")))
 
   # ---- log2 变换 (归一化在插补之后) ----
   expr_log2 <- log2(expr_raw)
@@ -519,19 +517,18 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   expr_imp_lin  <- 2 ^ expr_imp
 
   if (identical(impute_method, "none")) {
-    add_warning(sprintf("缺失值处理方式：不填补（保留 %d 个缺失值，占 %.2f%%）；已停用差异分析与功能富集",
-                        n_missing, n_missing / (nrow(expr_imp) * ncol(expr_imp)) * 100))
+    add_warning(tr_("缺失值处理方式：不填补（保留 %d 个缺失值，占 %.2f%%）；已停用差异分析与功能富集",
+                    n_missing, n_missing / (nrow(expr_imp) * ncol(expr_imp)) * 100))
   } else if (identical(impute_method, "mar")) {
     # v1.14.2: 如实描述 — knn_fallback 标记覆盖两种回退 (impute 包缺失 / impute.knn
     # 运行期失败), 此前运行期失败时仍标注 "k 近邻"
     fb <- isTRUE(attr(expr_imp_raw, "knn_fallback"))
     add_warning(if (!fb)
-                  "缺失值插补：随机缺失型（k 近邻, k=10）"
-                else paste0("缺失值插补：随机缺失型 — k 近邻不可用, 实际回退为行中位数填充",
-                            "（安装 impute 包后重跑可得 k 近邻插补）"))
+                  tr_("缺失值插补：随机缺失型（k 近邻, k=10）")
+                else tr_("缺失值插补：随机缺失型 — k 近邻不可用, 实际回退为行中位数填充（安装 impute 包后重跑可得 k 近邻插补）"))
   }
-  add_warning(sprintf("样本中位数归一化：各样本中位数对齐到最大值 %.2f（平移 %.2f ~ %.2f）",
-                      median_target, min(median_shift), max(median_shift)))
+  add_warning(tr_("样本中位数归一化：各样本中位数对齐到最大值 %.2f（平移 %.2f ~ %.2f）",
+                  median_target, min(median_shift), max(median_shift)))
 
   # ---- 去批次 (可选) ----
   use_combat    <- isTRUE(params$use_combat)
@@ -543,10 +540,10 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
   n_batches     <- 0L
   if (use_combat) {
     bm  <- tryCatch(normalize_batch_map(sample_batch_map), error = function(e) NULL)
-    err <- if (is.null(bm)) "未提供批次表" else validate_batch_map(bm, snames)
+    err <- if (is.null(bm)) tr_("未提供批次表") else validate_batch_map(bm, snames)
     if (!is.null(err)) {
-      combat_reason <- paste0(err, "（请在「① 数据与分组」的批次设置中填写并应用）")
-      add_warning(paste0("去批次未执行：", combat_reason))
+      combat_reason <- paste0(err, tr_("（请在「① 数据与分组」的批次设置中填写并应用）"))
+      add_warning(tr_("去批次未执行：%s", combat_reason))
     } else {
       batch_vec <- unname(stats::setNames(as.character(bm$Batch), as.character(bm$Sample))[snames])
       n_batches <- length(unique(batch_vec))
@@ -555,11 +552,11 @@ prep_run <- function(raw, params = list(), sample_group_map = NULL, annot_cols =
         expr_imp      <- res$mat
         combat_done   <- TRUE
         combat_note   <- res$note
-        add_warning(sprintf("去批次校正：ComBat（%s），%d 个批次（%s），分组作为协变量保留",
-                            combat_note, n_batches, paste(unique(batch_vec), collapse = " / ")))
+        add_warning(tr_("去批次校正：ComBat（%s），%d 个批次（%s），分组作为协变量保留",
+                        combat_note, n_batches, paste(unique(batch_vec), collapse = " / ")))
       } else {
         combat_reason <- res$reason
-        add_warning(paste0("去批次未执行：", combat_reason))
+        add_warning(tr_("去批次未执行：%s", combat_reason))
       }
     }
   }

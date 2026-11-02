@@ -20,10 +20,14 @@ DIANN GUI 作业完成邮件通知助手。
 连通性检查（只连 SMTP 不登录不发信，用于验证计算节点出网）:
   python3 mail_notify.py --check --config mail_config.txt
 
+语言: --lang zh|en (默认取环境变量 DIANN_GUI_LANG, 解析不了为 en); en 模式查安装布局
+  <pkg>/i18n/translations.json, 表缺失/缺 key 一律回退中文原文 (与 R 侧 tr_ 语义一致)。
+
 约定：作为作业的一部分运行时，任何失败都只打 WARNING、以 0 退出，绝不影响作业状态。
 """
 import argparse
 import html
+import json
 import os
 import re
 import smtplib
@@ -35,6 +39,73 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 DEFAULT_CONFIG = os.path.join(os.path.expanduser("~"), ".diann_gui", "mail_config.txt")
+
+# ------------------------------------------------------------
+# i18n: --lang {zh,en}, 默认取环境变量 DIANN_GUI_LANG, 解析不了为 "en"
+# (与 R 侧 i18n_match_lang 同约定: 仅认 zh/zh_cn/zh-cn/chinese, 其余一律 en)。
+# 翻译表优先从脚本自身位置推导 ../i18n/translations.json (安装布局 <pkg>/python/
+# 与 <pkg>/i18n/ 同级; 表缺失/JSON 损坏/缺 key 一律回退中文原文, 不报错 — 与 R
+# 侧 tr_ 语义一致)。zh 模式不做任何查表, 输出与历史版本逐字符一致。
+# 状态标签 (成功/失败/…) 是与 R 侧四层合成的协议常量, 任何语言下 key 不变,
+# 仅展示词经 STATUS_WORDS_EN 映射; label == "成功" 等判定比较不受语言影响。
+# ------------------------------------------------------------
+
+_I18N_TABLE = None       # {中文原文: 英文}; None = 无表 (全部回退中文)
+_I18N_TABLE_LOADED = False
+
+
+def _resolve_lang(raw):
+    v = str(raw or "").strip().lower()
+    return "zh" if v in ("zh", "zh_cn", "zh-cn", "chinese") else "en"
+
+
+def _load_i18n_table():
+    """加载 <脚本目录>/../i18n/translations.json 为 {zh: en} 字典 (只加载一次)。
+
+    文件不存在 (源码树 inst/python/ 布局)、JSON 损坏或格式不符时置 None
+    (全部回退中文), 绝不抛错。key 列取 languages[0] (约定 "zh"), 值列取 "en"。
+    """
+    global _I18N_TABLE, _I18N_TABLE_LOADED
+    if not _I18N_TABLE_LOADED:
+        _I18N_TABLE_LOADED = True
+        path = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), os.pardir, "i18n", "translations.json"))
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            langs = [str(x).strip().lower() for x in (data.get("languages") or [])]
+            if "en" in langs and langs[0] != "en":
+                key_lang = langs[0]
+                table = {}
+                for row in (data.get("translation") or []):
+                    if not isinstance(row, dict):
+                        continue
+                    k, v = row.get(key_lang), row.get("en")
+                    if isinstance(k, str) and k and isinstance(v, str) and v.strip():
+                        table.setdefault(k, v)
+                _I18N_TABLE = table or None
+        except (OSError, ValueError, AttributeError):
+            _I18N_TABLE = None
+    return _I18N_TABLE
+
+
+_LANG = _resolve_lang(os.environ.get("DIANN_GUI_LANG"))
+
+
+def set_lang(lang):
+    """设置当前语言 (main() 在解析 --lang 后调用; 测试可直接切换)。"""
+    global _LANG
+    _LANG = _resolve_lang(lang)
+
+
+def _(s):
+    """用户可见文案翻译: zh 原样返回; 其他语言查表, 缺 key 回退中文原文 (同 R 侧 tr_)。"""
+    if _LANG == "zh" or not isinstance(s, str):
+        return s
+    table = _load_i18n_table()
+    if table:
+        return table.get(s, s)
+    return s
 
 
 def load_config(path):
@@ -70,11 +141,11 @@ def fmt_elapsed(sec):
         return None
     sec = int(sec or 0)
     if sec < 60:
-        return "%d 秒" % sec
+        return _("%d 秒") % sec
     h, rem = divmod(sec, 3600)
     if h:
-        return "%d 时 %d 分 %d 秒" % (h, rem // 60, rem % 60)
-    return "%d 分 %d 秒" % (sec // 60, sec % 60)
+        return _("%d 时 %d 分 %d 秒") % (h, rem // 60, rem % 60)
+    return _("%d 分 %d 秒") % (sec // 60, sec % 60)
 
 
 def count_lines(path, cap_mb=200):
@@ -101,14 +172,14 @@ def summarize_out_dir(out_dir, report_path=None, max_files=25):
     try:
         entries = [e for e in os.scandir(out_dir) if e.is_file()]
     except OSError as e:
-        return ["<li>无法读取输出目录: %s</li>" % html.escape(str(e))], metrics
+        return [_("<li>无法读取输出目录: %s</li>") % html.escape(str(e))], metrics
     entries.sort(key=lambda e: -e.stat().st_size)
     total = sum(e.stat().st_size for e in entries)
-    metrics.append("输出目录共 %d 个文件, 合计 %s" % (len(entries), human_size(total)))
+    metrics.append(_("输出目录共 %d 个文件, 合计 %s") % (len(entries), human_size(total)))
     for e in entries[:max_files]:
         rows.append("<li><code>%s</code> — %s</li>" % (html.escape(e.name), human_size(e.stat().st_size)))
     if len(entries) > max_files:
-        rows.append("<li>… 其余 %d 个文件从略</li>" % (len(entries) - max_files))
+        rows.append(_("<li>… 其余 %d 个文件从略</li>") % (len(entries) - max_files))
     # 关键结果指标: 主报告行数
     candidates = []
     if report_path:
@@ -117,17 +188,18 @@ def summarize_out_dir(out_dir, report_path=None, max_files=25):
     for p in candidates:
         if not p or not os.path.isfile(p):
             continue
-        data_rows, _ = count_lines(p)
+        # 注: 不可用裸名 "_" 接收 (与翻译函数 _() 冲突, 会成局部变量触发 UnboundLocalError)
+        data_rows, _total = count_lines(p)
         if data_rows is not None:
-            metrics.append("<b>%s</b> 数据行数: %d (前体/蛋白组识别)"
+            metrics.append(_("<b>%s</b> 数据行数: %d (前体/蛋白组识别)")
                            % (html.escape(os.path.basename(p)), data_rows))
         break
     try:
         for e in entries:
             if "matrix" in e.name.lower() and e.name.lower().endswith((".csv", ".tsv")):
-                data_rows, _ = count_lines(e.path)
+                data_rows, _total = count_lines(e.path)
                 if data_rows is not None:
-                    metrics.append("<b>%s</b> 行数: %d" % (html.escape(e.name), data_rows))
+                    metrics.append(_("<b>%s</b> 行数: %d") % (html.escape(e.name), data_rows))
     except OSError:
         pass
     return rows, metrics
@@ -155,35 +227,50 @@ def extract_inputs(script_path):
     return found
 
 
+# HTML 模板: 中文段抽成 {字段}, 由 build_html 经 _() 填入 (zh 模式填回原文, 逐字符一致)
 HTML_TMPL = """\
 <html><body style="font-family:'Microsoft YaHei',Arial,sans-serif;color:#333;">
-<h2 style="margin-bottom:4px;">{status_icon} DIA-NN 分析{status_word}</h2>
-<p style="color:#888;margin-top:0;">本邮件由实验室 DIA-NN GUI 自动发送, 请勿回复。</p>
+<h2 style="margin-bottom:4px;">{status_icon} {h2_text}</h2>
+<p style="color:#888;margin-top:0;">{auto_note}</p>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">
-<tr><td style="background:#f5f5f5;"><b>任务名称</b></td><td>{task}</td></tr>
+<tr><td style="background:#f5f5f5;"><b>{lbl_task}</b></td><td>{task}</td></tr>
 <tr><td style="background:#f5f5f5;"><b>Slurm JobID</b></td><td>{job_id}</td></tr>
-<tr><td style="background:#f5f5f5;"><b>作业状态</b></td><td>{status_line}</td></tr>
+<tr><td style="background:#f5f5f5;"><b>{lbl_status}</b></td><td>{status_line}</td></tr>
 {elapsed_row}
-<tr><td style="background:#f5f5f5;"><b>DIA-NN 版本</b></td><td>{diann_ver}</td></tr>
+<tr><td style="background:#f5f5f5;"><b>{lbl_version}</b></td><td>{diann_ver}</td></tr>
 {inputs_rows}
-<tr><td style="background:#f5f5f5;"><b>输出目录</b></td><td><code>{out_dir}</code></td></tr>
+<tr><td style="background:#f5f5f5;"><b>{lbl_outdir}</b></td><td><code>{out_dir}</code></td></tr>
 </table>
 
-<h3>📋 项目简介</h3>
+<h3>{h3_project}</h3>
 <div style="background:#f8f9fa;border-left:4px solid #3c763d;padding:8px 12px;white-space:pre-wrap;">{project_desc}</div>
 
-<h3>📊 结果简介</h3>
+<h3>{h3_result}</h3>
 <ul style="margin-top:0;">{metrics}</ul>
 <ul style="color:#555;">{files}</ul>
-<p>结果文件请登录集群在输出目录中查看/下载。</p>
+<p>{view_note}</p>
 </body></html>
 """
+
+
+# en 模式状态展示词 (key/label 保持中文协议常量; "完成" 用小写 "completed"
+# 使主题 "… analysis completed" 通顺)。判定比较 (label == "成功") 不经此表。
+STATUS_WORDS_EN = {"成功": "Success", "失败": "Failed", "待核实": "Unverified",
+                   "超时": "Timed out", "已取消": "Cancelled", "未知": "Unknown",
+                   "完成": "completed"}
+
+
+def _word(zh_word):
+    """状态展示词: zh 原样; en 经 STATUS_WORDS_EN 映射, 缺 key 原样。"""
+    return zh_word if _LANG == "zh" else STATUS_WORDS_EN.get(zh_word, zh_word)
 
 
 def status_view(a):
     """返回 (icon, word, status_line, ok)。
 
     有 --status-label 时按四层合成结果渲染; 否则退回退出码判定 (兼容手动调用)。
+    label 及 icons/words 的 key 是协议常量 (中文, 与 R 侧四层合成一致), 不随语言变;
+    en 模式仅把展示词映射为英文 (STATUS_WORDS_EN), ok 判定不受影响。
     """
     label = a.status_label
     if label:
@@ -191,49 +278,66 @@ def status_view(a):
         if a.status_reason:
             detail.append(a.status_reason)
         if a.rc is not None:
-            detail.append("程序退出码 %d" % a.rc)
+            detail.append(_("程序退出码 %d") % a.rc)
         if a.state:
-            detail.append("调度状态 %s" % a.state)
+            detail.append(_("调度状态 %s") % a.state)
         line = label if not detail else "%s: %s" % (label, "; ".join(detail))
         icons = {"成功": "✅", "失败": "❌", "待核实": "⚠️", "超时": "⏱️", "已取消": "🚫", "未知": "❓"}
         words = {"成功": "完成", "失败": "失败", "待核实": "待核实",
                  "超时": "超时", "已取消": "已取消", "未知": "状态未知"}
-        return icons.get(label, "❓"), words.get(label, label), line, label == "成功"
+        word = words.get(label, label)
+        if _LANG != "zh":
+            word = STATUS_WORDS_EN.get(label, _word(word))
+        return icons.get(label, "❓"), word, line, label == "成功"
     ok = a.rc is not None and a.rc == 0
     if ok:
-        return "✅", "完成", "正常结束, 退出码 0", True
-    return "❌", "失败", "失败, 退出码 %s" % (a.rc if a.rc is not None else "未知(日志缺失)"), False
+        return "✅", _word("完成"), _("正常结束, 退出码 0"), True
+    return "❌", _word("失败"), _("失败, 退出码 %s") % (a.rc if a.rc is not None else _("未知(日志缺失)")), False
 
 
 def build_html(a, out_files_html, metrics_html, inputs, project_desc):
     inputs_rows = []
+    # 协议 key 兼作解析与存储键 (extract_inputs/--f/--fasta/--lib), 显示时才经 _() 翻译
     for label in ("RAW 文件", "FASTA", "光谱库"):
         if label in inputs:
             items = inputs[label]
             shown = "".join("<div><code>%s</code></div>" % html.escape(i) for i in items[:12])
             if len(items) > 12:
-                shown += "<div>… 共 %d 个</div>" % len(items)
+                shown += "<div>%s</div>" % (_("… 共 %d 个") % len(items))
             inputs_rows.append('<tr><td style="background:#f5f5f5;"><b>%s</b></td><td>%s</td></tr>'
-                               % (label, shown))
+                               % (_(label), shown))
     icon, word, status_line, _ok = status_view(a)
     # v1.14.1: 优先容器实测版本 (--diann-ver), 旧调用/旧记录回退 sif 文件名
     ver = (a.diann_ver or "").strip()
     return HTML_TMPL.format(
         status_icon=icon,
-        status_word=word,
+        h2_text=_("DIA-NN 分析%s") % word,
+        auto_note=_("本邮件由实验室 DIA-NN GUI 自动发送, 请勿回复。"),
+        lbl_task=_("任务名称"),
+        lbl_status=_("作业状态"),
         task=html.escape(str(a.task or "-")),
         job_id=html.escape(str(a.job_id or "-")),
         status_line=html.escape(status_line),
         elapsed_row=("" if a.elapsed is None else
-                     '<tr><td style="background:#f5f5f5;"><b>耗时</b></td><td>%s</td></tr>'
-                     % fmt_elapsed(a.elapsed)),
+                     '<tr><td style="background:#f5f5f5;"><b>%s</b></td><td>%s</td></tr>'
+                     % (_("耗时"), fmt_elapsed(a.elapsed))),
+        lbl_version=_("DIA-NN 版本"),
         diann_ver=html.escape(ver if ver else (os.path.basename(a.sif) if a.sif else "-")),
         inputs_rows="".join(inputs_rows),
+        lbl_outdir=_("输出目录"),
         out_dir=html.escape(str(a.out_dir or "-")),
-        project_desc=html.escape(project_desc or "(未填写)"),
-        metrics="".join("<li>%s</li>" % m for m in metrics_html) or "<li>(无)</li>",
+        h3_project=_("📋 项目简介"),
+        project_desc=html.escape(project_desc or _("(未填写)")),
+        h3_result=_("📊 结果简介"),
+        metrics="".join("<li>%s</li>" % m for m in metrics_html) or "<li>%s</li>" % _("(无)"),
         files="".join(out_files_html),
+        view_note=_("结果文件请登录集群在输出目录中查看/下载。"),
     )
+
+
+def build_subject(task, job_id, word):
+    """邮件主题行 (zh 与历史版本逐字符一致; en 经翻译表换模板)。"""
+    return _("【DIA-NN GUI】%s (Job %s) 分析%s") % (task or _("任务"), job_id or "?", word)
 
 
 def smtp_send(cfg, to_list, subject, html, timeout=30):
@@ -253,7 +357,7 @@ def smtp_send(cfg, to_list, subject, html, timeout=30):
                 smtp.quit()
             except Exception:
                 pass
-            raise smtplib.SMTPException("STARTTLS 不可用, 拒绝以明文发送凭据: %s" % e)
+            raise smtplib.SMTPException(_("STARTTLS 不可用, 拒绝以明文发送凭据: %s") % e)
     try:
         smtp.login(cfg["smtp_user"], cfg["smtp_pass"])
         smtp.sendmail(cfg["mail_from"], to_list, msg.as_string())
@@ -287,12 +391,16 @@ def main():
     ap.add_argument("--self-test", action="store_true", help="发一封简单测试邮件")
     ap.add_argument("--check", action="store_true", help="只测 SMTP 连通性, 不登录不发信")
     ap.add_argument("--strict", action="store_true", help="发送失败时以非零退出码结束 (供轮询方记录)")
+    ap.add_argument("--lang", default=_resolve_lang(os.environ.get("DIANN_GUI_LANG")),
+                    choices=("zh", "en"),
+                    help="输出语言 (默认取环境变量 DIANN_GUI_LANG, 解析不了为 en)")
     a = ap.parse_args()
+    set_lang(a.lang)
 
     cfg = load_config(a.config)
     if a.check:
         if not cfg:
-            print("CHECK FAIL: 配置不可用: %s" % a.config)
+            print(_("CHECK FAIL: 配置不可用: %s") % a.config)
             return 1
         try:
             if cfg["smtp_port"] == 465:
@@ -301,37 +409,36 @@ def main():
                 s = smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"], timeout=15)
             banner = s.noop()
             s.quit()
-            print("CHECK OK: %s:%s 可达 (%s)" % (cfg["smtp_host"], cfg["smtp_port"], banner))
+            print(_("CHECK OK: %s:%s 可达 (%s)") % (cfg["smtp_host"], cfg["smtp_port"], banner))
             return 0
         except (OSError, smtplib.SMTPException) as e:
-            print("CHECK FAIL: %s:%s 不可达: %s" % (cfg["smtp_host"], cfg["smtp_port"], e))
+            print(_("CHECK FAIL: %s:%s 不可达: %s") % (cfg["smtp_host"], cfg["smtp_port"], e))
             return 1
 
     to_list = [x.strip() for x in re.split(r"[,;\s]+", a.to or "") if "@" in x]
     if not to_list:
-        print("MAIL SKIPPED: 未提供收件人")
+        print(_("MAIL SKIPPED: 未提供收件人"))
         return 1 if a.strict else 0
     if not cfg:
-        print("MAIL SKIPPED: 邮件配置不可用 (%s), 请参考 mail_config.example.txt" % a.config)
+        print(_("MAIL SKIPPED: 邮件配置不可用 (%s), 请参考 mail_config.example.txt") % a.config)
         return 1 if a.strict else 0
 
     if a.self_test:
-        html = ("<html><body><h3>✅ DIA-NN GUI 邮件通知自测成功</h3>"
-                "<p>SMTP 账号 <code>%s</code> 配置正确, 通道可用。</p></body></html>" % cfg["smtp_user"])
-        subject = "【DIA-NN GUI】邮件通知自测"
+        html = _("<html><body><h3>✅ DIA-NN GUI 邮件通知自测成功</h3>"
+                 "<p>SMTP 账号 <code>%s</code> 配置正确, 通道可用。</p></body></html>") % cfg["smtp_user"]
+        subject = _("【DIA-NN GUI】邮件通知自测")
     else:
         project_desc = ""
         if a.desc_file and os.path.isfile(a.desc_file):
             try:
                 with open(a.desc_file, "r", encoding="utf-8", errors="replace") as fh:
-                    project_desc = fh.read().strip() or "(未填写)"
+                    project_desc = fh.read().strip() or _("(未填写)")
             except OSError:
-                project_desc = "(简介文件不可读)"
+                project_desc = _("(简介文件不可读)")
         out_files_html, metrics_html = (summarize_out_dir(a.out_dir, a.out_file) if a.out_dir else ([], []))
         html = build_html(a, out_files_html, metrics_html, extract_inputs(a.script), project_desc)
         _icon, word, _line, _ok = status_view(a)
-        subject = "【DIA-NN GUI】%s (Job %s) 分析%s" % (
-            a.task or "任务", a.job_id or "?", word)
+        subject = build_subject(a.task, a.job_id, word)
 
     try:
         smtp_send(cfg, to_list, subject, html)
@@ -341,7 +448,7 @@ def main():
         if a.self_test:
             print("SELF-TEST FAIL: %s" % e)
             return 1
-        print("WARNING: 邮件通知发送失败 (不影响作业): %s" % e)
+        print(_("WARNING: 邮件通知发送失败 (不影响作业): %s") % e)
         return 1 if a.strict else 0
 
 

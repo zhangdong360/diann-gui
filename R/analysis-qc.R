@@ -34,7 +34,7 @@ median_norm_boxplot <- function(p) {
     g2 <- one(after, sprintf("After median normalization (target %.2f)", tgt))
     gridExtra::grid.arrange(g1, g2, ncol = 2)
   }, kind = "grid", width = ax$width + 1, height = 5.5,
-    label = "中位数归一化前后对比箱线图")
+    label = tr_("中位数归一化前后对比箱线图"))
 }
 
 # 缺失值分布概况 (辅助判断 MAR / MNAR): A 平均丰度 vs 缺失率, B 不同缺失率分箱的丰度分布
@@ -88,9 +88,9 @@ missing_profile_plots <- function(p) {
   list(
     plots = list(
       A = new_plot(function() pA, kind = "ggplot", width = 10, height = 4.8,
-                   label = "平均丰度 vs 缺失率"),
+                   label = tr_("平均丰度 vs 缺失率")),
       B = new_plot(function() pB, kind = "ggplot", width = 10, height = 4.8,
-                   label = "不同缺失率蛋白的丰度分布")),
+                   label = tr_("不同缺失率蛋白的丰度分布"))),
     stats = list(n = nrow(df), miss_pct = mean(is.na(m)) * 100, rho = rho)
   )
 }
@@ -141,7 +141,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
                     x = "# Samples where protein detected", y = "# Proteins") +
       theme_proteo()
     gridExtra::grid.arrange(p1a, p1b, ncol = 2)
-  }, kind = "grid", width = pair_w, height = 5, label = "每样本检出蛋白数 + 蛋白检出频率分布")
+  }, kind = "grid", width = pair_w, height = 5, label = tr_("每样本检出蛋白数 + 蛋白检出频率分布"))
 
   # ---- 6.2 缺失值 ----
   plots[["02_qc_missingness"]] <- new_plot(function() {
@@ -161,15 +161,15 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
                     x = "Missing rate per protein (%)", y = "# Proteins") +
       theme_proteo()
     gridExtra::grid.arrange(p2a, p2b, ncol = 2)
-  }, kind = "grid", width = pair_w, height = 5, label = "每样本缺失率 + 蛋白缺失率分布")
+  }, kind = "grid", width = pair_w, height = 5, label = tr_("每样本缺失率 + 蛋白缺失率分布"))
 
   # ---- 需要完整矩阵的三张图: 用 expr_imp 的完全检出子集 (不足 3 个则跳过) ----
   expr_complete <- p$expr_imp[stats::complete.cases(p$expr_imp), , drop = FALSE]
   has_complete  <- nrow(expr_complete) >= 3 && ncol(expr_complete) >= 2
   pca_var <- NULL; cor_range <- NULL
   if (!isTRUE(p$imputed))
-    add_warning(sprintf("未做缺失值插补：PCA / 样本相关性 / 层次聚类仅基于 %d 个完全检出蛋白",
-                        nrow(expr_complete)))
+    add_warning(tr_("未做缺失值插补：PCA / 样本相关性 / 层次聚类仅基于 %d 个完全检出蛋白",
+                    nrow(expr_complete)))
 
   if (has_complete) {
     # ---- 6.3 PCA ----
@@ -186,7 +186,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
                       x = sprintf("PC1 (%.1f%%)", pca_var[1]),
                       y = sprintf("PC2 (%.1f%%)", pca_var[2])) +
         theme_proteo()
-    }, kind = "ggplot", width = 7.5, height = 6.5, label = "样本 PCA 得分图")
+    }, kind = "ggplot", width = 7.5, height = 6.5, label = tr_("样本 PCA 得分图"))
 
     # ---- 6.4 样本相关性热图 ----
     cor_mat  <- stats::cor(expr_complete, method = cor_method)
@@ -222,7 +222,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
                          annotation_col = data.frame(Group = gr_ord, row.names = sn_ord),
                          annotation_colors = list(Group = grp_col),
                          cellwidth = cor_cell, cellheight = cor_cell)
-    }, kind = "grid", width = cor_w, height = cor_h, label = "样本间相关性热图")
+    }, kind = "grid", width = cor_w, height = cor_h, label = tr_("样本间相关性热图"))
 
     # ---- 6.5 样本层次聚类 ----
     hc   <- stats::hclust(stats::dist(t(expr_complete)), method = "complete")
@@ -231,9 +231,9 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
       plot(dend, main = "Hierarchical clustering of samples",
            xlab = "Sample", ylab = "Distance", cex.main = 1.2)
       stats::rect.hclust(hc, k = n_groups, border = grp_col)
-    }, kind = "base", width = 7.5, height = 6, label = "样本层次聚类树状图")
+    }, kind = "base", width = 7.5, height = 6, label = tr_("样本层次聚类树状图"))
   } else {
-    add_warning("完全检出蛋白不足 3 个，未生成 PCA / 样本相关性热图 / 样本层次聚类图")
+    add_warning(tr_("完全检出蛋白不足 3 个，未生成 PCA / 样本相关性热图 / 样本层次聚类图"))
   }
 
   # ---- 6.6 组内 CV 分布 ----
@@ -255,7 +255,7 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
       ggplot2::labs(title = "Within-group coefficient of variation (CV) distribution",
                     x = "CV", y = "Density") +
       theme_proteo()
-  }, kind = "ggplot", width = 8, height = 5.5, label = "组内变异系数分布")
+  }, kind = "ggplot", width = 8, height = 5.5, label = tr_("组内变异系数分布"))
 
   # ---- 6.7 组内 CV 重复性箱线图 (按组比较重复性) ----
   cv_box_df <- cv_df
@@ -283,9 +283,9 @@ qc_compute <- function(prep, cor_min = NULL, cv_bins = 40) {
                       x = "Group", y = "CV (%)") +
         theme_proteo() + ggplot2::theme(legend.position = "none")
     }, kind = "ggplot", width = 8, height = 5.5,
-      label = "组内 CV 重复性箱线图")
+      label = tr_("组内 CV 重复性箱线图"))
   } else {
-    add_warning("组内 CV 无法计算（每组有效重复不足），未生成 CV 箱线图")
+    add_warning(tr_("组内 CV 无法计算（每组有效重复不足），未生成 CV 箱线图"))
     cv_summary <- NULL
   }
 

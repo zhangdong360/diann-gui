@@ -7,6 +7,13 @@
 
 # GUI 更新日志 (新的在前)
 CHANGELOG <- list(
+  list(ver = "v1.15.0", date = "2026-11-02", items = c(
+    "新增: 界面中英文切换——标题栏右上角语言下拉, 切换写回 ~/.diann_gui/config.R 的 LANG 键并自动刷新页面; 默认英文 (LANG = \"en\"), 可选 \"zh\"; 环境变量 DIANN_GUI_LANG 优先于配置 (部署方钉死语言用); 语言解析顺序 DIANN_GUI_LANG > LANG > \"en\"",
+    "新增: 基于 shiny.i18n 的翻译基础设施——翻译表 inst/i18n/translations.json (key = 中文原文, 1160+ 条整句英文译文, sprintf 占位符逐条校验); 内部 tr_() 无状态查表, 未命中 key 回退中文原文, 不因缺译文中断; 术语表 inst/i18n/GLOSSARY.md 统一译名",
+    "新增: 全量文案包装——提交/任务队列/结果分析全部界面、校验与通知消息、doctor() 自检输出 (新增 lang = 参数)、启动控制台提示、完成邮件 (mail_notify.py 双语模板, R 侧传 --lang)、HTML 分析报告 (含 <html lang> 动态化) 均随语言切换; 作业状态枚举值 (运行中/已完成 等) 与生成脚本内容保持不变 (协议常量, 不参与翻译)",
+    "文档: README「构建 DIA-NN 容器镜像」章节补充分步构建步骤——issue #1202 社区 Dockerfile 模板 (含 GUI 契约所需的容器内 PATH 适配) 与 docker save → apptainer build docker-archive:// 转换命令、裸命令 diann-linux --version 自验; 仓库仍不附带 Dockerfile 文件",
+    "测试: test-i18n.R 契约测试——R/ 全部 tr_ key 静态扫描必须命中翻译表且有非空英文译文、zh/en 占位符一致性、回退语义、语言覆盖栈、配置写回、doctor(lang=) 双语输出、app_ui 随语言渲染; 其余测试经 helper.R 钉 zh 保持原断言; e2e/手册截图脚本同步钉 zh (手册截图仍为中文界面)"
+  )),
   list(ver = "v1.14.3", date = "2026-10-28", items = c(
     "改进: 邮件前置条件一次性告知——邮箱配置与 python3 双缺时, 提示同时给出两步 (复制配置 + 安装 python3), 初阶用户建好配置后不再被第二次提示拦住 (此前只报第一个原因, python3 要求要等配置建好后才出现)",
     "改进: 「邮箱通知」输入框说明补充前置条件 (需在服务器配置邮件凭据与 python3; 未配置时提交会提示, 不影响作业)",

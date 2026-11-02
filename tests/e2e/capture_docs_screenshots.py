@@ -161,6 +161,8 @@ def start_app(fx, port):
     env = dict(os.environ)
     env["HOME"] = str(fx["home"])
     env["DIANN_GUI_CONFIG"] = str(fx["config"])
+    # v1.15: 应用默认英文 UI; 手册截图仍为中文 (LANG=zh), 保持既有图集不变
+    env["DIANN_GUI_LANG"] = "zh"
     libs = env.get("R_LIBS", "")
     cur = r_libs()
     if cur and cur not in libs:

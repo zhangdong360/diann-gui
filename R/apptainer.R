@@ -55,13 +55,13 @@ apptainer_kind_of <- function(kind = "", path = "") {
 
 # 人类可读的版本要求 (UI 帮助行 / 验证结论 / 报错文案统一走这里)
 sif_min_version_text <- function() {
-  sprintf("apptainer ≥ %d.0 或 singularity ≥ %d.0",
+  sprintf(tr_("apptainer ≥ %d.0 或 singularity ≥ %d.0"),
           SIF_MIN_MAJOR[["apptainer"]], SIF_MIN_MAJOR[["singularity"]])
 }
 
 # 2.x 的确切症状 (放在结论行里, 用户搜得到原报错)
 sif_2x_symptom <- function() {
-  "singularity 2.x 只能读 squashfs/ext3 的 .simg, 读 .sif 会报 \"Unknown image format/type\" (ABORT: Retval = 255)"
+  tr_("singularity 2.x 只能读 squashfs/ext3 的 .simg, 读 .sif 会报 \"Unknown image format/type\" (ABORT: Retval = 255)")
 }
 
 # 该运行时能否读/运行 SIF: TRUE/FALSE; 版本解析不出时 NA (未知, 不作为拦截依据)
@@ -89,20 +89,20 @@ apptainer_check <- function(path, runner = apptainer_run, timeout = 8) {
   res <- list(ok = FALSE, path = "", absolute = FALSE, exists = FALSE, executable = FALSE,
               kind = "", version = "", sif_ok = NA, sif_note = "", message = "", raw = character(0))
   p <- trimws(as.character(path %||% ""))
-  if (!nzchar(p)) { res$message <- "路径为空"; return(res) }
+  if (!nzchar(p)) { res$message <- tr_("路径为空"); return(res) }
   p <- path.expand(p)
-  if (!startsWith(p, "/")) { res$message <- "必须是服务器绝对路径 (以 / 开头)"; return(res) }
+  if (!startsWith(p, "/")) { res$message <- tr_("必须是服务器绝对路径 (以 / 开头)"); return(res) }
   res$absolute <- TRUE
   if (dir.exists(p)) {
     cand <- file.path(p, c("apptainer", "singularity"))
     cand <- cand[file.exists(cand)]
-    if (!length(cand)) { res$message <- sprintf("目录下没有 apptainer/singularity: %s", p); return(res) }
+    if (!length(cand)) { res$message <- tr_("目录下没有 apptainer/singularity: %s", p); return(res) }
     p <- cand[1]
   }
   res$path <- p
-  if (!file.exists(p)) { res$message <- sprintf("文件不存在: %s", p); return(res) }
+  if (!file.exists(p)) { res$message <- tr_("文件不存在: %s", p); return(res) }
   res$exists <- TRUE
-  if (file.access(p, 1) != 0) { res$message <- sprintf("不可执行: %s", p); return(res) }
+  if (file.access(p, 1) != 0) { res$message <- tr_("不可执行: %s", p); return(res) }
   res$executable <- TRUE
   out <- tryCatch(runner(p, "--version", timeout = timeout),
                   error = function(e) structure(paste("ERROR:", conditionMessage(e)), status = -1L))
@@ -115,15 +115,15 @@ apptainer_check <- function(path, runner = apptainer_run, timeout = 8) {
     res$message <- sprintf("%s %s", res$kind, v$version)
   } else {
     txt <- paste(res$raw, collapse = " ")
-    res$message <- sprintf("无法执行 --version: %s", substr(trimws(gsub("\\s+", " ", txt)), 1, 200))
+    res$message <- tr_("无法执行 --version: %s", substr(trimws(gsub("\\s+", " ", txt)), 1, 200))
   }
   # 版本下限: 能跑 --version 不等于能读 SIF (2.x 就是这样), 单独留字段给 UI 标注与拦截
   if (isTRUE(res$ok)) {
     res$sif_ok <- sif_capable(res$kind, res$version)
     if (identical(res$sif_ok, FALSE)) {
-      res$sif_note <- sprintf("不支持 SIF 镜像 (需要 %s): %s",
+      res$sif_note <- sprintf(tr_("不支持 SIF 镜像 (需要 %s): %s"),
                               sif_min_version_text(),
-                              if (identical(res$kind, "singularity")) sif_2x_symptom() else "版本过低")
+                              if (identical(res$kind, "singularity")) sif_2x_symptom() else tr_("版本过低"))
     }
   }
   res
@@ -237,10 +237,10 @@ apptainer_candidates <- function(refresh = FALSE, ttl = 86400,
 apptainer_choices <- function(cands) {
   if (is.null(cands) || !nrow(cands)) return(character(0))
   cands <- apptainer_cands_sif(cands)
-  ver <- ifelse(cands$ok & !is.na(cands$version), cands$version, "(版本未知)")
+  ver <- ifelse(cands$ok & !is.na(cands$version), cands$version, tr_("(版本未知)"))
   no_sif <- !is.na(cands$sif_ok) & !cands$sif_ok & cands$ok
   labels <- sprintf("%s %s%s · %s", cands$kind, ver,
-                    ifelse(no_sif, " ⚠ 不支持 SIF", ""), cands$path)
+                    ifelse(no_sif, tr_(" ⚠ 不支持 SIF"), ""), cands$path)
   stats::setNames(cands$path, labels)
 }
 

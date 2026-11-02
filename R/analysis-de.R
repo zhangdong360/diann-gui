@@ -91,7 +91,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
     sig_up   <- sum(res$logFC > 0 & res$Significant, na.rm = TRUE)
     sig_down <- sum(res$logFC < 0 & res$Significant, na.rm = TRUE)
     if (nrow(sig) == 0)
-      add_warning(sprintf("对比 %s vs %s: 未检出显著差异蛋白", trt, ctrl))
+      add_warning(tr_("对比 %s vs %s: 未检出显著差异蛋白", trt, ctrl))
 
     plots <- list()
 
@@ -121,15 +121,15 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
                                          logFC_cutoff, p_lab, pval_cutoff, sig_up, sig_down),
                       x = "log2 fold change", y = y_lab) +
         theme_proteo()
-    }, kind = "ggplot", width = 8.5, height = 7, label = "差异蛋白火山图")
+    }, kind = "ggplot", width = 8.5, height = 7, label = tr_("差异蛋白火山图"))
 
     # 差异蛋白热图 (Z-score, |logFC| 前 heatmap_max)
     if (nrow(sig) > 0) {
       hm_prots <- rownames(sig)[order(-abs(sig$logFC))]
       if (length(hm_prots) > heatmap_max) {
         hm_prots <- hm_prots[seq_len(heatmap_max)]
-        add_warning(sprintf("对比 %s vs %s: 差异蛋白超过 %d 个, 热图仅展示 |logFC| 最大的 %d 个",
-                            trt, ctrl, heatmap_max, heatmap_max))
+        add_warning(tr_("对比 %s vs %s: 差异蛋白超过 %d 个, 热图仅展示 |logFC| 最大的 %d 个",
+                        trt, ctrl, heatmap_max, heatmap_max))
       }
       hm_mat <- expr_imp[hm_prots, , drop = FALSE]
       hm_mat <- t(scale(t(hm_mat)))
@@ -151,7 +151,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
                            main = sprintf("Differential proteins (%s vs %s, %d) - Z-score",
                                           trt, ctrl, length(hm_prots)),
                            cellheight = lay$cell)
-      }, kind = "grid", width = 8, height = lay$height, label = "差异蛋白 Z-score 热图")
+      }, kind = "grid", width = 8, height = lay$height, label = tr_("差异蛋白 Z-score 热图"))
     }
 
     # 数量柱状图
@@ -166,7 +166,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
         ggplot2::labs(title = sprintf("Number of differential proteins (%s vs %s)", trt, ctrl),
                       x = "Regulation", y = "# Proteins") +
         theme_proteo() + ggplot2::theme(legend.position = "none")
-    }, kind = "ggplot", width = 6, height = 5.5, label = "上/下调蛋白数量统计")
+    }, kind = "ggplot", width = 6, height = 5.5, label = tr_("上/下调蛋白数量统计"))
 
     # 关键蛋白箱线图
     if (nrow(sig) > 0) {
@@ -192,7 +192,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
                          strip.text = ggplot2::element_text(size = 9.5))
       }, kind = "ggplot", width = 10,
         height = 3.4 * ceiling(length(top_prots) / 3),
-        label = "关键差异蛋白表达箱线图")
+        label = tr_("关键差异蛋白表达箱线图"))
     }
 
     list(res = res, sig = sig, sig_up = sig_up, sig_down = sig_down,
@@ -221,7 +221,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
     anova_res <- anova_res[order(anova_res$P.Value), ]
     anova_sig <- anova_res[anova_res$Significant, , drop = FALSE]
     if (nrow(anova_sig) == 0)
-      add_warning("多组全局 F 检验未检出显著蛋白 (所有组间均无差异)")
+      add_warning(tr_("多组全局 F 检验未检出显著蛋白 (所有组间均无差异)"))
 
     anova <- list(res = anova_res, sig = anova_sig, ref = ref, plots = list())
 
@@ -253,7 +253,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
                                           n_groups, length(hm_prots)),
                            cellheight = lay$cell)
       }, kind = "grid", width = 8, height = lay$height,
-        label = "全局显著差异蛋白热图")
+        label = tr_("全局显著差异蛋白热图"))
     }
   }
 
@@ -284,7 +284,7 @@ de_compute <- function(prep, logFC_cutoff = 1, pval_cutoff = 0.05,
     sig_up <- sig_down <- NA_integer_
   }
   if (nrow(sig) == 0)
-    add_warning("未检出任何显著差异蛋白, 后续热图/富集将跳过或降级")
+    add_warning(tr_("未检出任何显著差异蛋白, 后续热图/富集将跳过或降级"))
 
   list(
     mode = mode, design = design, pairs = pairs, pair_stat = pair_stat, anova = anova,

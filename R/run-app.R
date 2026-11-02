@@ -68,25 +68,25 @@ run_app <- function(port = NULL, host = "127.0.0.1",
   }
   who <- Sys.info()[["user"]]
   if (isTRUE(analysis_only)) {
-    message(sprintf("DIA-NN GUI %s — 结果分析模式 (仅下游分析; 不含 DIA-NN 运行管理)", GUI_VERSION))
+    message(tr_("DIA-NN GUI %s — 结果分析模式 (仅下游分析; 不含 DIA-NN 运行管理)", GUI_VERSION))
   } else {
-    message(sprintf("DIA-NN GUI %s — 运行身份: %s (作业将以该身份执行)", GUI_VERSION, who))
-    message(sprintf("执行后端: %s (%s)", backend_label(),
-                    if (isTRUE(binfo$auto)) "自动检测" else "配置指定"))
+    message(tr_("DIA-NN GUI %s — 运行身份: %s (作业将以该身份执行)", GUI_VERSION, who))
+    message(tr_("执行后端: %s (%s)", backend_label(),
+                if (isTRUE(binfo$auto)) tr_("自动检测") else tr_("配置指定")))
     n_sif <- nrow(.cfg$sif_df)
-    message(sprintf("SIF 镜像: %d 个 (已识别 %d 个)", n_sif,
-                    if (n_sif) sum(.cfg$sif_df$verified) else 0L))
+    message(tr_("SIF 镜像: %d 个 (已识别 %d 个)", n_sif,
+                if (n_sif) sum(.cfg$sif_df$verified) else 0L))
     # v1.14.1: 邮件停用原因在启动时即告知 (不再只靠 doctor/提交校验)
     mg <- mail_gate_info()
-    message(sprintf("邮件通知: %s", if (mg$enabled) "已启用 (作业完成自动发信)"
-                    else sprintf("停用 — %s。%s", mg$reason, mg$hint)))
+    message(tr_("邮件通知: %s", if (mg$enabled) tr_("已启用 (作业完成自动发信)")
+                else tr_("停用 — %s。%s", mg$reason, mg$hint)))
   }
-  message(sprintf("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else "(内置默认)"))
-  message(sprintf("访问地址: http://%s:%s/", host, if (is.null(port)) "(随机)" else port))
+  message(tr_("配置文件: %s", if (nzchar(cfg_get("CONFIG_FILE") %||% "")) cfg_get("CONFIG_FILE") else tr_("(内置默认)")))
+  message(tr_("访问地址: http://%s:%s/", host, if (is.null(port)) tr_("(随机)") else port))
   if (!is.null(port) && nzchar(Sys.getenv("SSH_CONNECTION")) && identical(host, "127.0.0.1")) {
-    message(sprintf("远程集群: 先建隧道 ssh -L %d:127.0.0.1:%d <用户>@<集群>", port, port))
+    message(tr_("远程集群: 先建隧道 ssh -L %d:127.0.0.1:%d <用户>@<集群>", port, port))
   }
-  message("停止: Ctrl+C")
+  message(tr_("停止: Ctrl+C"))
 
   shiny::runApp(app, port = port, host = host, launch.browser = launch.browser)
   invisible(app)

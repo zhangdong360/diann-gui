@@ -18,7 +18,7 @@
 #' @export
 usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
                          out_dir = ".", registry = NULL, state = NULL) {
-  if (!grepl("^\\d{4}-\\d{2}$", month)) stop("`month` 需要 YYYY-MM 格式, 例如 2026-10")
+  if (!grepl("^\\d{4}-\\d{2}$", month)) stop(tr_("`month` 需要 YYYY-MM 格式, 例如 2026-10"))
 
   read_rds_opt <- function(path) {
     if (is.null(path) || !nzchar(path) || !file.exists(path)) return(NULL)
@@ -32,8 +32,7 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
   nstate <- read_rds_opt(if (!is.null(state) && nzchar(state)) state else
     file.path(dirname(def_registry), "diann_gui_notify_state.rds"))
   if (is.null(registry) || !nrow(registry)) {
-    message("注册表为空或不可读 (", def_registry,
-            "): 无统计数据。可用 registry 参数指定路径。")
+    message(tr_("注册表为空或不可读 (%s): 无统计数据。可用 registry 参数指定路径。", def_registry))
     return(invisible(NULL))
   }
   recs <- if (!is.null(nstate)) nstate$recs else list()
@@ -41,8 +40,8 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
 
   gui <- registry[substr(as.character(registry$提交时间), 1, 7) == month, , drop = FALSE]
   if (!nrow(gui)) {
-    message(sprintf("注册表中 %s 无提交记录 (注册表覆盖 %s ~ %s)。", month,
-                    min(as.character(registry$提交时间)), max(as.character(registry$提交时间))))
+    message(tr_("注册表中 %s 无提交记录 (注册表覆盖 %s ~ %s)。", month,
+                min(as.character(registry$提交时间)), max(as.character(registry$提交时间))))
     return(invisible(NULL))
   }
 
@@ -136,7 +135,7 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
                        log_path = logf),
       error = function(e) NULL)
     gui$label[i] <- if (is.null(st)) "未知" else st$label
-    gui$reason[i] <- if (is.null(st)) "状态合成异常" else st$reason
+    gui$reason[i] <- if (is.null(st)) tr_("状态合成异常") else st$reason
   }
 
   # ---- 汇总与输出 ----
@@ -146,16 +145,16 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
     ok <- !is.na(s)
     out <- rep("-", length(s))
     h <- s[ok] %/% 3600; m <- (s[ok] %% 3600) %/% 60; sec <- s[ok] %% 60
-    out[ok] <- ifelse(h > 0, sprintf("%d时%02d分%02d秒", h, m, sec), sprintf("%d分%02d秒", m, sec))
+    out[ok] <- ifelse(h > 0, tr_("%d时%02d分%02d秒", h, m, sec), tr_("%d分%02d秒", m, sec))
     out
   }
   # v1.14.1: 逐作业表补「版本」列 (注册表 v2 起就记录容器实测版本, 月报此前一直没显示)
   ver_col <- col_or_na(gui, "版本")
-  ver_col[is.na(ver_col) | !nzchar(ver_col)] <- "未识别"
+  ver_col[is.na(ver_col) | !nzchar(ver_col)] <- tr_("未识别")
   tab <- data.frame(
     JobID = as.character(gui$jobid), 任务名 = as.character(gui$任务名), 版本 = ver_col,
     状态 = gui$label,
-    后端 = ifelse(gui$backend == "local", "本地", "Slurm"),
+    后端 = ifelse(gui$backend == "local", tr_("本地"), "Slurm"),
     耗时 = fmt_elapsed(gui$elapsed_s), 提交时间 = as.character(gui$提交时间),
     邮箱 = ifelse(nzchar(gui$email), gui$email, "-"), stringsAsFactors = FALSE)
   cnt <- table(factor(gui$label, levels = c("成功", "失败", "待核实", "超时", "已取消", "未知")))
@@ -166,34 +165,34 @@ usage_report <- function(month = format(Sys.Date(), "%Y-%m"),
 
   con <- file(rep_path, open = "wt", encoding = "UTF-8")
   wl <- function(...) writeLines(as.character(unlist(list(...), use.names = FALSE)), con = con)
-  wl(sprintf("# DIA-NN GUI 使用统计 — %s", month), "",
-     sprintf("- GUI 提交作业数: **%d**", nrow(gui)),
-     sprintf("- 执行后端: Slurm **%d** 条 / 本地 **%d** 条", n_slurm, n_local),
-     sprintf("- 数据源: 提交注册表 (%s ~ %s)",
-             min(as.character(registry$提交时间)), max(as.character(registry$提交时间))), "",
-     "## 状态分布", "",
-     "| 状态 | 数量 |", "|---|---|",
+  wl(tr_("# DIA-NN GUI 使用统计 — %s", month), "",
+     tr_("- GUI 提交作业数: **%d**", nrow(gui)),
+     tr_("- 执行后端: Slurm **%d** 条 / 本地 **%d** 条", n_slurm, n_local),
+     tr_("- 数据源: 提交注册表 (%s ~ %s)",
+         min(as.character(registry$提交时间)), max(as.character(registry$提交时间))), "",
+     tr_("## 状态分布"), "",
+     tr_("| 状态 | 数量 |"), "|---|---|",
      sprintf("| %s | %d |", names(cnt), as.integer(cnt)), "",
-     if (length(es)) sprintf(
+     if (length(es)) tr_(
        "耗时: 平均 **%.0f 分钟**, 中位 **%.0f 分钟**, 最长 %s (JobID %s)",
        mean(es) / 60, median(es) / 60,
-       fmt_elapsed(max(es))[1], as.character(gui$jobid)[which.max(gui$elapsed_s)]) else "耗时: 无数据", "",
-     if (nrow(prob)) c("## 失败 / 待核实明细", "",
-                       "| JobID | 任务名 | 后端 | 状态 | 原因 |", "|---|---|---|---|---|",
+       fmt_elapsed(max(es))[1], as.character(gui$jobid)[which.max(gui$elapsed_s)]) else tr_("耗时: 无数据"), "",
+     if (nrow(prob)) c(tr_("## 失败 / 待核实明细"), "",
+                       tr_("| JobID | 任务名 | 后端 | 状态 | 原因 |"), "|---|---|---|---|---|",
                        sprintf("| %s | %s | %s | %s | %s |",
                                prob$jobid, prob$任务名,
-                               ifelse(prob$backend == "local", "本地", "Slurm"),
+                               ifelse(prob$backend == "local", tr_("本地"), "Slurm"),
                                prob$label, prob$reason)) else
-       c("## 失败 / 待核实明细", "", "本月无失败或待核实作业。"), "",
-     "## 逐作业明细", "",
+       c(tr_("## 失败 / 待核实明细"), "", tr_("本月无失败或待核实作业。")), "",
+     tr_("## 逐作业明细"), "",
      paste0("| ", paste(names(tab), collapse = " | "), " |"),
      paste0("|", paste(rep("---", ncol(tab)), collapse = "|"), "|"),
      apply(tab, 1, function(r) paste0("| ", paste(r, collapse = " | "), " |")), "",
-     sprintf("> 生成时间: %s; 状态由四层模型合成 (调度终态/本地进程态 → 程序退出码 → 产物验证 → 展示合成)",
-             format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+     tr_("> 生成时间: %s; 状态由四层模型合成 (调度终态/本地进程态 → 程序退出码 → 产物验证 → 展示合成)",
+         format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   close(con)
-  cat(sprintf("报告已写入: %s (GUI 作业 %d [Slurm %d / 本地 %d], 成功 %d, 失败 %d, 待核实 %d)\n",
-              rep_path, nrow(gui), n_slurm, n_local,
-              cnt[["成功"]], cnt[["失败"]], cnt[["待核实"]]))
+  cat(tr_("报告已写入: %s (GUI 作业 %d [Slurm %d / 本地 %d], 成功 %d, 失败 %d, 待核实 %d)\n",
+          rep_path, nrow(gui), n_slurm, n_local,
+          cnt[["成功"]], cnt[["失败"]], cnt[["待核实"]]))
   invisible(rep_path)
 }
