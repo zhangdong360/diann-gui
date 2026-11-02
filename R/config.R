@@ -59,7 +59,8 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
                 "APPTAINER_MODULE_FALLBACK", "BIND_PATHS", "MAIL_PYTHON",
                 "DEFAULT_APPTAINER", "APPTAINER_STRICT_CHECK", "RETENTION_DAYS",
                 "EXEC_BACKEND", "LOCAL_REQUIRE_EXCLUSIVE_HOST",
-                "LOCAL_NICE", "LOCAL_TIMEOUT_GRACE", "LOCAL_MAX_JOBS", "LOCAL_MEM_ADVISORY")) {
+                "LOCAL_NICE", "LOCAL_TIMEOUT_GRACE", "LOCAL_MAX_JOBS", "LOCAL_MEM_ADVISORY",
+                "LANG")) {
       if (exists(k, envir = scratch, inherits = FALSE)) {
         assign(k, get(k, envir = scratch, inherits = FALSE), envir = .cfg)
       }
@@ -96,6 +97,9 @@ diann_load_config <- function(file = NULL, reset = FALSE) {
   if (is.null(.cfg$LOCAL_TIMEOUT_GRACE) || !is.finite(.cfg$LOCAL_TIMEOUT_GRACE)) .cfg$LOCAL_TIMEOUT_GRACE <- 30L
   if (is.null(.cfg$LOCAL_MAX_JOBS) || !is.finite(.cfg$LOCAL_MAX_JOBS)) .cfg$LOCAL_MAX_JOBS <- 0L
   if (is.null(.cfg$LOCAL_MEM_ADVISORY)) .cfg$LOCAL_MEM_ADVISORY <- TRUE
+
+  # ---- 界面语言 (v1.15: en 默认 / zh 可切, 语言切换写回用户配置) ----
+  if (is.null(.cfg$LANG)) .cfg$LANG <- "en"
 
   # ---- 邮件 ----
   if (is.null(.cfg$MAIL_PYTHON)) .cfg$MAIL_PYTHON <- Sys.which("python3")

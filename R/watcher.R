@@ -46,7 +46,7 @@ ensure_diann_watcher <- function() {
   }
   if (!ok) {
     try(cat(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"),
-            "watcher 未能启动, 详见", logf, "\n", file = logf, append = TRUE), silent = TRUE)
+            tr_("watcher 未能启动, 详见 %s", logf), "\n", file = logf, append = TRUE), silent = TRUE)
   }
   invisible(ok)
 }

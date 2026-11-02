@@ -183,7 +183,68 @@ GUI 不分发 DIA-NN 二进制、镜像或构建脚本——**每个使用者按
 - 官方仓库 README（https://github.com/vdemichev/DiaNN ）——release 附带镜像构建
   脚本，README 说明如何用 apptainer/singularity 把 Docker 镜像转成 `.sif`；
 - [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) ——社区
-  维护的 Dockerfile 讨论。
+  维护的 Dockerfile 讨论（构建步骤以该 issue 为准）。
+
+### 分步构建（基于 issue #1202 社区 Dockerfile）
+
+以下步骤来自 `rolivella` 在 [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202)
+中提供的 Dockerfile。按维护者在同一 issue 中的说明：构建指令本身不受 DIA-NN
+许可约束——被禁止的只是二进制/镜像再分发。本仓库仍不附带 Dockerfile 文件：
+请自行新建目录并复制下述模板。
+
+**1. `Dockerfile`** —— 把 `<版本>` 替换为 DIA-NN release 标签（如 `2.3.2`）：
+
+```dockerfile
+FROM ubuntu:22.04
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y wget unzip libgomp1 locales
+
+# 语言环境（避免运行时报错）
+RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# 从 DIA-NN release 页下载官方 Linux 版。
+# 先到 release 页核对资产名：1.9.x 是 `diann-<版本>.Linux.zip`，
+# 新版是 `DIA-NN-<版本>-Academia-Linux.zip` 之类；zip 解压目录结构随版本有变化，
+# 请相应调整下面两行 RUN 里的路径。
+RUN wget https://github.com/vdemichev/DiaNN/releases/download/<版本>/diann-<版本>.Linux.zip -O diann-<版本>.Linux.zip
+RUN unzip diann-<版本>.Linux.zip
+RUN chmod -R 775 /diann-<版本>
+
+# GUI 契约：diann-linux 必须在容器内 PATH 上
+ENV PATH="/diann-<版本>:$PATH"
+
+# 是否合规使用 DIA-NN 由使用者自行确认并遵守其许可条款。
+```
+
+**2. 构建 Docker 镜像并测试：**
+
+```bash
+docker build -t diann-<版本> .
+docker run --rm diann-<版本> diann-linux --version
+```
+
+**3. 通过 `docker save` 转成 `.sif`：**
+
+```bash
+docker save -o diann-<版本>.tar diann-<版本>
+apptainer build diann-<版本>.sif docker-archive://diann-<版本>.tar
+```
+
+**4. 用 GUI 实际依赖的方式自验——裸命令 `diann-linux`，不带绝对路径：**
+
+```bash
+apptainer exec diann-<版本>.sif diann-linux --version
+```
+
+若更想用官方 release 自带的镜像构建脚本，同样是上面这套
+`docker save` → `apptainer build docker-archive://` 转换流程——只需确保
+DIA-NN 二进制目录最终位于容器内 `PATH` 上。
 
 **本项目对镜像的硬性要求**（这是我们唯一的契约）：
 
@@ -228,7 +289,22 @@ v1.12 起应用不再依赖 Slurm。默认 `EXEC_BACKEND = "auto"`：
 本地模式界面差异：标题栏「执行后端: 本地单机」；资源盒改名「6. 运行资源 (本地)」
 且没有分区；提交按钮为「提交本地任务」；监控页隐藏 `sinfo` 节点资源盒，标题为
 「本地运行任务」/「近期历史 (本地作业)」；日志查看器定位 `local-<ID>.out`。
-Slurm 模式界面与 v1.11 基本一致，现有截图仍然有效。
+Slurm 模式布局与 v1.11 基本一致，现有截图仍然有效（注意：v1.15 起界面文案
+随语言设置变化——手册截图为中文界面，见下节）。
+
+## 界面语言（中英文，v1.15）
+
+全部界面、校验与通知消息、`doctor()` 自检输出、完成邮件和分析 HTML 报告均有
+中英双语。**默认英文**；语言解析顺序：
+
+1. 环境变量 `DIANN_GUI_LANG`（`en`/`zh`）——部署方钉死语言用；
+2. `~/.diann_gui/config.R` 的 `LANG` 键；
+3. 默认 `"en"`。
+
+应用内切换：标题栏右上角语言下拉——选择后写回你的 `config.R`
+（`LANG <- "zh"`）并自动刷新一次页面。作业状态值（`运行中`、`已完成` 等）是
+与脚本/日志共用的协议常量，不参与翻译。译文在 `inst/i18n/translations.json`
+（缺条目时回退中文原文；测试套件保证覆盖完整）。
 
 **HPC 登录节点有保护**：如果本机像 Slurm 节点（PATH 上有
 `squeue`/`sacct`/`scontrol`/`sinfo`，或存在 `/etc/slurm*`、设置了 `SLURM_CONF`）

@@ -99,20 +99,19 @@ mail_gate_info <- function() {
   if (enabled) return(info)
   if (!has_conf) {
     ex <- system.file("config", "mail_config.example.txt", package = "diann.gui")
-    info$reason <- sprintf("未找到邮件配置 %s", conf)
-    info$hint <- sprintf(paste0("在 R 里执行 file.copy('%s', '%s') 并填写 smtp_host/smtp_user/smtp_pass",
-                                " (终端: cp <示例> %s && chmod 600 %s) 后重启应用"),
-                         ex, conf, conf, conf)
+    info$reason <- tr_("未找到邮件配置 %s", conf)
+    info$hint <- tr_("在 R 里执行 file.copy('%s', '%s') 并填写 smtp_host/smtp_user/smtp_pass (终端: cp <示例> %s && chmod 600 %s) 后重启应用",
+                     ex, conf, conf, conf)
     # v1.14.3: 双缺一次说全 — 面向初阶实验人员, 建好配置后不再被第二次提示拦住
     if (!has_python)
       info$hint <- paste0(info$hint,
-                          "; 注意该功能还需 python3 发送邮件 (无则: sudo apt install python3, WSL2 同)")
+                          tr_("; 注意该功能还需 python3 发送邮件 (无则: sudo apt install python3, WSL2 同)"))
   } else if (!has_python) {
-    info$reason <- sprintf("未找到 python3 (发送脚本 mail_notify.py 依赖), 配置文件 %s 已就绪", conf)
-    info$hint <- "安装 python3 (Ubuntu/WSL2: sudo apt install python3), 或在 config.R 设 MAIL_PYTHON 指向可用解释器"
+    info$reason <- tr_("未找到 python3 (发送脚本 mail_notify.py 依赖), 配置文件 %s 已就绪", conf)
+    info$hint <- tr_("安装 python3 (Ubuntu/WSL2: sudo apt install python3), 或在 config.R 设 MAIL_PYTHON 指向可用解释器")
   } else {
-    info$reason <- "MAIL_ENABLED 为 FALSE (配置在启动后未重新加载)"
-    info$hint <- "重新运行 diann.gui::diann_load_config() 并重启应用"
+    info$reason <- tr_("MAIL_ENABLED 为 FALSE (配置在启动后未重新加载)")
+    info$hint <- tr_("重新运行 diann.gui::diann_load_config() 并重启应用")
   }
   info
 }
@@ -269,43 +268,43 @@ diann_job_status <- function(jobid, out_dir, out_file, script_path = "",
   if (length(q)) {
     qs <- toupper(trimws(q[1]))
     label <- switch(qs, RUNNING = "运行中", PENDING = "排队中", qs)
-    reason <- "作业仍在队列中"
+    reason <- tr_("作业仍在队列中")
   } else if (is.na(state)) {
     if (art_ok && !is.na(rc) && rc == 0) {
-      label <- "成功"; reason <- "程序退出 0 且产物为新 (sacct 不可用, 未核对调度终态)"
+      label <- "成功"; reason <- tr_("程序退出 0 且产物为新 (sacct 不可用, 未核对调度终态)")
     } else if (art_ok && teardown) {
       label <- "待核实"
-      reason <- sprintf("产物已生成但程序层退出 %s (疑容器卸载异常; sacct 不可用)", rc)
+      reason <- tr_("产物已生成但程序层退出 %s (疑容器卸载异常; sacct 不可用)", rc)
     } else if (!is.na(rc) && rc != 0) {
-      label <- "失败"; reason <- sprintf("程序退出码 %d (sacct 不可用)", rc)
+      label <- "失败"; reason <- tr_("程序退出码 %d (sacct 不可用)", rc)
     } else if (art_ok) {
-      label <- "待核实"; reason <- "发现新产物但退出码未知 (sacct 不可用)"
+      label <- "待核实"; reason <- tr_("发现新产物但退出码未知 (sacct 不可用)")
     } else {
-      label <- "未知"; reason <- "sacct 无记录, 日志/产物均不足以判定"
+      label <- "未知"; reason <- tr_("sacct 无记录, 日志/产物均不足以判定")
     }
   } else if (state == "COMPLETED") {
-    if (art_ok) { label <- "成功"; reason <- "调度完成且产物为新" }
-    else if (art_bad) { label <- "待核实"; reason <- "调度完成但未见本次产物 (检查输出路径或目录清理)" }
-    else { label <- "成功"; reason <- "调度完成 (产物未核验)" }
+    if (art_ok) { label <- "成功"; reason <- tr_("调度完成且产物为新") }
+    else if (art_bad) { label <- "待核实"; reason <- tr_("调度完成但未见本次产物 (检查输出路径或目录清理)") }
+    else { label <- "成功"; reason <- tr_("调度完成 (产物未核验)") }
   } else if (state %in% c("FAILED", "OUT_OF_MEMORY", "NODE_FAIL", "BOOT_FAIL", "PREEMPTED", "DEADLINE")) {
     if (art_ok && (teardown || (!is.na(rc) && rc == 0))) {
       label <- "待核实"
-      reason <- sprintf("调度报告 %s 但主报告为本次新写 (程序层退出 %s, 疑容器卸载异常), 请核对产物完整性", state, rc)
+      reason <- tr_("调度报告 %s 但主报告为本次新写 (程序层退出 %s, 疑容器卸载异常), 请核对产物完整性", state, rc)
     } else {
       label <- "失败"
-      reason <- sprintf("调度状态 %s, 程序退出码 %s", state,
-                        if (!is.na(rc)) as.character(rc) else "未知(见日志)")
+      reason <- tr_("调度状态 %s, 程序退出码 %s", state,
+                    if (!is.na(rc)) as.character(rc) else tr_("未知(见日志)"))
     }
   } else if (state == "TIMEOUT") {
     label <- "超时"
-    reason <- if (art_ok) "作业超时被终止, 但存在新产物, 请核对" else "作业超时被终止, 未见新产物"
+    reason <- if (art_ok) tr_("作业超时被终止, 但存在新产物, 请核对") else tr_("作业超时被终止, 未见新产物")
   } else if (state == "CANCELLED") {
-    label <- "已取消"; reason <- "作业被取消"
+    label <- "已取消"; reason <- tr_("作业被取消")
   } else if (state %in% c("RUNNING", "PENDING")) {
-    label <- "未知"; reason <- "sacct 记录与队列不一致 (记账滞后), 稍后刷新"
+    label <- "未知"; reason <- tr_("sacct 记录与队列不一致 (记账滞后), 稍后刷新")
   } else {
     if (art_ok && !is.na(rc) && rc == 0) {
-      label <- "成功"; reason <- sprintf("调度状态 %s, 程序退出 0 且产物为新", state)
+      label <- "成功"; reason <- tr_("调度状态 %s, 程序退出 0 且产物为新", state)
     } else {
       label <- "待核实"
       reason <- sprintf("调度状态 %s, 程序退出码 %s", state,
@@ -378,7 +377,7 @@ diann_notify_tick <- function(snapshot = NULL) {
       cand[[k]]$deferred <- TRUE
       cand[[k]]$st <- st
       cand[[k]]$rc <- rc
-      cand[[k]]$result <- "状态未知, 等待 sacct/产物就绪后再发送"
+      cand[[k]]$result <- tr_("状态未知, 等待 sacct/产物就绪后再发送")
       cand[[k]]$status <- 0L
       next
     }
@@ -387,7 +386,9 @@ diann_notify_tick <- function(snapshot = NULL) {
               "--task", shQuote(r$task), "--out-dir", shQuote(r$out_dir),
               "--out-file", shQuote(r$out_file), "--sif", shQuote(r$sif),
               "--script", shQuote(r$script_path), "--desc-file", shQuote(r$desc_file),
-              "--config", shQuote(cfg_get("MAIL_CONF")), "--strict")
+              "--config", shQuote(cfg_get("MAIL_CONF")), "--strict",
+              # 邮件语言随 GUI (i18n_lang() 恒为 "zh"/"en"); python 侧缺译文回退中文
+              "--lang", i18n_lang())
     # v1.14.1: 邮件「DIA-NN 版本」显示容器实测值 (旧记录无 ver 字段时脚本回退文件名)
     verv <- as.character(r$ver %||% "")[1]
     if (!is.na(verv) && nzchar(verv)) args <- c(args, "--diann-ver", shQuote(verv))

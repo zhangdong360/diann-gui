@@ -32,6 +32,9 @@ set_core_const <- function(key, value) diann.gui::set_core_const(key, value)
 # 临时 HOME: 通知状态/注册表落临时目录 (diann_load_config 依赖 HOME)
 Sys.setenv(HOME = file.path(tempdir(), sprintf("diann_test_home_%d", Sys.getpid())))
 dir.create(Sys.getenv("HOME"), showWarnings = FALSE, recursive = TRUE)
+# v1.15: 测试断言基于中文文案 (UI 默认英文) — 套件级钉死 zh;
+# i18n 覆盖完整性/英文译文由 test-i18n.R 单独验证。
+Sys.setenv(DIANN_GUI_LANG = "zh")
 diann_load_config()
 
 # 包内部函数别名 (测试体零改动)

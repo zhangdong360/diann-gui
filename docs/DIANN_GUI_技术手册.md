@@ -85,6 +85,7 @@ Slurm 分区、apptainer 候选与 SIF 目录），或手动编辑模板 `inst/c
 | `LOCAL_TIMEOUT_GRACE` | `30` | 本地作业到时限后 SIGTERM→SIGKILL 等待秒数 |
 | `LOCAL_MAX_JOBS` | `0` | 本地并发上限：0=不限，>0 达到即阻断提交（不排队） |
 | `LOCAL_MEM_ADVISORY` | `TRUE` | 提交前按 `/proc/meminfo` 比对内存（仅警告，本地不可强制） |
+| `LANG` | `"en"` | 界面语言（v1.15）：`"en"` 英文 / `"zh"` 中文；环境变量 `DIANN_GUI_LANG` 覆盖。界面右上角语言下拉切换后自动写回本键并刷新页面；作业状态值（运行中/已完成 等）为协议常量不翻译 |
 
 配置发现顺序：`DIANN_GUI_CONFIG` 环境变量 → `~/.diann_gui/config.R` →
 `<工作目录>/diann_gui_config.R`。**工作目录的 `config.R` 一律不读取**（v1.13 起，
@@ -170,7 +171,8 @@ exec <sif> diann-linux --version`），结果按 size+mtime 缓存到
 本地单机模式的界面实例（含本面板的识别回显）见 `docs/img/local_mode_submit.png`
 （提交页）与 `docs/img/local_mode_monitor.png`（任务队列页），新版手指南同图内嵌
 （图 3-2/3-3）。页面加载不识别（不跑容器）；切换镜像或点「识别所有未识别镜像」
-时才在容器内实测。
+时才在容器内实测。（v1.15 注：全部手册截图为中文界面；应用默认英文，界面语言
+由 `DIANN_GUI_LANG`/`LANG` 控制，见 §1.2 配置键表。）
 
 ### 3.3 「3. 文件与数据库」
 
@@ -834,9 +836,10 @@ GUI 按链自动定位日志：Slurm 模式找 `slurm-<ID>.out`，本地模式�
 
 ### 10.9 镜像构建 / 容器内无 diann-linux / 计算节点无 apptainer / 版本未识别
 
-- **怎么构建 .sif**：按 DIA-NN 官方说明自行构建（官方仓库 README 与 release
-  附带的构建脚本、issue #1202 社区 Dockerfile 讨论——本项目不提供构建脚本/
-  Dockerfile）；构建后放入 SIF_DIRS（文件名任意），GUI 会自动识别版本。
+- **怎么构建 .sif**：按 DIA-NN 官方说明自行构建——README（中英双语）「构建
+  DIA-NN 容器镜像」章节给出基于 issue #1202 社区 Dockerfile 的分步模板与
+  `docker save` → `apptainer build docker-archive://` 转换命令（仓库本身仍不
+  附带 Dockerfile 文件）；构建后放入 SIF_DIRS（文件名任意），GUI 会自动识别版本。
 - **识别报「容器内找不到 diann-linux」**：镜像没把 DIA-NN 二进制目录加进容器内
   `PATH`——重新构建镜像，把二进制目录加入 PATH。
 - **计算节点看不到 apptainer**：作业脚本自带回退链 `APPTAINER_PATHS` → `PATH` →

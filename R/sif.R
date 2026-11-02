@@ -63,30 +63,29 @@ sif_identify <- function(sif, apptainer_bin, timeout = 60, runner = apptainer_ru
          inspect = inspect, raw_version_lines = raw, reason = reason)
   }
   lc <- sif_check_local(sif)
-  if (!lc$exists) return(fail("static", "missing", sprintf("镜像不存在: %s", sif)))
+  if (!lc$exists) return(fail("static", "missing", tr_("镜像不存在: %s", sif)))
   if (!isTRUE(lc$readable)) {
     return(fail("static", "unreadable",
-                sprintf("GUI 运行身份 (%s) 无权读取该镜像", Sys.info()[["user"]])))
+                tr_("GUI 运行身份 (%s) 无权读取该镜像", Sys.info()[["user"]])))
   }
   if (!isTRUE(lc$sif_magic)) {
     return(fail("static", "not_sif",
-                "SIF 魔数校验失败 — 不是有效的 SIF 镜像 (可能损坏或下载截断)"))
+                tr_("SIF 魔数校验失败 — 不是有效的 SIF 镜像 (可能损坏或下载截断)")))
   }
   if (!nzchar(ap)) {
     return(fail("runtime", "no_apptainer",
-                paste0("GUI 节点无可用 apptainer/singularity, 版本未识别 (不影响提交; ",
-                       "作业脚本在计算节点自行回退查找运行时)")))
+                tr_("GUI 节点无可用 apptainer/singularity, 版本未识别 (不影响提交; 作业脚本在计算节点自行回退查找运行时)")))
   }
   if (!file.exists(ap) || file.access(ap, 1) != 0) {
     return(fail("runtime", "no_apptainer",
-                sprintf("所选 apptainer 在 GUI 节点不可执行: %s (计算节点可见时作业仍可运行)", ap)))
+                tr_("所选 apptainer 在 GUI 节点不可执行: %s (计算节点可见时作业仍可运行)", ap)))
   }
   ins <- tryCatch(suppressWarnings(runner(ap, c("inspect", shQuote(sif)), timeout = min(timeout, 15L))),
-                  error = function(e) paste("inspect 出错:", conditionMessage(e)))
+                  error = function(e) tr_("inspect 出错: %s", conditionMessage(e)))
   ins_txt <- if (is.character(ins)) paste(ins, collapse = "\n") else ""
   exe <- tryCatch(suppressWarnings(runner(ap, c("exec", shQuote(sif), "diann-linux", "--version"),
                                           timeout = timeout)),
-                  error = function(e) paste("exec 出错:", conditionMessage(e)))
+                  error = function(e) tr_("exec 出错: %s", conditionMessage(e)))
   exe_txt <- if (is.character(exe)) paste(exe, collapse = "\n") else ""
   raw <- if (is.character(exe)) exe[nzchar(exe)] else character(0)
   # system2(timeout=) 超时返回已产出的部分输出 + attr(,"status")==124, 没有 "timed out" 文本;
@@ -97,30 +96,29 @@ sif_identify <- function(sif, apptainer_bin, timeout = 60, runner = apptainer_ru
     grepl("timed out", exe_txt, fixed = TRUE)
   if (timed_out) {
     return(fail("version", "timeout",
-                sprintf("容器内执行超时 (%ss); 若计算节点正常, 可稍后重试 (超时不落缓存, 会自动重试)", timeout),
+                tr_("容器内执行超时 (%ss); 若计算节点正常, 可稍后重试 (超时不落缓存, 会自动重试)", timeout),
                 inspect = ins_txt, raw = raw))
   }
   ver <- parse_diann_version(exe_txt)
   if (nzchar(ver)) {
-    msg <- sprintf("容器内 DIA-NN 可执行, 实际版本: %s", ver)
+    msg <- tr_("容器内 DIA-NN 可执行, 实际版本: %s", ver)
     if (grepl("org.label-schema.usage.singularity.deffile.from:", ins_txt)) {
       from <- trimws(sub(".*org.label-schema.usage.singularity.deffile.from:[[:space:]]*([^\n]+).*",
                          "\\1", ins_txt))
-      if (nzchar(from) && from != ins_txt) msg <- sprintf("%s (镜像基础: %s)", msg, from)
+      if (nzchar(from) && from != ins_txt) msg <- sprintf(tr_("%s (镜像基础: %s)"), msg, from)
     }
     return(list(ok = TRUE, version = ver, stage = "version", message = msg,
                 inspect = ins_txt, raw_version_lines = raw, reason = ""))
   }
-  tl <- if (length(raw)) tail(raw, 1) else "(无输出)"
+  tl <- if (length(raw)) tail(raw, 1) else tr_("(无输出)")
   tl <- gsub("\r", " ", gsub("\033\\[[0-9;]*[A-Za-z]", "", tl))
   if (grepl("(?i)diann-linux.*(not found|no such file|exec.*failed)", exe_txt, perl = TRUE)) {
     return(fail("version", "no_diann_linux",
-                paste0("容器内找不到 diann-linux — 镜像未把 DIA-NN 目录加入 PATH ",
-                       "(构建说明见 README「构建 DIA-NN 容器镜像」章节)"),
+                tr_("容器内找不到 diann-linux — 镜像未把 DIA-NN 目录加入 PATH (构建说明见 README「构建 DIA-NN 容器镜像」章节)"),
                 inspect = ins_txt, raw = raw))
   }
   fail("version", "no_version",
-       sprintf("容器已启动但未解析到 DIA-NN 版本: %s", substr(trimws(tl), 1, 160)),
+       tr_("容器已启动但未解析到 DIA-NN 版本: %s", substr(trimws(tl), 1, 160)),
        inspect = ins_txt, raw = raw)
 }
 
@@ -214,7 +212,7 @@ sif_identify_safe <- function(path, apptainer_bin, timeout = 60, runner = apptai
                               file = sif_probe_file()) {
   tryCatch(sif_identify_cache(path, apptainer_bin, timeout = timeout, runner = runner, file = file),
            error = function(e) list(ok = FALSE, version = "", stage = "", reason = "error",
-                                    message = sprintf("识别异常: %s", conditionMessage(e)),
+                                    message = tr_("识别异常: %s", conditionMessage(e)),
                                     inspect = "", raw_version_lines = character(0)))
 }
 
@@ -294,7 +292,7 @@ sif_choice_labels <- function(df) {
   vv[is.na(vv)] <- ""
   # verified 但缺版本串的残缺行按未识别标注 (API 健壮性; sif_merge_probe 自身不会产生)
   vs <- vs & nzchar(vv)
-  lab <- ifelse(vs, sprintf("v%s · %s", vv, d$path), sprintf("未识别 · %s", d$path))
+  lab <- ifelse(vs, sprintf("v%s · %s", vv, d$path), sprintf(tr_("未识别 · %s"), d$path))
   stats::setNames(d$path, lab)
 }
 

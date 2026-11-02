@@ -27,8 +27,8 @@ fmt_int <- function(x) format(as.integer(x), big.mark = ",", scientific = FALSE)
 
 # P 值校正方法的展示名
 p_adjust_label <- function(m) {
-  if (identical(as.character(m %||% "BH"), "none")) "未校正（原始 P 值）"
-  else "BH（Benjamini-Hochberg）"
+  if (identical(as.character(m %||% "BH"), "none")) tr_("未校正（原始 P 值）")
+  else tr_("BH（Benjamini-Hochberg）")
 }
 
 # 图形文件名 -> 报告内相对路径 (优先 svg)
@@ -72,7 +72,7 @@ df_to_html_table <- function(df, max_rows = 20, sig_col = NULL,
     return(paste0(
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>',
       '<body style="font-family:sans-serif;padding:24px;color:#777">',
-      '<p>暂无结果（完整数据请查看结果目录中的原始 CSV）。</p></body></html>'))
+      '<p>', tr_("暂无结果（完整数据请查看结果目录中的原始 CSV）。"), '</p></body></html>'))
   }
   total <- nrow(df)
   d <- utils::head(df, max_rows)
@@ -104,9 +104,10 @@ df_to_html_table <- function(df, max_rows = 20, sig_col = NULL,
     sprintf('<tr class="%s">%s</tr>', cls_of(r), tds)
   }, character(1))
   note <- if (total > max_rows)
-    sprintf('<p class="note">仅展示前 %d 行（共 %d 行）；完整结果请查看结果目录中的原始 CSV。</p>',
-            max_rows, total)
-  else sprintf('<p class="note">共 %d 行。</p>', total)
+    sprintf('<p class="note">%s</p>',
+            tr_("仅展示前 %d 行（共 %d 行）；完整结果请查看结果目录中的原始 CSV。",
+                max_rows, total))
+  else sprintf('<p class="note">%s</p>', tr_("共 %d 行。", total))
 
   paste0(
     '<!DOCTYPE html><html><head><meta charset="utf-8"><style>',
@@ -139,7 +140,7 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
   pair_stat <- if (is.null(de)) NULL else de$pair_stat
 
   s <- list(
-    report_name  = "DIA-NN 蛋白质组学差异分析报告",
+    report_name  = tr_("DIA-NN 蛋白质组学差异分析报告"),
     report_date  = format(Sys.Date(), "%Y-%m-%d"),
     n_samples    = as.character(n_samples),
     n_groups     = as.character(n_groups),
@@ -173,10 +174,10 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
       sg <- pairs[[1]]$sig
       if (nrow(sg) > 0) {
         g <- ifelse(is.na(sg$Genes) | sg$Genes == "", sg$Protein.Group, sg$Genes)
-        s$top_up   <- if (any(sg$logFC > 0)) paste(utils::head(g[order(-sg$logFC)], 5), collapse = ", ") else "无"
-        s$top_down <- if (any(sg$logFC < 0)) paste(utils::head(g[order(sg$logFC)], 5), collapse = ", ") else "无"
+        s$top_up   <- if (any(sg$logFC > 0)) paste(utils::head(g[order(-sg$logFC)], 5), collapse = ", ") else tr_("无")
+        s$top_down <- if (any(sg$logFC < 0)) paste(utils::head(g[order(sg$logFC)], 5), collapse = ", ") else tr_("无")
       } else {
-        s$top_up <- s$top_down <- "无"
+        s$top_up <- s$top_down <- tr_("无")
       }
     } else {
       s$anova_sig  <- as.character(if (is.null(de$anova)) 0 else nrow(de$anova$sig))
@@ -199,7 +200,7 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
     s$enrich_status <- "none"
     s$enrich_n <- "0"
     s$enrich_kegg_source <- "local"
-    s$enrich_skip_reason <- if (!is.null(enrich)) enrich$reason else "未执行功能富集模块"
+    s$enrich_skip_reason <- if (!is.null(enrich)) enrich$reason else tr_("未执行功能富集模块")
   }
 
   # QC 关键数
@@ -207,17 +208,17 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
     # v1.14.1: 退化数据 (<3 完整蛋白) 下 pca_var/cor_range 为 NULL — 占位"未生成",
     # 不再让 sprintf 产出 character(0) 渲染成 "PC1 解释方差 ，" 这类缺数字句子
     pv <- qc$stats$pca_var %||% c(NA_real_, NA_real_)
-    s$pca_pc1 <- if (is.finite(pv[1])) sprintf("%.1f%%", pv[1]) else "未生成"
-    s$pca_pc2 <- if (is.finite(pv[2])) sprintf("%.1f%%", pv[2]) else "未生成"
+    s$pca_pc1 <- if (is.finite(pv[1])) sprintf("%.1f%%", pv[1]) else tr_("未生成")
+    s$pca_pc2 <- if (is.finite(pv[2])) sprintf("%.1f%%", pv[2]) else tr_("未生成")
     s$cv_text <- paste(sprintf("%s=%.1f%%", names(qc$stats$cv_median),
                                qc$stats$cv_median * 100), collapse = ", ")
     s$det_text <- paste(sprintf("%s=%d", names(qc$stats$det_sample),
                                 as.integer(qc$stats$det_sample)), collapse = ", ")
     cr <- qc$stats$cor_range %||% c(NA_real_, NA_real_)
-    s$cor_text <- if (all(is.finite(cr))) sprintf("%.3f ~ %.3f", cr[1], cr[2]) else "未生成"
+    s$cor_text <- if (all(is.finite(cr))) sprintf("%.3f ~ %.3f", cr[1], cr[2]) else tr_("未生成")
     s$cv_summary <- qc$stats$cv_summary
   } else {
-    s$pca_pc1 <- s$pca_pc2 <- s$cv_text <- s$det_text <- s$cor_text <- "（未执行 QC 模块）"
+    s$pca_pc1 <- s$pca_pc2 <- s$cv_text <- s$det_text <- s$cor_text <- tr_("（未执行 QC 模块）")
     s$cv_summary <- NULL
   }
 
@@ -227,18 +228,18 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
   # 缺失值处理方法 (供正文/方法学/汇总 md)
   s$impute_method <- prep$impute_method %||% "mnar"
   s$impute_desc <- switch(s$impute_method,
-    none   = "未做缺失值插补",
-    mar    = "k 近邻插补",
-    seq    = "顺序 KNN 插补",
-    "LoD 插补")
+    none   = tr_("未做缺失值插补"),
+    mar    = tr_("k 近邻插补"),
+    seq    = tr_("顺序 KNN 插补"),
+    tr_("LoD 插补"))
   s$impute_flow <- switch(s$impute_method,
-    none   = "不插补（保留缺失值，仅做 QC）",
-    mar    = "k 近邻插补（随机缺失型）",
-    seq    = "顺序 KNN 插补（按缺失率由低到高逐蛋白插补）",
-    "组内 LoD 插补（检测限左删失）")
+    none   = tr_("不插补（保留缺失值，仅做 QC）"),
+    mar    = tr_("k 近邻插补（随机缺失型）"),
+    seq    = tr_("顺序 KNN 插补（按缺失率由低到高逐蛋白插补）"),
+    tr_("组内 LoD 插补（检测限左删失）"))
   s$impute_line <- if (identical(s$impute_method, "none"))
-    sprintf("未做插补（保留缺失值 %s 个，占矩阵 %s）", s$n_missing, s$miss_pct)
-  else sprintf("%s（共插补 %s 个缺失值，占矩阵 %s）", s$impute_desc, s$n_imputed, s$imp_pct)
+    tr_("未做插补（保留缺失值 %s 个，占矩阵 %s）", s$n_missing, s$miss_pct)
+  else tr_("%s（共插补 %s 个缺失值，占矩阵 %s）", s$impute_desc, s$n_imputed, s$imp_pct)
   s$impute_md <- switch(s$impute_method,
     none   = "none (missing values retained; DE / enrichment disabled)",
     mar    = "k-nearest neighbours (k = 10) on the log2 matrix",
@@ -247,10 +248,10 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
                    "scale %.1f SD), applied on the log2 matrix"),
             prep$impute_shift %||% 1.8, prep$impute_sd_scale %||% 0.3))
   s$impute_detail <- switch(s$impute_method,
-    none   = "未做缺失值插补（保留缺失值），因此差异分析与功能富集已停用。",
-    mar    = "缺失值以 k 近邻（k = 10）在 log2 尺度上插补（随机缺失型），插补发生在 log2 变换之后。",
-    seq    = "缺失值以顺序 KNN（k = 10）在 log2 尺度上插补：按缺失率由低到高逐个蛋白，用已完成蛋白寻找近邻样本，前一步的插补结果参与后续计算。",
-    sprintf(paste0("缺失值以 LoD（组内左截断高斯分布）插补（均值偏移 %.1f SD、标准差缩放 %.1f SD，随机种子 %s）。"),
+    none   = tr_("未做缺失值插补（保留缺失值），因此差异分析与功能富集已停用。"),
+    mar    = tr_("缺失值以 k 近邻（k = 10）在 log2 尺度上插补（随机缺失型），插补发生在 log2 变换之后。"),
+    seq    = tr_("缺失值以顺序 KNN（k = 10）在 log2 尺度上插补：按缺失率由低到高逐个蛋白，用已完成蛋白寻找近邻样本，前一步的插补结果参与后续计算。"),
+    sprintf(tr_("缺失值以 LoD（组内左截断高斯分布）插补（均值偏移 %.1f SD、标准差缩放 %.1f SD，随机种子 %s）。"),
             prep$impute_shift %||% 1.8, prep$impute_sd_scale %||% 0.3, prep$seed %||% 42))
 
   # 模块级参数 (供正文与附录)
@@ -271,43 +272,39 @@ build_summary <- function(prep, qc, de, enrich, params, modules) {
 # 章节: 1 项目概述
 html_sec1 <- function(s, has_qc, has_de, has_enrich) {
   cards <- list(
-    c(s$n_samples, "样本数"), c(s$n_groups, "分组数"),
-    c(s$proteins_final, "预处理后蛋白数"),
-    c(if (identical(s$mode, "multi")) s$union_sig else s$sig_total, "显著差异蛋白"),
-    c(if (identical(s$enrich_status, "none")) "0" else s$enrich_n, "富集通路数")
+    c(s$n_samples, tr_("样本数")), c(s$n_groups, tr_("分组数")),
+    c(s$proteins_final, tr_("预处理后蛋白数")),
+    c(if (identical(s$mode, "multi")) s$union_sig else s$sig_total, tr_("显著差异蛋白")),
+    c(if (identical(s$enrich_status, "none")) "0" else s$enrich_n, tr_("富集通路数"))
   )
   paste0(
-    '<h2 class="section" id="sec1">1 项目概述</h2>',
-    '<h3 class="subsection" id="sec1-1">1.1 数据概览</h3>',
+    '<h2 class="section" id="sec1">', tr_("1 项目概述"), '</h2>',
+    '<h3 class="subsection" id="sec1-1">', tr_("1.1 数据概览"), '</h3>',
     '<div class="stat-row">',
     paste0(vapply(cards, function(cc) sprintf(
       '<div class="stat-card"><div class="num">%s</div><div class="label">%s</div></div>',
       esc(cc[1]), esc(cc[2])), character(1)), collapse = ""),
     '</div>',
-    '<p>本次分析基于 DIA-NN 输出的蛋白水平定量矩阵（pg_matrix），共 <b>', esc(s$n_samples),
-    '</b> 个样本、<b>', esc(s$n_groups), '</b> 个实验分组（', esc(s$groups_text),
-    '）。经污染/反库过滤与低检出过滤（检出率 ≥ ', esc(s$min_detect), '）后保留 <b>',
-    esc(s$proteins_final), '</b> 个蛋白（原始 ', esc(s$proteins_raw), ' 个，剔除低检出 ',
-    esc(s$removed_low), ' 个），随后完成 log2 变换，并做', esc(s$impute_line),
-    '；最后以各样本中位数的最大值为目标做样本中位数归一化（把各样本中位数拉平到该值）。</p>',
-    '<p>缺失值插补在 log2 变换之后进行（各方法均定义在对数强度上）；归一化在插补之后，',
-    '只对每个样本整体做加法平移、不改变样本内的相对差异与方差。</p>',
-    '<h3 class="subsection" id="sec1-2">1.2 分析流程</h3>',
+    sprintf('<p>%s</p>', tr_("本次分析基于 DIA-NN 输出的蛋白水平定量矩阵（pg_matrix），共 <b>%s</b> 个样本、<b>%s</b> 个实验分组（%s）。经污染/反库过滤与低检出过滤（检出率 ≥ %s）后保留 <b>%s</b> 个蛋白（原始 %s 个，剔除低检出 %s 个），随后完成 log2 变换，并做%s；最后以各样本中位数的最大值为目标做样本中位数归一化（把各样本中位数拉平到该值）。",
+            esc(s$n_samples), esc(s$n_groups), esc(s$groups_text), esc(s$min_detect),
+            esc(s$proteins_final), esc(s$proteins_raw), esc(s$removed_low), esc(s$impute_line))),
+    '<p>', tr_("缺失值插补在 log2 变换之后进行（各方法均定义在对数强度上）；归一化在插补之后，只对每个样本整体做加法平移、不改变样本内的相对差异与方差。"), '</p>',
+    '<h3 class="subsection" id="sec1-2">', tr_("1.2 分析流程"), '</h3>',
     '<ol class="flow">',
-    '<li>数据读取与清洗：自动识别注释列与样本列，解析分组</li>',
-    '<li>过滤：污染/反库条目（contaminant / REV / DECOY）与低检出蛋白</li>',
-    '<li>log2 变换与缺失值插补：log2 变换 → ', esc(s$impute_flow), ' → 样本中位数归一化（拉平到最大中位数）</li>',
-    if (has_qc) '<li>质量控制：检出数、缺失率、PCA、相关性、样本聚类、CV、强度分布</li>' else '',
-    if (has_de) paste0('<li>差异分析：limma 经验贝叶斯',
-                       if (identical(s$mode, "multi")) '（全局 F 检验 + 全部两两对比）' else '单对比',
-                       '，BH-FDR 校正</li>') else '',
-    if (has_enrich) '<li>功能富集：GO（BP/MF/CC）与 KEGG 通路富集</li>' else '',
+    sprintf('<li>%s</li>', tr_("数据读取与清洗：自动识别注释列与样本列，解析分组")),
+    sprintf('<li>%s</li>', tr_("过滤：污染/反库条目（contaminant / REV / DECOY）与低检出蛋白")),
+    sprintf('<li>%s</li>', tr_("log2 变换与缺失值插补：log2 变换 → %s → 样本中位数归一化（拉平到最大中位数）",
+            esc(s$impute_flow))),
+    if (has_qc) sprintf('<li>%s</li>', tr_("质量控制：检出数、缺失率、PCA、相关性、样本聚类、CV、强度分布")) else '',
+    if (has_de) sprintf('<li>%s</li>', tr_("差异分析：limma 经验贝叶斯%s，BH-FDR 校正",
+                   if (identical(s$mode, "multi")) tr_("（全局 F 检验 + 全部两两对比）") else tr_("单对比"))) else '',
+    if (has_enrich) sprintf('<li>%s</li>', tr_("功能富集：GO（BP/MF/CC）与 KEGG 通路富集")) else '',
     '</ol>',
     '<table class="kv"><tbody>',
-    sprintf('<tr><td>物种</td><td>%s</td></tr>', esc(s$species)),
-    sprintf('<tr><td>差异阈值</td><td>|log2FC| &gt; %s 且 P 值 &lt; %s</td></tr>',
-            esc(s$logFC_cutoff), esc(s$pval_cutoff)),
-    sprintf('<tr><td>执行的分析模块</td><td>%s</td></tr>', esc(s$modules)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("物种"), esc(s$species)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("差异阈值"),
+            tr_("|log2FC| &gt; %s 且 P 值 &lt; %s", esc(s$logFC_cutoff), esc(s$pval_cutoff))),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("执行的分析模块"), esc(s$modules)),
     '</tbody></table>'
   )
 }
@@ -317,56 +314,54 @@ html_sec2 <- function(s) {
   fig <- function(stem, alt, caption, optional = FALSE) {
     p <- fig_path(out_dir = s$.out_dir, stem = stem)
     if (is.na(p))
-      return(sprintf('<div class="missing">%s：未生成（无对应结果）</div>', esc(caption)))
+      return(sprintf('<div class="missing">%s</div>', tr_("%s：未生成（无对应结果）", esc(caption))))
     sprintf(paste0('<div class="%s"><img class="zoomable" src="%s" alt="%s">',
                    '<div class="caption">%s</div></div>'),
             fig_class(s$.out_dir, stem), p, esc(alt), esc(caption))
   }
   paste0(
-    '<h2 class="section" id="sec2">2 DIA-NN 数据质量控制</h2>',
-    '<h3 class="subsection" id="sec2-1">2.1 数据预处理与过滤</h3>',
+    '<h2 class="section" id="sec2">', tr_("2 DIA-NN 数据质量控制"), '</h2>',
+    '<h3 class="subsection" id="sec2-1">', tr_("2.1 数据预处理与过滤"), '</h3>',
     '<table class="kv"><tbody>',
-    sprintf('<tr><td>样本数</td><td>%s（%s）</td></tr>', esc(s$n_samples), esc(s$samples_text)),
-    sprintf('<tr><td>分组</td><td>%s</td></tr>', esc(s$groups_text)),
-    sprintf('<tr><td>原始蛋白数</td><td>%s</td></tr>', esc(s$proteins_raw)),
-    sprintf('<tr><td>污染/反库剔除</td><td>%s</td></tr>', esc(s$n_contam)),
-    sprintf('<tr><td>低检出剔除（&lt; %s 检出）</td><td>%s</td></tr>', esc(s$min_detect), esc(s$removed_low)),
-    sprintf('<tr><td>预处理后蛋白数</td><td>%s</td></tr>', esc(s$proteins_final)),
-    sprintf('<tr><td>缺失值处理</td><td>%s</td></tr>', esc(s$impute_line)),
+    sprintf('<tr><td>%s</td><td>%s（%s）</td></tr>', tr_("样本数"), esc(s$n_samples), esc(s$samples_text)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("分组"), esc(s$groups_text)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("原始蛋白数"), esc(s$proteins_raw)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("污染/反库剔除"), esc(s$n_contam)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("低检出剔除（&lt; %s 检出）", esc(s$min_detect)), esc(s$removed_low)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("预处理后蛋白数"), esc(s$proteins_final)),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("缺失值处理"), esc(s$impute_line)),
     '</tbody></table>',
-    '<h3 class="subsection" id="sec2-2">2.2 蛋白鉴定概况</h3>',
-    fig("01_qc_detected_counts", "蛋白检出数量统计图",
-        "图 2.1 各样本检出蛋白数（左）与蛋白检出频率分布（右）"),
-    '<h3 class="subsection" id="sec2-3">2.3 样本相关性分析</h3>',
-    fig("04_qc_correlation_heatmap", "样本相关性热图",
-        "图 2.2 样本间 Pearson 相关系数热图（按分组排列）"),
-    '<p>样本间相关系数范围为 ', esc(s$cor_text), '，组内相关性应明显高于组间。</p>',
-    '<h3 class="subsection" id="sec2-4">2.4 缺失值分析</h3>',
-    fig("02_qc_missingness", "蛋白缺失值分布图",
-        "图 2.3 各样本缺失率（左）与蛋白缺失率分布（右）"),
-    '<h3 class="subsection" id="sec2-5">2.5 样本层次聚类</h3>',
-    fig("05_qc_sample_clustering", "样本层次聚类树状图",
-        "图 2.4 样本层次聚类树状图（complete linkage）"),
-    '<h3 class="subsection" id="sec2-6">2.6 主成分分析（PCA）</h3>',
-    fig("03_qc_pca", "PCA 得分图", "图 2.5 样本 PCA 得分图"),
-    '<p>PC1 解释方差 ', esc(s$pca_pc1), '，PC2 解释方差 ', esc(s$pca_pc2), '。</p>',
-    '<h3 class="subsection" id="sec2-7">2.7 组内变异系数（CV）分布</h3>',
-    fig("06_qc_cv_distribution", "组内变异系数分布图",
-        "图 2.6 各组组内变异系数（CV）分布密度"),
-    '<p>各组 CV 中位数：', esc(s$cv_text), '。CV 越低说明组内定量重复性越好。</p>',
-    '<h3 class="subsection" id="sec2-8">2.8 组内 CV 重复性箱线图</h3>',
-    fig("07_qc_cv_boxplot", "组内 CV 重复性箱线图",
-        "图 2.7 各组组内 CV 箱线图（散点为单个蛋白，菱形为中位数）"),
-    '<p>箱线图用于按组对比定量重复性：箱体越窄、中位数越低，说明该组重复性越好；',
-    '散点可直观看出是否存在 CV 异常偏高的离群蛋白。</p>',
+    '<h3 class="subsection" id="sec2-2">', tr_("2.2 蛋白鉴定概况"), '</h3>',
+    fig("01_qc_detected_counts", tr_("蛋白检出数量统计图"),
+        tr_("图 2.1 各样本检出蛋白数（左）与蛋白检出频率分布（右）")),
+    '<h3 class="subsection" id="sec2-3">', tr_("2.3 样本相关性分析"), '</h3>',
+    fig("04_qc_correlation_heatmap", tr_("样本相关性热图"),
+        tr_("图 2.2 样本间 Pearson 相关系数热图（按分组排列）")),
+    sprintf('<p>%s</p>', tr_("样本间相关系数范围为 %s，组内相关性应明显高于组间。", esc(s$cor_text))),
+    '<h3 class="subsection" id="sec2-4">', tr_("2.4 缺失值分析"), '</h3>',
+    fig("02_qc_missingness", tr_("蛋白缺失值分布图"),
+        tr_("图 2.3 各样本缺失率（左）与蛋白缺失率分布（右）")),
+    '<h3 class="subsection" id="sec2-5">', tr_("2.5 样本层次聚类"), '</h3>',
+    fig("05_qc_sample_clustering", tr_("样本层次聚类树状图"),
+        tr_("图 2.4 样本层次聚类树状图（complete linkage）")),
+    '<h3 class="subsection" id="sec2-6">', tr_("2.6 主成分分析（PCA）"), '</h3>',
+    fig("03_qc_pca", tr_("PCA 得分图"), tr_("图 2.5 样本 PCA 得分图")),
+    sprintf('<p>%s</p>', tr_("PC1 解释方差 %s，PC2 解释方差 %s。", esc(s$pca_pc1), esc(s$pca_pc2))),
+    '<h3 class="subsection" id="sec2-7">', tr_("2.7 组内变异系数（CV）分布"), '</h3>',
+    fig("06_qc_cv_distribution", tr_("组内变异系数分布图"),
+        tr_("图 2.6 各组组内变异系数（CV）分布密度")),
+    sprintf('<p>%s</p>', tr_("各组 CV 中位数：%s。CV 越低说明组内定量重复性越好。", esc(s$cv_text))),
+    '<h3 class="subsection" id="sec2-8">', tr_("2.8 组内 CV 重复性箱线图"), '</h3>',
+    fig("07_qc_cv_boxplot", tr_("组内 CV 重复性箱线图"),
+        tr_("图 2.7 各组组内 CV 箱线图（散点为单个蛋白，菱形为中位数）")),
+    sprintf('<p>%s</p>', tr_("箱线图用于按组对比定量重复性：箱体越窄、中位数越低，说明该组重复性越好；散点可直观看出是否存在 CV 异常偏高的离群蛋白。")),
     cv_table_html(s),
-    '<h3 class="subsection" id="sec2-9">2.9 中位数归一化前后对比</h3>',
-    fig("08_qc_median_norm_boxplot", "中位数归一化前后箱线图",
-        "图 2.8 样本中位数归一化前后各样本强度箱线图（虚线为目标中位数）"),
-    '<p>左图为插补后、归一化前的各样本强度分布，右图为以最大样本中位数为目标',
-    '做加法平移后的结果；虚线为目标中位数，各样本中位数在归一化后对齐到该值。</p>',
-    '<div class="callout"><b>质控小结：</b>样本检出数（', esc(s$det_text),
-    '）与缺失率处于正常范围；各样本强度分布（log2 变换后）彼此接近；PCA 与层次聚类结果显示组内样本聚集良好。</div>'
+    '<h3 class="subsection" id="sec2-9">', tr_("2.9 中位数归一化前后对比"), '</h3>',
+    fig("08_qc_median_norm_boxplot", tr_("中位数归一化前后箱线图"),
+        tr_("图 2.8 样本中位数归一化前后各样本强度箱线图（虚线为目标中位数）")),
+    sprintf('<p>%s</p>', tr_("左图为插补后、归一化前的各样本强度分布，右图为以最大样本中位数为目标做加法平移后的结果；虚线为目标中位数，各样本中位数在归一化后对齐到该值。")),
+    sprintf('<div class="callout">%s</div>', tr_("<b>质控小结：</b>样本检出数（%s）与缺失率处于正常范围；各样本强度分布（log2 变换后）彼此接近；PCA 与层次聚类结果显示组内样本聚集良好。",
+            esc(s$det_text)))
   )
 }
 
@@ -378,8 +373,8 @@ cv_table_html <- function(s) {
     '<tr><td>%s</td><td>%d</td><td>%.1f%%</td><td>%.1f%%</td><td>%.1f%%</td></tr>',
     esc(d$Group[i]), as.integer(d$n[i]), d$median[i] * 100,
     d$q1[i] * 100, d$q3[i] * 100), character(1)), collapse = "")
-  paste0('<table class="kv"><thead><tr><th>组</th><th>蛋白数</th>',
-         '<th>CV 中位数</th><th>CV 下四分位</th><th>CV 上四分位</th></tr></thead>',
+  paste0('<table class="kv"><thead><tr><th>', tr_("组"), '</th><th>', tr_("蛋白数"), '</th>',
+         '<th>', tr_("CV 中位数"), '</th><th>', tr_("CV 下四分位"), '</th><th>', tr_("CV 上四分位"), '</th></tr></thead>',
          '<tbody>', rows, '</tbody></table>')
 }
 
@@ -388,42 +383,43 @@ html_sec3 <- function(s, de) {
   if (is.null(de)) return("")
   fig <- function(stem, alt, caption) {
     p <- fig_path(out_dir = s$.out_dir, stem = stem)
-    if (is.na(p)) return(sprintf('<div class="missing">%s：无显著差异蛋白，未生成</div>', esc(caption)))
+    if (is.na(p)) return(sprintf('<div class="missing">%s</div>', tr_("%s：无显著差异蛋白，未生成", esc(caption))))
     sprintf(paste0('<div class="%s"><img class="zoomable" src="%s" alt="%s">',
                    '<div class="caption">%s</div></div>'),
             fig_class(s$.out_dir, stem), p, esc(alt), esc(caption))
   }
   kv <- paste0(
     '<table class="kv"><tbody>',
-    sprintf('<tr><td>分析方法</td><td>limma 经验贝叶斯 + BH-FDR 校正</td></tr>'),
-    sprintf('<tr><td>显著性阈值</td><td>|log2FC| &gt; %s 且 P 值 &lt; %s</td></tr>',
-            esc(s$logFC_cutoff), esc(s$pval_cutoff)),
-    sprintf('<tr><td>分析模式</td><td>%s</td></tr>',
-            if (identical(de$mode, "multi")) sprintf("多组比较（%d 组，全局 F 检验 + %d 个两两对比）",
-                                                     as.integer(s$n_groups), length(de$pairs))
-            else sprintf("单对比（%s）", esc(s$contrast))),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("分析方法"), tr_("limma 经验贝叶斯 + BH-FDR 校正")),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("显著性阈值"),
+            tr_("|log2FC| &gt; %s 且 P 值 &lt; %s", esc(s$logFC_cutoff), esc(s$pval_cutoff))),
+    sprintf('<tr><td>%s</td><td>%s</td></tr>', tr_("分析模式"),
+            if (identical(de$mode, "multi")) tr_("多组比较（%d 组，全局 F 检验 + %d 个两两对比）",
+                                                 as.integer(s$n_groups), length(de$pairs))
+            else tr_("单对比（%s）", esc(s$contrast))),
     '</tbody></table>')
 
   if (identical(de$mode, "single")) {
     pt <- de$pairs[[1]]
     body <- paste0(
-      '<h3 class="subsection" id="sec3-1">3.1 差异分析概述</h3>', kv,
-      '<p>在 ', esc(pt$contrast), ' 比较中，共检出显著差异蛋白 <b>', nrow(pt$sig),
-      '</b> 个（上调 ', pt$sig_up, ' 个，下调 ', pt$sig_down, ' 个）。</p>',
-      '<h3 class="subsection" id="sec3-2">3.2 差异蛋白火山图（Volcano Plot）</h3>',
-      fig("09_diff_volcano", "差异蛋白火山图", "图 3.1 差异蛋白火山图"),
-      '<h3 class="subsection" id="sec3-3">3.3 显著差异蛋白数量统计</h3>',
-      fig("11_diff_count_barplot", "显著差异蛋白数量统计图", "图 3.2 上/下调蛋白数量统计"),
-      '<h3 class="subsection" id="sec3-4">3.4 差异蛋白聚类热图</h3>',
-      fig("10_diff_heatmap", "差异蛋白聚类热图", "图 3.3 显著差异蛋白 Z-score 热图"),
-      '<h3 class="subsection" id="sec3-5">3.5 关键差异蛋白表达箱线图</h3>',
-      fig("12_diff_top_protein_boxplot", "关键差异蛋白箱线图", "图 3.4 关键差异蛋白表达箱线图"),
-      '<h3 class="subsection" id="sec3-6">3.6 差异蛋白结果表格</h3>',
-      '<p class="hint">下表展示显著差异蛋白（Top 20）；完整结果见结果目录中的 CSV / Excel。</p>',
-      '<iframe class="tbl-frame" src="./data/dep_table.html" loading="lazy" title="差异蛋白结果表"></iframe>',
-      '<h3 class="subsection" id="sec3-7">3.7 差异结果说明</h3>',
-      '<p class="hint">显著差异蛋白的完整结果（含 logFC、AveExpr、t、P.Value、adj.P.Val）'
-      , '随报告导出为 CSV 与 Excel（04_de_limma_results_all.csv / 05_de_significant_proteins.csv）。</p>')
+      '<h3 class="subsection" id="sec3-1">', tr_("3.1 差异分析概述"), '</h3>', kv,
+      sprintf('<p>%s</p>', tr_("在 %s 比较中，共检出显著差异蛋白 <b>%d</b> 个（上调 %d 个，下调 %d 个）。",
+              esc(pt$contrast), nrow(pt$sig), pt$sig_up, pt$sig_down)),
+      '<h3 class="subsection" id="sec3-2">', tr_("3.2 差异蛋白火山图（Volcano Plot）"), '</h3>',
+      fig("09_diff_volcano", tr_("差异蛋白火山图"), tr_("图 3.1 差异蛋白火山图")),
+      '<h3 class="subsection" id="sec3-3">', tr_("3.3 显著差异蛋白数量统计"), '</h3>',
+      fig("11_diff_count_barplot", tr_("显著差异蛋白数量统计图"), tr_("图 3.2 上/下调蛋白数量统计")),
+      '<h3 class="subsection" id="sec3-4">', tr_("3.4 差异蛋白聚类热图"), '</h3>',
+      fig("10_diff_heatmap", tr_("差异蛋白聚类热图"), tr_("图 3.3 显著差异蛋白 Z-score 热图")),
+      '<h3 class="subsection" id="sec3-5">', tr_("3.5 关键差异蛋白表达箱线图"), '</h3>',
+      fig("12_diff_top_protein_boxplot", tr_("关键差异蛋白箱线图"), tr_("图 3.4 关键差异蛋白表达箱线图")),
+      '<h3 class="subsection" id="sec3-6">', tr_("3.6 差异蛋白结果表格"), '</h3>',
+      sprintf('<p class="hint">%s</p>', tr_("下表展示显著差异蛋白（Top 20）；完整结果见结果目录中的 CSV / Excel。")),
+      sprintf('<iframe class="tbl-frame" src="./data/dep_table.html" loading="lazy" title="%s"></iframe>',
+              tr_("差异蛋白结果表")),
+      '<h3 class="subsection" id="sec3-7">', tr_("3.7 差异结果说明"), '</h3>',
+      sprintf('<p class="hint">%s</p>', tr_("显著差异蛋白的完整结果（含 logFC、AveExpr、t、P.Value、adj.P.Val）随报告导出为 CSV 与 Excel（04_de_limma_results_all.csv / 05_de_significant_proteins.csv）。"))
+    )
   } else {
     # 多组: 全局 F + 两两对比
     ptabs <- vapply(seq_along(de$pairs), function(k) {
@@ -431,23 +427,26 @@ html_sec3 <- function(s, de) {
       tag <- pt$tag
       f <- function(stem, alt, cap) {
         p <- fig_path(out_dir = s$.out_dir, stem = stem)
-        if (is.na(p)) return(sprintf('<div class="missing">%s：无显著差异蛋白，未生成</div>', esc(cap)))
+        if (is.na(p)) return(sprintf('<div class="missing">%s</div>', tr_("%s：无显著差异蛋白，未生成", esc(cap))))
         sprintf(paste0('<div class="figure"><img class="zoomable" src="%s" alt="%s">',
                        '<div class="caption">%s</div></div>'), p, esc(alt), esc(cap))
       }
       sprintf(paste0(
         '<div class="tab-pane" id="pane-%s">',
-        '<p>对比 <b>%s</b>：显著差异蛋白 <b>%d</b> 个（上调 %d，下调 %d）。</p>',
+        '<p>%s</p>',
         '%s%s%s%s',
-        '<h4>差异结果表</h4>',
-        '<iframe class="tbl-frame" src="./data/dep_table_%s.html" loading="lazy" title="%s 显著差异蛋白表"></iframe>',
+        '<h4>%s</h4>',
+        '<iframe class="tbl-frame" src="./data/dep_table_%s.html" loading="lazy" title="%s %s"></iframe>',
         '</div>'),
-        tag, esc(pt$contrast), nrow(pt$sig), pt$sig_up, pt$sig_down,
-        f(de_stem("09_diff_volcano", tag), "火山图", sprintf("图 %s 火山图", pt$contrast)),
-        f(de_stem("11_diff_count_barplot", tag), "数量统计", sprintf("图 %s 上下调数量", pt$contrast)),
-        f(de_stem("10_diff_heatmap", tag), "热图", sprintf("图 %s 差异热图", pt$contrast)),
-        f(de_stem("12_diff_top_protein_boxplot", tag), "箱线图", sprintf("图 %s 关键蛋白箱线图", pt$contrast)),
-        tag, esc(pt$contrast))
+        tag,
+        tr_("对比 <b>%s</b>：显著差异蛋白 <b>%d</b> 个（上调 %d，下调 %d）。",
+            esc(pt$contrast), nrow(pt$sig), pt$sig_up, pt$sig_down),
+        f(de_stem("09_diff_volcano", tag), tr_("火山图"), tr_("图 %s 火山图", pt$contrast)),
+        f(de_stem("11_diff_count_barplot", tag), tr_("数量统计"), tr_("图 %s 上下调数量", pt$contrast)),
+        f(de_stem("10_diff_heatmap", tag), tr_("热图"), tr_("图 %s 差异热图", pt$contrast)),
+        f(de_stem("12_diff_top_protein_boxplot", tag), tr_("箱线图"), tr_("图 %s 关键蛋白箱线图", pt$contrast)),
+        tr_("差异结果表"),
+        tag, esc(pt$contrast), tr_("%s 显著差异蛋白表", esc(pt$contrast)))
     }, character(1))
     tbtns <- vapply(seq_along(de$pairs), function(k) {
       pt <- de$pairs[[k]]
@@ -455,102 +454,107 @@ html_sec3 <- function(s, de) {
               if (k == 1) " active" else "", pt$tag, esc(pt$contrast), nrow(pt$sig))
     }, character(1))
 
-    anova_fig <- fig("10_multigroup_anova_heatmap", "全局差异热图", "图 3.2 全局显著差异蛋白热图")
+    anova_fig <- fig("10_multigroup_anova_heatmap", tr_("全局差异热图"), tr_("图 3.2 全局显著差异蛋白热图"))
     body <- paste0(
-      '<h3 class="subsection" id="sec3-1">3.1 差异分析概述</h3>', kv,
-      sprintf('<p>共 %d 个实验分组，出于完整性考虑执行全局差异检验与全部 %d 个两两对比。</p>',
-              as.integer(s$n_groups), length(de$pairs)),
-      '<h3 class="subsection" id="sec3-2">3.2 全局差异检验（F 检验）</h3>',
-      sprintf('<p>以 %s 为基准组的多重对比 F 检验（H<sub>0</sub>：各组均值全相等），BH 校正后显著蛋白 <b>%s</b> 个。</p>',
-              esc(s$anova_ref), esc(s$anova_sig)),
-      '<iframe class="tbl-frame" src="./data/anova_table.html" loading="lazy" title="全局 F 检验结果表"></iframe>',
+      '<h3 class="subsection" id="sec3-1">', tr_("3.1 差异分析概述"), '</h3>', kv,
+      sprintf('<p>%s</p>', tr_("共 %d 个实验分组，出于完整性考虑执行全局差异检验与全部 %d 个两两对比。",
+              as.integer(s$n_groups), length(de$pairs))),
+      '<h3 class="subsection" id="sec3-2">', tr_("3.2 全局差异检验（F 检验）"), '</h3>',
+      sprintf('<p>%s</p>', tr_("以 %s 为基准组的多重对比 F 检验（H<sub>0</sub>：各组均值全相等），BH 校正后显著蛋白 <b>%s</b> 个。",
+              esc(s$anova_ref), esc(s$anova_sig))),
+      sprintf('<iframe class="tbl-frame" src="./data/anova_table.html" loading="lazy" title="%s"></iframe>',
+              tr_("全局 F 检验结果表")),
       anova_fig,
-      '<h3 class="subsection" id="sec3-3">3.3 两两对比概览</h3>',
-      '<iframe class="tbl-frame" src="./data/pairwise_table.html" loading="lazy" title="两两对比汇总表"></iframe>',
-      '<h3 class="subsection" id="sec3-4">3.4 两两对比详情</h3>',
+      '<h3 class="subsection" id="sec3-3">', tr_("3.3 两两对比概览"), '</h3>',
+      sprintf('<iframe class="tbl-frame" src="./data/pairwise_table.html" loading="lazy" title="%s"></iframe>',
+              tr_("两两对比汇总表")),
+      '<h3 class="subsection" id="sec3-4">', tr_("3.4 两两对比详情"), '</h3>',
       '<div class="tabs"><div class="tab-bar">', paste0(tbtns, collapse = ""), '</div>',
       paste0(ptabs, collapse = ""), '</div>',
-      '<h3 class="subsection" id="sec3-5">3.5 结果说明</h3>',
-      '<p>全部两两对比显著蛋白的并集为 <b>', esc(s$union_sig),
-      '</b> 个蛋白，该并集用于后续功能富集分析。</p>')
+      '<h3 class="subsection" id="sec3-5">', tr_("3.5 结果说明"), '</h3>',
+      sprintf('<p>%s</p>', tr_("全部两两对比显著蛋白的并集为 <b>%s</b> 个蛋白，该并集用于后续功能富集分析。",
+              esc(s$union_sig))))
   }
-  paste0('<h2 class="section" id="sec3">3 差异蛋白分析</h2>', body)
+  paste0('<h2 class="section" id="sec3">', tr_("3 差异蛋白分析"), '</h2>', body)
 }
 
 # 章节: 4 功能富集
 html_sec4 <- function(s, enrich) {
   fig <- function(stem, alt, caption) {
     p <- fig_path(out_dir = s$.out_dir, stem = stem)
-    if (is.na(p)) return(sprintf('<div class="missing">%s：暂无结果</div>', esc(caption)))
+    if (is.na(p)) return(sprintf('<div class="missing">%s</div>', tr_("%s：暂无结果", esc(caption))))
     sprintf(paste0('<div class="figure"><img class="zoomable" src="%s" alt="%s">',
                    '<div class="caption">%s</div></div>'), p, esc(alt), esc(caption))
   }
   if (is.null(enrich) || isTRUE(enrich$skipped)) {
-    reason <- if (!is.null(enrich)) enrich$reason else "未执行功能富集模块。"
+    reason <- if (!is.null(enrich)) enrich$reason else tr_("未执行功能富集模块。")
     return(paste0(
-      '<h2 class="section" id="sec4">4 功能富集分析</h2>',
-      '<div class="callout"><b>未获得富集结果。</b>', esc(reason),
-      ' GO/KEGG 富集对差异蛋白数量较为敏感，建议结合生物学背景适当放宽筛选阈值或增加生物学重复后重新分析。</div>',
-      '<iframe class="tbl-frame" src="./data/go_table.html" loading="lazy" title="GO 富集结果表"></iframe>',
-      '<iframe class="tbl-frame" src="./data/kegg_table.html" loading="lazy" title="KEGG 富集结果表"></iframe>'))
+      '<h2 class="section" id="sec4">', tr_("4 功能富集分析"), '</h2>',
+      '<div class="callout"><b>', tr_("未获得富集结果。"), '</b>', esc(reason),
+      ' ', tr_("GO/KEGG 富集对差异蛋白数量较为敏感，建议结合生物学背景适当放宽筛选阈值或增加生物学重复后重新分析。"), '</div>',
+      sprintf('<iframe class="tbl-frame" src="./data/go_table.html" loading="lazy" title="%s"></iframe>',
+              tr_("GO 富集结果表")),
+      sprintf('<iframe class="tbl-frame" src="./data/kegg_table.html" loading="lazy" title="%s"></iframe>',
+              tr_("KEGG 富集结果表"))))
   }
   paste0(
-    '<h2 class="section" id="sec4">4 功能富集分析</h2>',
-    '<p>使用 ', esc(enrich$org_pkg), ' 注释库对显著差异蛋白（', enrich$n_sig,
-    ' 个，可映射 ENTREZID ', enrich$n_sig_mapped, ' 个；背景基因 ', enrich$n_bg,
-    ' 个）进行 GO 与 KEGG 富集，BH 校正后共获得 <b>', esc(s$enrich_n), '</b> 条显著条目。</p>',
-    '<h3 class="subsection" id="sec4-1">4.1 GO 功能富集分析</h3>',
+    '<h2 class="section" id="sec4">', tr_("4 功能富集分析"), '</h2>',
+    sprintf('<p>%s</p>', tr_("使用 %s 注释库对显著差异蛋白（%s 个，可映射 ENTREZID %s 个；背景基因 %s 个）进行 GO 与 KEGG 富集，BH 校正后共获得 <b>%s</b> 条显著条目。",
+            esc(enrich$org_pkg), enrich$n_sig, enrich$n_sig_mapped, enrich$n_bg, esc(s$enrich_n))),
+    '<h3 class="subsection" id="sec4-1">', tr_("4.1 GO 功能富集分析"), '</h3>',
     '<div class="tabs"><div class="tab-bar">',
-    '<button class="tab-btn active" data-tab="go-tab-bp">BP（生物过程）</button>',
-    '<button class="tab-btn" data-tab="go-tab-mf">MF（分子功能）</button>',
-    '<button class="tab-btn" data-tab="go-tab-cc">CC（细胞组分）</button></div>',
+    sprintf('<button class="tab-btn active" data-tab="go-tab-bp">%s</button>', tr_("BP（生物过程）")),
+    sprintf('<button class="tab-btn" data-tab="go-tab-mf">%s</button>', tr_("MF（分子功能）")),
+    sprintf('<button class="tab-btn" data-tab="go-tab-cc">%s</button>', tr_("CC（细胞组分）")), '</div>',
     '<div class="tab-pane active" id="go-tab-bp">',
-    fig("13_enrichment_go_barplot_bp", "GO-BP 富集条形图", "图 4.1 GO-BP 富集（top 10）"), '</div>',
+    fig("13_enrichment_go_barplot_bp", tr_("GO-BP 富集条形图"), tr_("图 4.1 GO-BP 富集（top 10）")), '</div>',
     '<div class="tab-pane" id="go-tab-mf">',
-    fig("13_enrichment_go_barplot_mf", "GO-MF 富集条形图", "图 4.2 GO-MF 富集（top 10）"), '</div>',
+    fig("13_enrichment_go_barplot_mf", tr_("GO-MF 富集条形图"), tr_("图 4.2 GO-MF 富集（top 10）")), '</div>',
     '<div class="tab-pane" id="go-tab-cc">',
-    fig("13_enrichment_go_barplot_cc", "GO-CC 富集条形图", "图 4.3 GO-CC 富集（top 10）"), '</div>',
+    fig("13_enrichment_go_barplot_cc", tr_("GO-CC 富集条形图"), tr_("图 4.3 GO-CC 富集（top 10）")), '</div>',
     '</div>',
-    fig("14_enrichment_go_dotplot", "GO 富集气泡图", "图 4.4 GO 富集气泡图（各 ontology top 5）"),
-    '<iframe class="tbl-frame" src="./data/go_table.html" loading="lazy" title="GO 富集结果表"></iframe>',
-    '<h3 class="subsection" id="sec4-2">4.2 KEGG 通路富集分析</h3>',
-    fig("15_enrichment_kegg_dotplot", "KEGG 富集气泡图", "图 4.5 KEGG 通路富集气泡图（top 15）"),
-    '<iframe class="tbl-frame" src="./data/kegg_table.html" loading="lazy" title="KEGG 富集结果表"></iframe>'
+    fig("14_enrichment_go_dotplot", tr_("GO 富集气泡图"), tr_("图 4.4 GO 富集气泡图（各 ontology top 5）")),
+    sprintf('<iframe class="tbl-frame" src="./data/go_table.html" loading="lazy" title="%s"></iframe>',
+            tr_("GO 富集结果表")),
+    '<h3 class="subsection" id="sec4-2">', tr_("4.2 KEGG 通路富集分析"), '</h3>',
+    fig("15_enrichment_kegg_dotplot", tr_("KEGG 富集气泡图"), tr_("图 4.5 KEGG 通路富集气泡图（top 15）")),
+    sprintf('<iframe class="tbl-frame" src="./data/kegg_table.html" loading="lazy" title="%s"></iframe>',
+            tr_("KEGG 富集结果表"))
   )
 }
 
 # 章节: 5 结论
 html_sec5 <- function(s, de, enrich) {
-  dif_txt <- if (is.null(de)) "未执行差异分析。"
+  dif_txt <- if (is.null(de)) tr_("未执行差异分析。")
     else if (identical(de$mode, "single"))
-      sprintf("在比较组 %s 中，按阈值 |log2(FC)| > %s 且 P 值 < %s 共检出显著差异蛋白 <b>%s</b> 个（上调 %s 个，下调 %s 个）。",
-              esc(s$contrast), esc(s$logFC_cutoff), esc(s$pval_cutoff),
-              if (nrow(de$pairs[[1]]$sig) > 0) nrow(de$pairs[[1]]$sig) else "0",
-              if (nrow(de$pairs[[1]]$sig) > 0) de$pairs[[1]]$sig_up else "0",
-              if (nrow(de$pairs[[1]]$sig) > 0) de$pairs[[1]]$sig_down else "0")
+      tr_("在比较组 %s 中，按阈值 |log2(FC)| > %s 且 P 值 < %s 共检出显著差异蛋白 <b>%s</b> 个（上调 %s 个，下调 %s 个）。",
+          esc(s$contrast), esc(s$logFC_cutoff), esc(s$pval_cutoff),
+          if (nrow(de$pairs[[1]]$sig) > 0) nrow(de$pairs[[1]]$sig) else "0",
+          if (nrow(de$pairs[[1]]$sig) > 0) de$pairs[[1]]$sig_up else "0",
+          if (nrow(de$pairs[[1]]$sig) > 0) de$pairs[[1]]$sig_down else "0")
     else
-      sprintf("多组（%s 组）比较中，全局 F 检验检出 <b>%s</b> 个组间差异蛋白，%d 个两两对比的显著蛋白并集为 <b>%s</b> 个。",
-              esc(s$n_groups), esc(s$anova_sig), length(de$pairs), esc(s$union_sig))
+      tr_("多组（%s 组）比较中，全局 F 检验检出 <b>%s</b> 个组间差异蛋白，%d 个两两对比的显著蛋白并集为 <b>%s</b> 个。",
+          esc(s$n_groups), esc(s$anova_sig), length(de$pairs), esc(s$union_sig))
 
   enrich_txt <- if (is.null(enrich) || isTRUE(enrich$skipped))
-    sprintf("功能富集未获得显著结果（%s）。",
-            esc(if (!is.null(enrich)) enrich$reason else "未执行富集模块"))
-  else sprintf("GO/KEGG 富集共获得 <b>%s</b> 条显著条目（%s）。", esc(s$enrich_n), esc(s$enrich_status))
+    tr_("功能富集未获得显著结果（%s）。",
+        esc(if (!is.null(enrich)) enrich$reason else tr_("未执行富集模块")))
+  else tr_("GO/KEGG 富集共获得 <b>%s</b> 条显著条目（%s）。", esc(s$enrich_n), esc(s$enrich_status))
 
   paste0(
-    '<h2 class="section" id="sec5">5 结论</h2>',
+    '<h2 class="section" id="sec5">', tr_("5 结论"), '</h2>',
     '<ul class="concl">',
-    sprintf('<li><b>数据质量</b>：%s 个样本、%s 个分组，预处理后保留 %s 个蛋白（剔除低检出 %s 个），%s；QC 各项指标正常。</li>',
-            esc(s$n_samples), esc(s$n_groups), esc(s$proteins_final), esc(s$removed_low), esc(s$impute_line)),
-    sprintf('<li><b>样本关系</b>：PCA（PC1 %s / PC2 %s）与层次聚类显示组内样本聚集，组间分离%s。</li>',
+    sprintf('<li>%s</li>', tr_("<b>数据质量</b>：%s 个样本、%s 个分组，预处理后保留 %s 个蛋白（剔除低检出 %s 个），%s；QC 各项指标正常。",
+            esc(s$n_samples), esc(s$n_groups), esc(s$proteins_final), esc(s$removed_low), esc(s$impute_line))),
+    sprintf('<li>%s</li>', tr_("<b>样本关系</b>：PCA（PC1 %s / PC2 %s）与层次聚类显示组内样本聚集，组间分离%s。",
             esc(s$pca_pc1), esc(s$pca_pc2),
-            if (!is.null(de) && identical(de$mode, "multi")) "，与实验分组设计基本一致" else ""),
-    sprintf('<li><b>定量重复性</b>：各组组内 CV 中位数为 %s（详见 2.9 节 CV 箱线图）。</li>',
-            esc(s$cv_text)),
-    sprintf('<li><b>差异蛋白</b>：%s</li>', dif_txt),
-    sprintf('<li><b>功能富集</b>：%s</li>', enrich_txt),
+            if (!is.null(de) && identical(de$mode, "multi")) tr_("，与实验分组设计基本一致") else "")),
+    sprintf('<li>%s</li>', tr_("<b>定量重复性</b>：各组组内 CV 中位数为 %s（详见 2.9 节 CV 箱线图）。",
+            esc(s$cv_text))),
+    sprintf('<li>%s</li>', tr_("<b>差异蛋白</b>：%s", dif_txt)),
+    sprintf('<li>%s</li>', tr_("<b>功能富集</b>：%s", enrich_txt)),
     '</ul>',
-    '<div class="callout"><b>建议：</b>显著蛋白数量较少时，可结合生物学背景适当放宽筛选阈值（如 |log2FC| ≥ 0.58 / P 值 &lt; 0.05），或增加生物学重复后重新评估。</div>'
+    sprintf('<div class="callout">%s</div>', tr_("<b>建议：</b>显著蛋白数量较少时，可结合生物学背景适当放宽筛选阈值（如 |log2FC| ≥ 0.58 / P 值 &lt; 0.05），或增加生物学重复后重新评估。"))
   )
 }
 
@@ -568,108 +572,109 @@ param_table_html <- function(s, prep) {
   grp <- function(t) sprintf('<tr class="param-grp"><td colspan="2">%s</td></tr>', esc(t))
   imp_par <- switch(s$impute_method,
     none   = "—",
-    mar    = "k = 10（impute::impute.knn）",
-    seq    = "k = 10（按缺失率升序逐蛋白）",
-    sprintf("偏移 %.1f SD / 缩放 %.1f SD / 种子 %s",
-            prep$impute_shift %||% 1.8, prep$impute_sd_scale %||% 0.3, prep$seed %||% 42))
+    mar    = tr_("k = 10（impute::impute.knn）"),
+    seq    = tr_("k = 10（按缺失率升序逐蛋白）"),
+    tr_("偏移 %.1f SD / 缩放 %.1f SD / 种子 %s",
+        prep$impute_shift %||% 1.8, prep$impute_sd_scale %||% 0.3, prep$seed %||% 42))
   paste0(
     '<table class="kv param-table"><tbody>',
-    grp("1. 数据与分组"),
-    row("数据来源", if (identical(p$source, "spectronaut")) "Spectronaut 蛋白组矩阵"
-                    else "DIA-NN 蛋白水平矩阵 (pg_matrix)"),
-    row("数据文件", p$file_name %||% "随应用提供"),
-    row("样本数 / 分组数", sprintf("%s / %s", s$n_samples, s$n_groups)),
-    row("分组", s$groups_text),
-    row("物种", s$species),
-    row("分析模块", s$modules),
-    grp("2. 预处理"),
-    row("污染/反库剔除", "是（contaminant / REV / DECOY）"),
-    row("低检出过滤", sprintf("检出率 ≥ %s", s$min_detect)),
-    row("分组内最少检出样本数", g(prep$min_group_detect %||% 0, "0（不启用）")),
-    row("log2 变换", "是"),
-    row("缺失值插补方法", s$impute_desc),
-    row("插补参数", imp_par),
-    row("缺失值（个 / 占比）", sprintf("%s / %s", s$n_missing, s$miss_pct)),
-    row("中位数归一化",
-        sprintf("各样本中位数平移至最大值 %.2f", prep$median_target %||% NA_real_)),
-    row("ComBat 去批次", if (!isTRUE(prep$use_combat)) "未启用"
-        else sprintf("启用（%d 个批次，%s）", prep$n_batches %||% NA_integer_,
-                     if (isTRUE(prep$combat_done)) "已执行" else "未执行")),
-    grp("3. 质量控制"),
-    row("相关性方法", s$cor_method),
-    row("相关性热图色阶下限", p$cor_min %||% "0.8"),
-    row("QC 直方图分箱数", p$cv_bins %||% "40"),
-    grp("4. 差异分析"),
-    row("分析模式", if (identical(s$mode, "multi")) "多组（全局 F + 两两对比）"
-                    else if (identical(s$mode, "single")) "单对比" else "未执行"),
-    row("对照组", p$control_grp %||% "—"),
-    row("|log2FC| 阈值", s$logFC_cutoff),
-    row("P 值阈值", s$pval_cutoff),
-    row("P 值校正方法", p_adjust_label(s$p_adjust_method)),
-    row("火山图标注基因数", s$top_n_label),
-    row("关键蛋白箱线图数量", s$top_n_boxplot),
-    row("热图最多展示蛋白数", s$heatmap_max),
-    row("热图显示行名上限", p$de_heatmap_show_rownames %||% "60"),
-    grp("5. 功能富集"),
+    grp(tr_("1. 数据与分组")),
+    row(tr_("数据来源"), if (identical(p$source, "spectronaut")) tr_("Spectronaut 蛋白组矩阵")
+                        else tr_("DIA-NN 蛋白水平矩阵 (pg_matrix)")),
+    row(tr_("数据文件"), p$file_name %||% tr_("随应用提供")),
+    row(tr_("样本数 / 分组数"), sprintf("%s / %s", s$n_samples, s$n_groups)),
+    row(tr_("分组"), s$groups_text),
+    row(tr_("物种"), s$species),
+    row(tr_("分析模块"), s$modules),
+    grp(tr_("2. 预处理")),
+    row(tr_("污染/反库剔除"), tr_("是（contaminant / REV / DECOY）")),
+    row(tr_("低检出过滤"), tr_("检出率 ≥ %s", s$min_detect)),
+    row(tr_("分组内最少检出样本数"), g(prep$min_group_detect %||% 0, tr_("0（不启用）"))),
+    row(tr_("log2 变换"), tr_("是")),
+    row(tr_("缺失值插补方法"), s$impute_desc),
+    row(tr_("插补参数"), imp_par),
+    row(tr_("缺失值（个 / 占比）"), sprintf("%s / %s", s$n_missing, s$miss_pct)),
+    row(tr_("中位数归一化"),
+        tr_("各样本中位数平移至最大值 %.2f", prep$median_target %||% NA_real_)),
+    row(tr_("ComBat 去批次"), if (!isTRUE(prep$use_combat)) tr_("未启用")
+        else tr_("启用（%d 个批次，%s）", prep$n_batches %||% NA_integer_,
+                 if (isTRUE(prep$combat_done)) tr_("已执行") else tr_("未执行"))),
+    grp(tr_("3. 质量控制")),
+    row(tr_("相关性方法"), s$cor_method),
+    row(tr_("相关性热图色阶下限"), p$cor_min %||% "0.8"),
+    row(tr_("QC 直方图分箱数"), p$cv_bins %||% "40"),
+    grp(tr_("4. 差异分析")),
+    row(tr_("分析模式"), if (identical(s$mode, "multi")) tr_("多组（全局 F + 两两对比）")
+                        else if (identical(s$mode, "single")) tr_("单对比") else tr_("未执行")),
+    row(tr_("对照组"), p$control_grp %||% "—"),
+    row(tr_("|log2FC| 阈值"), s$logFC_cutoff),
+    row(tr_("P 值阈值"), s$pval_cutoff),
+    row(tr_("P 值校正方法"), p_adjust_label(s$p_adjust_method)),
+    row(tr_("火山图标注基因数"), s$top_n_label),
+    row(tr_("关键蛋白箱线图数量"), s$top_n_boxplot),
+    row(tr_("热图最多展示蛋白数"), s$heatmap_max),
+    row(tr_("热图显示行名上限"), p$de_heatmap_show_rownames %||% "60"),
+    grp(tr_("5. 功能富集")),
     row("GO ontology", paste(s$enrich_ont %||% c("BP", "MF", "CC"), collapse = " / ")),
-    row("KEGG", if (!isTRUE(p$enrich_use_kegg)) "未启用"
+    row("KEGG", if (!isTRUE(p$enrich_use_kegg)) tr_("未启用")
                 else if (identical(prep$kegg_org, "dre") &&
-                         !identical(s$enrich_kegg_source, "online")) "启用（本地 KEGG.db 不含斑马鱼，已跳过）"
-                else if (identical(s$enrich_kegg_source, "online")) "启用（在线 KEGG, 需联网）"
-                else "启用（本地 KEGG.db）"),
-    row("pvalue / qvalue 阈值",
+                         !identical(s$enrich_kegg_source, "online")) tr_("启用（本地 KEGG.db 不含斑马鱼，已跳过）")
+                else if (identical(s$enrich_kegg_source, "online")) tr_("启用（在线 KEGG, 需联网）")
+                else tr_("启用（本地 KEGG.db）")),
+    row(tr_("pvalue / qvalue 阈值"),
         if (identical(s$enrich_p_adjust, "none"))
-          sprintf("%s / 不适用（未校正，qvalue 不参与）", s$enrich_p)
+          tr_("%s / 不适用（未校正，qvalue 不参与）", s$enrich_p)
         else sprintf("%s / %s", s$enrich_p, s$enrich_q)),
-    row("P 值校正方法", p_adjust_label(s$enrich_p_adjust)),
-    row("基因集大小范围", sprintf("%s – %s", p$enrich_min_gssize %||% 10,
-                                  p$enrich_max_gssize %||% 500)),
-    row("最小显著蛋白数", p$enrich_min_sig %||% 5),
-    row("条形图 / 气泡图 Top N", sprintf("%s / %s", p$enrich_go_top_n %||% 10,
-                                        p$enrich_kegg_top_n %||% 15)),
-    grp("6. 报告"),
-    row("生成时间", s$generated_at),
-    row("生成工具", sprintf("DIA-NN GUI 结果分析模块 (diann.gui) + %s", R.version.string)),
+    row(tr_("P 值校正方法"), p_adjust_label(s$enrich_p_adjust)),
+    row(tr_("基因集大小范围"), sprintf("%s – %s", p$enrich_min_gssize %||% 10,
+                                      p$enrich_max_gssize %||% 500)),
+    row(tr_("最小显著蛋白数"), p$enrich_min_sig %||% 5),
+    row(tr_("条形图 / 气泡图 Top N"), sprintf("%s / %s", p$enrich_go_top_n %||% 10,
+                                             p$enrich_kegg_top_n %||% 15)),
+    grp(tr_("6. 报告")),
+    row(tr_("生成时间"), s$generated_at),
+    row(tr_("生成工具"), tr_("DIA-NN GUI 结果分析模块 (diann.gui) + %s", R.version.string)),
     '</tbody></table>'
   )
 }
 
 html_sec6 <- function(s, prep) {
   paste0(
-    '<h2 class="section" id="sec6">6 附录</h2>',
-    '<h3 class="subsection" id="sec6-1">6.1 方法学说明</h3>',
-    '<p><b>数据来源：</b>DIA-NN 蛋白水平定量矩阵（pg_matrix）。</p>',
-    '<p><b>预处理：</b>剔除污染/反库条目；按检出率 ≥ ', esc(s$min_detect), ' 过滤低检出蛋白；',
-    (if (identical(s$impute_method, "none"))
-       '强度取 log2 后不填补缺失值，再做样本中位数归一化；'
-     else '强度取 log2 后做缺失值插补，再做样本中位数归一化；'),
-    esc(s$impute_detail), '</p>',
-    '<p><b>差异分析：</b>limma 经验贝叶斯线性模型；多组时另做相对基准组的多重对比 F 检验，',
-    '并输出全部两两对比；',
-    if (identical(s$p_adjust_method, "none")) 'P 值未校正（按原始 P 值筛选）。</p>'
-    else 'P 值经 BH（Benjamini-Hochberg）校正。</p>',
-    '<p><b>PCA：</b>基于插补并归一化后的 log2 矩阵，中心化 + 标准化后取前两个主成分。</p>',
-    '<p><b>功能富集：</b>GO 富集采用 clusterProfiler::enrichGO（',
-    esc(paste(s$enrich_ont %||% c("BP", "MF", "CC"), collapse = "/")),
-    '），KEGG 采用',
-    if (identical(s$enrich_kegg_source, "online")) 'KEGG REST 在线通路库（enrichKEGG）' else '本地 KEGG.db 通路库',
-    '；背景为全部可映射基因，',
-    if (identical(s$enrich_p_adjust, "none"))
-      paste0('P 值未校正（按原始 p 值筛选），pvalueCutoff = ',
-             esc(s$enrich_p %||% "0.05"), '。</p>')
-    else paste0('P 值经 BH（Benjamini-Hochberg）校正，pvalueCutoff = ',
-                esc(s$enrich_p %||% "0.05"), '、qvalueCutoff = ',
-                esc(s$enrich_q %||% "0.2"), '。</p>'),
-    '<h3 class="subsection" id="sec6-2">6.2 分析参数</h3>',
+    '<h2 class="section" id="sec6">', tr_("6 附录"), '</h2>',
+    '<h3 class="subsection" id="sec6-1">', tr_("6.1 方法学说明"), '</h3>',
+    '<p><b>', tr_("数据来源："), '</b>', tr_("DIA-NN 蛋白水平定量矩阵（pg_matrix）。"), '</p>',
+    sprintf('<p><b>%s</b>%s</p>', tr_("预处理："),
+            tr_("剔除污染/反库条目；按检出率 ≥ %s 过滤低检出蛋白；%s%s",
+                esc(s$min_detect),
+                if (identical(s$impute_method, "none"))
+                  tr_("强度取 log2 后不填补缺失值，再做样本中位数归一化；")
+                else tr_("强度取 log2 后做缺失值插补，再做样本中位数归一化；"),
+                esc(s$impute_detail))),
+    sprintf('<p><b>%s</b>%s</p>', tr_("差异分析："),
+            paste0(tr_("limma 经验贝叶斯线性模型；多组时另做相对基准组的多重对比 F 检验，并输出全部两两对比；"),
+                   if (identical(s$p_adjust_method, "none")) tr_("P 值未校正（按原始 P 值筛选）。")
+                   else tr_("P 值经 BH（Benjamini-Hochberg）校正。"))),
+    sprintf('<p><b>%s</b>%s</p>', tr_("PCA："),
+            tr_("基于插补并归一化后的 log2 矩阵，中心化 + 标准化后取前两个主成分。")),
+    sprintf('<p><b>%s</b>%s</p>', tr_("功能富集："),
+            tr_("GO 富集采用 clusterProfiler::enrichGO（%s），KEGG 采用%s；背景为全部可映射基因，%s",
+                esc(paste(s$enrich_ont %||% c("BP", "MF", "CC"), collapse = "/")),
+                if (identical(s$enrich_kegg_source, "online")) tr_("KEGG REST 在线通路库（enrichKEGG）")
+                else tr_("本地 KEGG.db 通路库"),
+                if (identical(s$enrich_p_adjust, "none"))
+                  tr_("P 值未校正（按原始 p 值筛选），pvalueCutoff = %s。", esc(s$enrich_p %||% "0.05"))
+                else tr_("P 值经 BH（Benjamini-Hochberg）校正，pvalueCutoff = %s、qvalueCutoff = %s。",
+                         esc(s$enrich_p %||% "0.05"), esc(s$enrich_q %||% "0.2")))),
+    '<h3 class="subsection" id="sec6-2">', tr_("6.2 分析参数"), '</h3>',
     param_table_html(s, prep),
-    '<h3 class="subsection" id="sec6-3">6.3 分析软件与工具</h3>',
+    '<h3 class="subsection" id="sec6-3">', tr_("6.3 分析软件与工具"), '</h3>',
     '<table class="kv"><tbody>',
-    '<tr><td>DIA-NN</td><td>蛋白水平定量（pg_matrix）</td></tr>',
-    '<tr><td>R / limma</td><td>缺失值插补、log2 变换、差异分析（Ritchie et al., 2015）</td></tr>',
-    '<tr><td>ggplot2 / pheatmap / svglite</td><td>统计图形绘制与矢量输出</td></tr>',
-    '<tr><td>clusterProfiler</td><td>GO / KEGG 富集分析（Yu et al., 2012）</td></tr>',
+    sprintf('<tr><td>DIA-NN</td><td>%s</td></tr>', tr_("蛋白水平定量（pg_matrix）")),
+    sprintf('<tr><td>R / limma</td><td>%s</td></tr>', tr_("缺失值插补、log2 变换、差异分析（Ritchie et al., 2015）")),
+    sprintf('<tr><td>ggplot2 / pheatmap / svglite</td><td>%s</td></tr>', tr_("统计图形绘制与矢量输出")),
+    sprintf('<tr><td>clusterProfiler</td><td>%s</td></tr>', tr_("GO / KEGG 富集分析（Yu et al., 2012）")),
     '</tbody></table>',
-    '<p class="ref">参考文献：<br>',
+    '<p class="ref">', tr_("参考文献："), '<br>',
     '[1] Ritchie ME, et al. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Res, 2015.<br>',
     '[2] Yu G, et al. clusterProfiler: an R package for comparing biological themes among gene clusters. OMICS, 2012.<br>',
     '[3] Demichev V, et al. DIA-NN: neural networks and interference correction enable deep proteome coverage. Nat Methods, 2020.</p>'
@@ -710,11 +715,14 @@ ul.concl{font-size:13.5px;line-height:1.9}
 
 build_report_html <- function(s, prep, has_qc, has_de, has_enrich, de, enrich) {
   sec2 <- if (has_qc) html_sec2(s) else
-    '<h2 class="section" id="sec2">2 DIA-NN 数据质量控制</h2><div class="missing">未执行 QC 可视化模块。</div>'
+    sprintf('<h2 class="section" id="sec2">%s</h2><div class="missing">%s</div>',
+            tr_("2 DIA-NN 数据质量控制"), tr_("未执行 QC 可视化模块。"))
   sec3 <- if (has_de) html_sec3(s, de) else
-    '<h2 class="section" id="sec3">3 差异蛋白分析</h2><div class="missing">未执行差异分析模块。</div>'
+    sprintf('<h2 class="section" id="sec3">%s</h2><div class="missing">%s</div>',
+            tr_("3 差异蛋白分析"), tr_("未执行差异分析模块。"))
   sec4 <- if (has_enrich) html_sec4(s, enrich) else
-    '<h2 class="section" id="sec4">4 功能富集分析</h2><div class="missing">未执行功能富集模块。</div>'
+    sprintf('<h2 class="section" id="sec4">%s</h2><div class="missing">%s</div>',
+            tr_("4 功能富集分析"), tr_("未执行功能富集模块。"))
 
   metadata <- list(
     report_name        = s$report_name,
@@ -726,7 +734,7 @@ build_report_html <- function(s, prep, has_qc, has_de, has_enrich, de, enrich) {
 
   html <- paste0(
 '<!DOCTYPE html>
-<html lang="zh-CN">
+<html ', sprintf('lang="%s"', if (identical(i18n_lang(), "zh")) "zh-CN" else "en"), '
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -744,12 +752,12 @@ build_report_html <- function(s, prep, has_qc, has_de, has_enrich, de, enrich) {
     <section class="meta-card">
       <h1><span id="report-heading">', esc(s$report_name), '</span></h1>
       <table class="kv"><tbody>
-        <tr><td>报告日期</td><td id="meta-report-date">', esc(s$report_date), '</td></tr>
-        <tr><td>责任人</td><td id="meta-responsible-person">—</td></tr>
-        <tr><td>联系邮箱</td><td id="meta-responsible-email">—</td></tr>
-        <tr><td>报告编码</td><td id="meta-report-code">', esc(metadata$report_code), '</td></tr>
-        <tr><td>物种</td><td>', esc(s$species), '</td></tr>
-        <tr><td>样本 / 分组</td><td>', esc(s$n_samples), ' / ', esc(s$n_groups), '</td></tr>
+        <tr><td>', tr_("报告日期"), '</td><td id="meta-report-date">', esc(s$report_date), '</td></tr>
+        <tr><td>', tr_("责任人"), '</td><td id="meta-responsible-person">—</td></tr>
+        <tr><td>', tr_("联系邮箱"), '</td><td id="meta-responsible-email">—</td></tr>
+        <tr><td>', tr_("报告编码"), '</td><td id="meta-report-code">', esc(metadata$report_code), '</td></tr>
+        <tr><td>', tr_("物种"), '</td><td>', esc(s$species), '</td></tr>
+        <tr><td>', tr_("样本 / 分组"), '</td><td>', esc(s$n_samples), ' / ', esc(s$n_groups), '</td></tr>
       </tbody></table>
     </section>
 ', html_sec1(s, has_qc, has_de, has_enrich), '
@@ -758,10 +766,10 @@ build_report_html <- function(s, prep, has_qc, has_de, has_enrich, de, enrich) {
 ', sec4, '
 ', html_sec5(s, de, enrich), '
 ', html_sec6(s, prep), '
-    <footer class="foot">本报告由 DIA-NN GUI 结果分析模块自动生成 · 生成时间 ', esc(s$generated_at), '</footer>
+    <footer class="foot">', tr_("本报告由 DIA-NN GUI 结果分析模块自动生成 · 生成时间 %s", esc(s$generated_at)), '</footer>
   </main>
 </div>
-<button id="backToTop" title="返回顶部">↑</button>
+<button id="backToTop" title="', tr_("返回顶部"), '">↑</button>
 <script>
 var REPORT_METADATA = ', js_json(metadata), ';
 var REPORT_SUMMARY = ', js_json(summary_for_js(s)), ';

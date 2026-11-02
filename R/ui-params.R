@@ -10,13 +10,13 @@
 mod_row_ui <- function(prefix, i, ncol1 = 4, value1 = "") {
   fluidRow(
     column(ncol1, textInput(paste0(prefix, "_name_", i), label = NULL, value = value1,
-                            placeholder = "如 UniMod:35")),
+                            placeholder = tr_("如 UniMod:35"))),
     column(4, textInput(paste0(prefix, "_mass_", i), label = NULL,
                         value = if (prefix == "vm" && i <= 2) vm_default(i, 2) else "",
-                        placeholder = "如 15.994915")),
+                        placeholder = tr_("如 15.994915"))),
     column(4, textInput(paste0(prefix, "_sites_", i), label = NULL,
                         value = if (prefix == "vm" && i <= 2) vm_default(i, 3) else "",
-                        placeholder = "如 M / STY / *n"))
+                        placeholder = tr_("如 M / STY / *n")))
   )
 }
 
@@ -41,35 +41,37 @@ num_input <- function(inputId, label, value = NA, min = NA, max = NA, step = NA,
 
 p_num <- function(id, cn, en, flag, value = NA, ph = NULL, min = 0, max = NULL, step = NULL, note = NULL) {
   tagList(
-    num_input(id, paste0(cn, " (", en, "):"), value = value, min = min,
+    num_input(id, tr_(paste0(cn, " (", en, "):")), value = value, min = min,
               max = if (is.null(max)) NA_real_ else max,
-              step = if (is.null(step)) NA_real_ else step, placeholder = ph),
-    param_hint(if (is.null(note)) flag else paste0(flag, "; ", note))
+              step = if (is.null(step)) NA_real_ else step,
+              placeholder = if (is.null(ph)) NULL else tr_(ph)),
+    param_hint(if (is.null(note)) flag else paste0(flag, "; ", tr_(note)))
   )
 }
 
 p_txt <- function(id, cn, en, flag, value = "", ph = "", note = NULL, width = NULL) {
   tagList(
-    textInput(id, label = paste0(cn, " (", en, "):"), value = value, placeholder = ph, width = width),
-    param_hint(if (is.null(note)) flag else paste0(flag, "; ", note))
+    textInput(id, label = tr_(paste0(cn, " (", en, "):")), value = value,
+              placeholder = if (nzchar(ph)) tr_(ph) else ph, width = width),
+    param_hint(if (is.null(note)) flag else paste0(flag, "; ", tr_(note)))
   )
 }
 
 p_chk <- function(id, cn, en, flag, value = FALSE) {
-  checkboxInput(id, label = HTML(sprintf("%s (%s) <span class='flag-hint'>%s</span>", cn, en, flag)),
+  checkboxInput(id, label = HTML(tr_("%s (%s) <span class='flag-hint'>%s</span>", cn, en, flag)),
                 value = value)
 }
 
 # Windows 风格最小-最大范围组: 一个标签 + [min] — [max] 两个输入框, 留空即用 DIA-NN 默认
 p_range <- function(cn, en, id_min, id_max, def_min, def_max, flag) {
   tags$div(class = "range-group",
-    tags$label(class = "range-label", paste0(cn, " (", en, ")")),
+    tags$label(class = "range-label", tr_(paste0(cn, " (", en, ")"))),
     tags$div(class = "range-row",
       num_input(id_min, label = NULL, value = NA, min = 0, placeholder = def_min, width = "44%"),
       tags$span(class = "range-dash", "—"),
       num_input(id_max, label = NULL, value = NA, min = 0, placeholder = def_max, width = "44%")
     ),
-    param_hint(sprintf("%s; 留空 = 默认 %s–%s", flag, def_min, def_max))
+    param_hint(tr_("%s; 留空 = 默认 %s–%s", flag, def_min, def_max))
   )
 }
 # 全局样式 (选择器覆盖任务队列/帮助页, 故由 app.R 在 dashboardBody 引用)
@@ -94,7 +96,7 @@ PARAM_CSS_TAG <- tags$style(HTML("      .scrollbox {max-height: 460px; overflow-
 # 「分析参数」盒的六个子标签 (Windows 风格 min-max 成组 + 中英双语标签)
 param_tabs_ui <- function() {
   tabsetPanel(id = "param_tabs", type = "tabs",
-                tabPanel("常规",
+                tabPanel(tr_("常规"),
                   br(),
                   fluidRow(
                     column(4,
@@ -102,7 +104,7 @@ param_tabs_ui <- function() {
                       p_num("qvalue", "前体 q-value 阈值", "Precursor q-value", "--qvalue",
                             0.01, min = 0, max = 1, step = 0.001),
                       tagList(
-                        selectInput("verbose", "日志详细度 (Verbosity):", choices = 0:4, selected = 1),
+                        selectInput("verbose", tr_("日志详细度 (Verbosity):"), choices = 0:4, selected = 1),
                         param_hint("--verbose")
                       )
                     ),
@@ -119,38 +121,38 @@ param_tabs_ui <- function() {
                     )
                   )
                 ),
-                tabPanel("质量与提取",
+                tabPanel(tr_("质量与提取"),
                   br(),
                   fluidRow(
                     column(4, p_num("mass_acc", "MS2 质量精度 ppm", "MS2 mass accuracy",
-                                    "--mass-acc", NA, ph = "自动", note = "留空 = 自动")),
+                                    "--mass-acc", NA, ph = tr_("自动"), note = tr_("留空 = 自动"))),
                     column(4, p_num("mass_acc_ms1", "MS1 质量精度 ppm", "MS1 mass accuracy",
-                                    "--mass-acc-ms1", NA, ph = "自动", note = "留空 = 自动")),
+                                    "--mass-acc-ms1", NA, ph = tr_("自动"), note = tr_("留空 = 自动"))),
                     column(4, p_num("window", "扫描窗口半径", "Window radius",
-                                    "--window", NA, ph = "自动", note = "留空 = 自动"))
+                                    "--window", NA, ph = tr_("自动"), note = tr_("留空 = 自动")))
                   ),
                   fluidRow(
                     column(4, p_num("min_peak", "最小峰高", "Min peak height",
-                                    "--min-peak", NA, ph = "自动", note = "留空 = 自动")),
+                                    "--min-peak", NA, ph = tr_("自动"), note = tr_("留空 = 自动"))),
                     column(4, p_num("rt_window", "RT 提取窗口下限 秒", "RT window (sec)",
-                                    "--rt-window", NA, ph = "自动", note = "留空 = 自动")),
+                                    "--rt-window", NA, ph = tr_("自动"), note = tr_("留空 = 自动"))),
                     column(4, p_num("im_window", "IM 提取窗口下限", "IM window",
-                                    "--im-window", NA, ph = "自动", note = "留空 = 自动"))
+                                    "--im-window", NA, ph = tr_("自动"), note = tr_("留空 = 自动")))
                   ),
                   fluidRow(
                     column(4, p_num("quant_qvalue", "定量 q-value", "Quant q-value",
-                                    "--quant-qvalue", NA, ph = "0.01", note = "留空 = 默认 0.01",
+                                    "--quant-qvalue", NA, ph = "0.01", note = tr_("留空 = 默认 0.01"),
                                     max = 1, step = 0.001)),
                     column(4, p_num("protein_quant_qvalue", "蛋白定量 q-value", "Protein q-value",
-                                    "--protein-quant-qvalue", NA, ph = "0.01", note = "留空 = 默认 0.01",
+                                    "--protein-quant-qvalue", NA, ph = "0.01", note = tr_("留空 = 默认 0.01"),
                                     max = 1, step = 0.001)),
                     column(4, p_num("matrix_qvalue", "矩阵过滤 q-value", "Matrix q-value",
-                                    "--matrix-qvalue", NA, note = "留空 = 默认",
+                                    "--matrix-qvalue", NA, note = tr_("留空 = 默认"),
                                     max = 1, step = 0.001))
                   ),
-                  helpText("以上数值参数留空时保持 DIA-NN 自动优化行为, 不写入命令行。")
+                  helpText(tr_("以上数值参数留空时保持 DIA-NN 自动优化行为, 不写入命令行。"))
                 ),
-                tabPanel("修饰",
+                tabPanel(tr_("修饰"),
                   br(),
                   fluidRow(
                     column(3, p_num("var_mods_max", "每肽段最大可变修饰数", "Max var mods per peptide",
@@ -158,35 +160,35 @@ param_tabs_ui <- function() {
                     column(4, p_chk("met_excision", "N 端甲硫氨酸切除", "Met excision", "--met-excision", FALSE)),
                     column(4, p_chk("reannotate", "用 FASTA 重注释谱库", "Reannotate library", "--reannotate", FALSE))
                   ),
-                  h5(tags$strong("可变修饰 (Variable modifications)")),
-                  param_hint("--var-mod 名称,质量,位点"),
+                  h5(tags$strong(tr_("可变修饰 (Variable modifications)"))),
+                  param_hint(tr_("--var-mod 名称,质量,位点")),
                   fluidRow(
-                    column(4, tags$strong("名称 (Name)")), column(4, tags$strong("质量 (Mass)")), column(4, tags$strong("位点 (Sites)"))
+                    column(4, tags$strong(tr_("名称 (Name)"))), column(4, tags$strong(tr_("质量 (Mass)"))), column(4, tags$strong(tr_("位点 (Sites)")))
                   ),
                   lapply(1:6, function(i) mod_row_ui("vm", i, value1 = vm_default(i, 1))),
-                  h5(tags$strong("固定修饰 (Fixed modifications)")),
-                  param_hint("--fixed-mod; 留空行忽略"),
+                  h5(tags$strong(tr_("固定修饰 (Fixed modifications)"))),
+                  param_hint(tr_("--fixed-mod; 留空行忽略")),
                   lapply(1:3, function(i) mod_row_ui("fm", i))
                 ),
-                tabPanel("FASTA搜索/库构建",
+                tabPanel(tr_("FASTA搜索/库构建"),
                   br(),
                   fluidRow(
                     column(4,
                       p_chk("fasta_search", "执行 FASTA 酶切搜索", "FASTA search", "--fasta-search", FALSE),
-                      helpText("无库(FASTA)分析时必须勾选; 仅用 FASTA 为谱库注释时保持不勾选")
+                      helpText(tr_("无库(FASTA)分析时必须勾选; 仅用 FASTA 为谱库注释时保持不勾选"))
                     ),
                     column(4,
                       p_chk("use_cut", "自定义酶切特异性", "Cut specificity", "--cut", FALSE),
                       conditionalPanel("input.use_cut == 1",
                         tagList(
-                          textInput("cut", "酶切特异性 (Specificity):", "K*,R*,!*P"),
-                          param_hint("默认 K*,R*,!*P (标准胰酶); Trypsin/P: K*,R*; Lys-C: K*,!*P; 非特异: **")
+                          textInput("cut", tr_("酶切特异性 (Specificity):"), "K*,R*,!*P"),
+                          param_hint(tr_("默认 K*,R*,!*P (标准胰酶); Trypsin/P: K*,R*; Lys-C: K*,!*P; 非特异: **"))
                         )
                       )
                     ),
                     column(4,
                       p_num("missed_cleavages", "最大漏切位点数", "Missed cleavages",
-                            "--missed-cleavages", NA, ph = "1", note = "留空 = 默认 1")
+                            "--missed-cleavages", NA, ph = "1", note = tr_("留空 = 默认 1"))
                     )
                   ),
                   br(),
@@ -210,15 +212,15 @@ param_tabs_ui <- function() {
                   conditionalPanel("input.gen_spec_lib == 1",
                     fluidRow(
                       column(6, p_txt("out_lib", "谱库输出路径", "Library output path",
-                                      "--out-lib", "", ph = "输出目录/library.speclib",
-                                      note = "留空 = <输出目录>/library.speclib")),
+                                      "--out-lib", "", ph = tr_("输出目录/library.speclib"),
+                                      note = tr_("留空 = <输出目录>/library.speclib"))),
                       column(6, p_num("out_lib_qvalue", "经验谱库 q-value 阈值", "Empirical library q-value",
-                                      "--out-lib-qvalue", NA, ph = "0.05", note = "留空 = 默认 0.05",
+                                      "--out-lib-qvalue", NA, ph = "0.05", note = tr_("留空 = 默认 0.05"),
                                       max = 1, step = 0.01))
                     )
                   )
                 ),
-                tabPanel("高级",
+                tabPanel(tr_("高级"),
                   br(),
                   fluidRow(
                     column(3,
@@ -238,18 +240,18 @@ param_tabs_ui <- function() {
                     ),
                     column(3,
                       p_chk("no_stats", "不生成 stats 文件", "No stats files", "--no-stats", FALSE),
-                      p_num("xic", "XIC 提取秒数", "XIC extraction (sec)", "--xic", NA, note = "留空 = 关闭"),
+                      p_num("xic", "XIC 提取秒数", "XIC extraction (sec)", "--xic", NA, note = tr_("留空 = 关闭")),
                       p_num("min_corr", "最小峰组相关分数", "Min peak correlation",
-                            "--min-corr", NA, ph = "自动", note = "留空 = 自动", max = 1, step = 0.01)
+                            "--min-corr", NA, ph = tr_("自动"), note = tr_("留空 = 自动"), max = 1, step = 0.01)
                     )
                   )
                 ),
-                tabPanel("额外参数",
+                tabPanel(tr_("额外参数"),
                   br(),
-                  textAreaInput("extra_args", "其他参数 (Additional arguments, 原样追加到命令尾部, 空格分隔):",
+                  textAreaInput("extra_args", tr_("其他参数 (Additional arguments, 原样追加到命令尾部, 空格分隔):"),
                                 height = "100px",
-                                placeholder = "例如: --cfg /path/to/config.txt --min-fr 3 --loc-factor 40"),
-                  helpText("未在以上面板覆盖的参数均可在此填写; 完整参数说明见\"参数速查\"页。")
+                                placeholder = tr_("例如: --cfg /path/to/config.txt --min-fr 3 --loc-factor 40")),
+                  helpText(tr_("未在以上面板覆盖的参数均可在此填写; 完整参数说明见\"参数速查\"页。"))
                 )
   )
 }

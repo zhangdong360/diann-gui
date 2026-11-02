@@ -101,9 +101,9 @@ init_config <- function(path = file.path(path.expand("~"), ".diann_gui", "config
     alt <- file.path(getwd(), "inst", "config", "config.example.R")
     if (file.exists(alt)) tpl <- alt
   }
-  if (!nzchar(tpl) || !file.exists(tpl)) stop("找不到配置模板 config.example.R (包安装不完整?)")
+  if (!nzchar(tpl) || !file.exists(tpl)) stop(tr_("找不到配置模板 config.example.R (包安装不完整?)"))
   if (file.exists(path) && !isTRUE(overwrite)) {
-    message("配置已存在, 未改动: ", path, " (需要覆盖请传 overwrite = TRUE)")
+    message(tr_("配置已存在, 未改动: %s (需要覆盖请传 overwrite = TRUE)", path))
     return(invisible(path))
   }
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE, mode = "0700")
@@ -136,11 +136,11 @@ init_config <- function(path = file.path(path.expand("~"), ".diann_gui", "config
   }
   writeLines(txt, path, useBytes = TRUE)
   try(Sys.chmod(path, "0600"), silent = TRUE)
-  message("已生成配置: ", path)
+  message(tr_("已生成配置: %s", path))
   if (isTRUE(auto) && !is.null(backend)) {
-    message(sprintf("执行后端: %s (写入 EXEC_BACKEND <- \"%s\"; 换机器可改回 \"auto\")",
-                    backend_label(backend), backend))
+    message(tr_("执行后端: %s (写入 EXEC_BACKEND <- \"%s\"; 换机器可改回 \"auto\")",
+                backend_label(backend), backend))
   }
-  message("下一步: 按需编辑该文件 (SIF_DIRS / APPTAINER_PATHS / DATA_HOME / EXEC_BACKEND), 然后运行 diann.gui::run_app()")
+  message(tr_("下一步: 按需编辑该文件 (SIF_DIRS / APPTAINER_PATHS / DATA_HOME / EXEC_BACKEND), 然后运行 diann.gui::run_app()"))
   invisible(path)
 }

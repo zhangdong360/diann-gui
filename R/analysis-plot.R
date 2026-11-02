@@ -113,14 +113,14 @@ save_plot_obj <- function(p, out_dir, file_stem, width = NULL, height = NULL) {
     svg_to_file(p, svg_path, width, height)
     TRUE
   }, error = function(e) {
-    warning(paste0("SVG 输出失败 (", conditionMessage(e), ")，降级为 300dpi PNG: ", file_stem))
+    warning(tr_("SVG 输出失败 (%s)，降级为 300dpi PNG: %s", conditionMessage(e), file_stem))
     try(grDevices::dev.off(), silent = TRUE)
     if (file.exists(svg_path)) try(file.remove(svg_path), silent = TRUE)
     FALSE
   })
   if (!ok) {
     tryCatch(png_to_file(p, png_path, width, height), error = function(e) {
-      warning("PNG 输出失败: ", file_stem, " (", conditionMessage(e), ")")
+      warning(tr_("PNG 输出失败: %s (%s)", file_stem, conditionMessage(e)))
       try(grDevices::dev.off(), silent = TRUE)
     })
     return(png_path)
@@ -171,7 +171,7 @@ figure_ui <- function(p, width = NULL, height = NULL) {
 
   if (is.null(src))
     return(htmltools::div(class = "err-box",
-                          paste0("图形渲染失败: ", err %||% "未知错误")))
+                          tr_("图形渲染失败: %s", err %||% tr_("未知错误"))))
   htmltools::tags$img(src = src, alt = p$label %||% "")
 }
 

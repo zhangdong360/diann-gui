@@ -1,0 +1,4825 @@
+{
+  "languages": ["zh", "en"],
+  "translation": [
+    {
+      "zh": "中文",
+      "en": "Chinese"
+    },
+    {
+      "zh": "英文",
+      "en": "English"
+    },
+    {
+      "zh": "界面语言",
+      "en": "UI language"
+    },
+    {
+      "zh": "切换后页面自动刷新一次。",
+      "en": "The page reloads once after switching."
+    },
+    {
+      "zh": "未校正（原始 P 值）",
+      "en": "uncorrected (raw P values)"
+    },
+    {
+      "zh": "BH（Benjamini-Hochberg）",
+      "en": "BH (Benjamini-Hochberg)"
+    },
+    {
+      "zh": "暂无结果（完整数据请查看结果目录中的原始 CSV）。",
+      "en": "No results yet (see the raw CSV files in the output directory for the full data)."
+    },
+    {
+      "zh": "仅展示前 %d 行（共 %d 行）；完整结果请查看结果目录中的原始 CSV。",
+      "en": "Showing the first %d of %d rows; see the raw CSV files in the output directory for the full results."
+    },
+    {
+      "zh": "共 %d 行。",
+      "en": "%d rows in total."
+    },
+    {
+      "zh": "DIA-NN 蛋白质组学差异分析报告",
+      "en": "DIA-NN Proteomics Differential Analysis Report"
+    },
+    {
+      "zh": "无",
+      "en": "None"
+    },
+    {
+      "zh": "未执行功能富集模块",
+      "en": "Enrichment module not executed"
+    },
+    {
+      "zh": "未生成",
+      "en": "not generated"
+    },
+    {
+      "zh": "（未执行 QC 模块）",
+      "en": "(QC module not executed)"
+    },
+    {
+      "zh": "未做缺失值插补",
+      "en": "No missing-value imputation"
+    },
+    {
+      "zh": "k 近邻插补",
+      "en": "k-nearest neighbour (KNN) imputation"
+    },
+    {
+      "zh": "顺序 KNN 插补",
+      "en": "Sequential KNN imputation"
+    },
+    {
+      "zh": "LoD 插补",
+      "en": "LoD imputation"
+    },
+    {
+      "zh": "不插补（保留缺失值，仅做 QC）",
+      "en": "No imputation (missing values retained; QC only)"
+    },
+    {
+      "zh": "k 近邻插补（随机缺失型）",
+      "en": "k-nearest neighbour imputation (MAR-type)"
+    },
+    {
+      "zh": "顺序 KNN 插补（按缺失率由低到高逐蛋白插补）",
+      "en": "Sequential KNN imputation (proteins imputed in ascending order of missing rate)"
+    },
+    {
+      "zh": "组内 LoD 插补（检测限左删失）",
+      "en": "Within-group LoD imputation (left-censored at the detection limit)"
+    },
+    {
+      "zh": "未做插补（保留缺失值 %s 个，占矩阵 %s）",
+      "en": "No imputation (%s missing values retained, %s of the matrix)"
+    },
+    {
+      "zh": "%s（共插补 %s 个缺失值，占矩阵 %s）",
+      "en": "%s (%s missing values imputed, %s of the matrix)"
+    },
+    {
+      "zh": "未做缺失值插补（保留缺失值），因此差异分析与功能富集已停用。",
+      "en": "Missing values were not imputed (retained as missing); differential analysis and enrichment are therefore disabled."
+    },
+    {
+      "zh": "缺失值以 k 近邻（k = 10）在 log2 尺度上插补（随机缺失型），插补发生在 log2 变换之后。",
+      "en": "Missing values were imputed with k-nearest neighbours (k = 10) on the log2 scale (MAR-type); imputation was performed after the log2 transform."
+    },
+    {
+      "zh": "缺失值以顺序 KNN（k = 10）在 log2 尺度上插补：按缺失率由低到高逐个蛋白，用已完成蛋白寻找近邻样本，前一步的插补结果参与后续计算。",
+      "en": "Missing values were imputed with sequential KNN (k = 10) on the log2 scale: proteins are processed in ascending order of missing rate, neighbour samples are drawn from already completed proteins, and results from previous steps participate in subsequent calculations."
+    },
+    {
+      "zh": "缺失值以 LoD（组内左截断高斯分布）插补（均值偏移 %.1f SD、标准差缩放 %.1f SD，随机种子 %s）。",
+      "en": "Missing values were imputed with a LoD left-censored Gaussian within groups (mean shift %.1f SD, SD scaling %.1f SD, random seed %s)."
+    },
+    {
+      "zh": "样本数",
+      "en": "Samples"
+    },
+    {
+      "zh": "分组数",
+      "en": "Groups"
+    },
+    {
+      "zh": "预处理后蛋白数",
+      "en": "Proteins after preprocessing"
+    },
+    {
+      "zh": "显著差异蛋白",
+      "en": "Significant differential proteins"
+    },
+    {
+      "zh": "富集通路数",
+      "en": "Enriched pathways"
+    },
+    {
+      "zh": "1 项目概述",
+      "en": "1 Project Overview"
+    },
+    {
+      "zh": "1.1 数据概览",
+      "en": "1.1 Data Overview"
+    },
+    {
+      "zh": "本次分析基于 DIA-NN 输出的蛋白水平定量矩阵（pg_matrix），共 <b>%s<\/b> 个样本、<b>%s<\/b> 个实验分组（%s）。经污染/反库过滤与低检出过滤（检出率 ≥ %s）后保留 <b>%s<\/b> 个蛋白（原始 %s 个，剔除低检出 %s 个），随后完成 log2 变换，并做%s；最后以各样本中位数的最大值为目标做样本中位数归一化（把各样本中位数拉平到该值）。",
+      "en": "This analysis is based on the DIA-NN protein-level quantification matrix (pg_matrix), with <b>%s<\/b> samples in <b>%s<\/b> experimental groups (%s). After contaminant/reverse-library filtering and low-detection filtering (detection rate ≥ %s), <b>%s<\/b> proteins were retained (%s originally, %s low-detection proteins removed); the log2 transform was then applied, followed by %s; finally, sample median normalization was performed targeting the largest of the per-sample medians (each sample's median is shifted to that value)."
+    },
+    {
+      "zh": "缺失值插补在 log2 变换之后进行（各方法均定义在对数强度上）；归一化在插补之后，只对每个样本整体做加法平移、不改变样本内的相对差异与方差。",
+      "en": "Missing-value imputation is performed after the log2 transform (all methods are defined on log-scale intensities); normalization is applied after imputation and only shifts each sample additively, leaving within-sample relative differences and variance unchanged."
+    },
+    {
+      "zh": "1.2 分析流程",
+      "en": "1.2 Analysis Workflow"
+    },
+    {
+      "zh": "数据读取与清洗：自动识别注释列与样本列，解析分组",
+      "en": "Data reading and cleaning: annotation and sample columns are identified automatically and groups are parsed"
+    },
+    {
+      "zh": "过滤：污染/反库条目（contaminant / REV / DECOY）与低检出蛋白",
+      "en": "Filtering: contaminant / reverse-library entries (contaminant / REV / DECOY) and low-detection proteins"
+    },
+    {
+      "zh": "log2 变换与缺失值插补：log2 变换 → %s → 样本中位数归一化（拉平到最大中位数）",
+      "en": "log2 transform and missing-value imputation: log2 transform → %s → sample median normalization (levelled to the maximum median)"
+    },
+    {
+      "zh": "质量控制：检出数、缺失率、PCA、相关性、样本聚类、CV、强度分布",
+      "en": "Quality control: detection counts, missing rates, PCA, correlation, sample clustering, CV, intensity distributions"
+    },
+    {
+      "zh": "差异分析：limma 经验贝叶斯%s，BH-FDR 校正",
+      "en": "Differential analysis: limma empirical Bayes %s with BH-FDR correction"
+    },
+    {
+      "zh": "（全局 F 检验 + 全部两两对比）",
+      "en": "(global F-test plus all pairwise comparisons)"
+    },
+    {
+      "zh": "单对比",
+      "en": "single comparison"
+    },
+    {
+      "zh": "功能富集：GO（BP/MF/CC）与 KEGG 通路富集",
+      "en": "Functional enrichment: GO (BP/MF/CC) and KEGG pathway enrichment"
+    },
+    {
+      "zh": "物种",
+      "en": "Species"
+    },
+    {
+      "zh": "差异阈值",
+      "en": "Differential thresholds"
+    },
+    {
+      "zh": "|log2FC| &gt; %s 且 P 值 &lt; %s",
+      "en": "|log2FC| &gt; %s and P value &lt; %s"
+    },
+    {
+      "zh": "执行的分析模块",
+      "en": "Modules executed"
+    },
+    {
+      "zh": "%s：未生成（无对应结果）",
+      "en": "%s: not generated (no corresponding results)"
+    },
+    {
+      "zh": "2 DIA-NN 数据质量控制",
+      "en": "2 DIA-NN Data Quality Control"
+    },
+    {
+      "zh": "2.1 数据预处理与过滤",
+      "en": "2.1 Data Preprocessing and Filtering"
+    },
+    {
+      "zh": "分组",
+      "en": "Groups"
+    },
+    {
+      "zh": "原始蛋白数",
+      "en": "Raw protein count"
+    },
+    {
+      "zh": "污染/反库剔除",
+      "en": "Contaminant/reverse-library removed"
+    },
+    {
+      "zh": "低检出剔除（&lt; %s 检出）",
+      "en": "Low-detection removed (&lt; %s detected)"
+    },
+    {
+      "zh": "缺失值处理",
+      "en": "Missing-value handling"
+    },
+    {
+      "zh": "2.2 蛋白鉴定概况",
+      "en": "2.2 Protein Identification Overview"
+    },
+    {
+      "zh": "蛋白检出数量统计图",
+      "en": "Protein detection counts plot"
+    },
+    {
+      "zh": "图 2.1 各样本检出蛋白数（左）与蛋白检出频率分布（右）",
+      "en": "Figure 2.1 Detected proteins per sample (left) and distribution of protein detection frequency (right)"
+    },
+    {
+      "zh": "2.3 样本相关性分析",
+      "en": "2.3 Sample Correlation Analysis"
+    },
+    {
+      "zh": "样本相关性热图",
+      "en": "Sample correlation heatmap"
+    },
+    {
+      "zh": "图 2.2 样本间 Pearson 相关系数热图（按分组排列）",
+      "en": "Figure 2.2 Heatmap of pairwise Pearson correlation coefficients (ordered by group)"
+    },
+    {
+      "zh": "样本间相关系数范围为 %s，组内相关性应明显高于组间。",
+      "en": "Sample-to-sample correlation coefficients range from %s; within-group correlations should be clearly higher than between-group ones."
+    },
+    {
+      "zh": "2.4 缺失值分析",
+      "en": "2.4 Missing-Value Analysis"
+    },
+    {
+      "zh": "蛋白缺失值分布图",
+      "en": "Protein missing-value distribution plot"
+    },
+    {
+      "zh": "图 2.3 各样本缺失率（左）与蛋白缺失率分布（右）",
+      "en": "Figure 2.3 Missing rate per sample (left) and distribution of protein missing rates (right)"
+    },
+    {
+      "zh": "2.5 样本层次聚类",
+      "en": "2.5 Sample Hierarchical Clustering"
+    },
+    {
+      "zh": "样本层次聚类树状图",
+      "en": "Sample hierarchical clustering dendrogram"
+    },
+    {
+      "zh": "图 2.4 样本层次聚类树状图（complete linkage）",
+      "en": "Figure 2.4 Hierarchical clustering dendrogram of samples (complete linkage)"
+    },
+    {
+      "zh": "2.6 主成分分析（PCA）",
+      "en": "2.6 Principal Component Analysis (PCA)"
+    },
+    {
+      "zh": "PCA 得分图",
+      "en": "PCA score plot"
+    },
+    {
+      "zh": "图 2.5 样本 PCA 得分图",
+      "en": "Figure 2.5 PCA score plot of samples"
+    },
+    {
+      "zh": "PC1 解释方差 %s，PC2 解释方差 %s。",
+      "en": "PC1 explains %s of the variance and PC2 explains %s."
+    },
+    {
+      "zh": "2.7 组内变异系数（CV）分布",
+      "en": "2.7 Within-Group Coefficient of Variation (CV) Distribution"
+    },
+    {
+      "zh": "组内变异系数分布图",
+      "en": "Within-group coefficient of variation distribution plot"
+    },
+    {
+      "zh": "图 2.6 各组组内变异系数（CV）分布密度",
+      "en": "Figure 2.6 Density of within-group coefficient of variation (CV) per group"
+    },
+    {
+      "zh": "各组 CV 中位数：%s。CV 越低说明组内定量重复性越好。",
+      "en": "Median within-group CV per group: %s. Lower CV indicates better quantitative reproducibility within groups."
+    },
+    {
+      "zh": "2.8 组内 CV 重复性箱线图",
+      "en": "2.8 Within-Group CV Reproducibility Boxplot"
+    },
+    {
+      "zh": "组内 CV 重复性箱线图",
+      "en": "Within-group CV reproducibility boxplot"
+    },
+    {
+      "zh": "图 2.7 各组组内 CV 箱线图（散点为单个蛋白，菱形为中位数）",
+      "en": "Figure 2.7 Within-group CV boxplots (points are individual proteins, diamonds are medians)"
+    },
+    {
+      "zh": "箱线图用于按组对比定量重复性：箱体越窄、中位数越低，说明该组重复性越好；散点可直观看出是否存在 CV 异常偏高的离群蛋白。",
+      "en": "The boxplots compare quantitative reproducibility across groups: narrower boxes and lower medians indicate better reproducibility; the points reveal proteins with unusually high CV at a glance."
+    },
+    {
+      "zh": "2.9 中位数归一化前后对比",
+      "en": "2.9 Before/After Median Normalization"
+    },
+    {
+      "zh": "中位数归一化前后箱线图",
+      "en": "Boxplots before/after median normalization"
+    },
+    {
+      "zh": "图 2.8 样本中位数归一化前后各样本强度箱线图（虚线为目标中位数）",
+      "en": "Figure 2.8 Intensity boxplots per sample before and after median normalization (dashed lines mark the target median)"
+    },
+    {
+      "zh": "左图为插补后、归一化前的各样本强度分布，右图为以最大样本中位数为目标做加法平移后的结果；虚线为目标中位数，各样本中位数在归一化后对齐到该值。",
+      "en": "The left panel shows per-sample intensity distributions after imputation and before normalization; the right panel shows the result of additively shifting each sample toward the largest sample median; dashed lines mark the target median, and sample medians align to it after normalization."
+    },
+    {
+      "zh": "<b>质控小结：<\/b>样本检出数（%s）与缺失率处于正常范围；各样本强度分布（log2 变换后）彼此接近；PCA 与层次聚类结果显示组内样本聚集良好。",
+      "en": "<b>QC summary:<\/b> sample detection counts (%s) and missing rates are within the normal range; intensity distributions (after log2 transform) are close to one another; PCA and hierarchical clustering show good within-group clustering."
+    },
+    {
+      "zh": "组",
+      "en": "Group"
+    },
+    {
+      "zh": "蛋白数",
+      "en": "Proteins"
+    },
+    {
+      "zh": "CV 中位数",
+      "en": "CV median"
+    },
+    {
+      "zh": "CV 下四分位",
+      "en": "CV 1st quartile"
+    },
+    {
+      "zh": "CV 上四分位",
+      "en": "CV 3rd quartile"
+    },
+    {
+      "zh": "%s：无显著差异蛋白，未生成",
+      "en": "%s: no significant differential proteins, not generated"
+    },
+    {
+      "zh": "分析方法",
+      "en": "Method"
+    },
+    {
+      "zh": "limma 经验贝叶斯 + BH-FDR 校正",
+      "en": "limma empirical Bayes + BH-FDR correction"
+    },
+    {
+      "zh": "显著性阈值",
+      "en": "Significance thresholds"
+    },
+    {
+      "zh": "分析模式",
+      "en": "Analysis mode"
+    },
+    {
+      "zh": "多组比较（%d 组，全局 F 检验 + %d 个两两对比）",
+      "en": "Multi-group comparison (%d groups, global F-test + %d pairwise comparisons)"
+    },
+    {
+      "zh": "单对比（%s）",
+      "en": "Single comparison (%s)"
+    },
+    {
+      "zh": "3.1 差异分析概述",
+      "en": "3.1 Differential Analysis Overview"
+    },
+    {
+      "zh": "在 %s 比较中，共检出显著差异蛋白 <b>%d<\/b> 个（上调 %d 个，下调 %d 个）。",
+      "en": "In the %s comparison, <b>%d<\/b> significant differential proteins were detected (%d up-regulated and %d down-regulated)."
+    },
+    {
+      "zh": "3.2 差异蛋白火山图（Volcano Plot）",
+      "en": "3.2 Differential Protein Volcano Plot"
+    },
+    {
+      "zh": "差异蛋白火山图",
+      "en": "Differential protein volcano plot"
+    },
+    {
+      "zh": "图 3.1 差异蛋白火山图",
+      "en": "Figure 3.1 Volcano plot of differential proteins"
+    },
+    {
+      "zh": "3.3 显著差异蛋白数量统计",
+      "en": "3.3 Counts of Significant Differential Proteins"
+    },
+    {
+      "zh": "显著差异蛋白数量统计图",
+      "en": "Significant differential protein counts plot"
+    },
+    {
+      "zh": "图 3.2 上/下调蛋白数量统计",
+      "en": "Figure 3.2 Up/down-regulated protein counts"
+    },
+    {
+      "zh": "3.4 差异蛋白聚类热图",
+      "en": "3.4 Differential Protein Clustering Heatmap"
+    },
+    {
+      "zh": "差异蛋白聚类热图",
+      "en": "Differential protein clustering heatmap"
+    },
+    {
+      "zh": "图 3.3 显著差异蛋白 Z-score 热图",
+      "en": "Figure 3.3 Z-score heatmap of significant differential proteins"
+    },
+    {
+      "zh": "3.5 关键差异蛋白表达箱线图",
+      "en": "3.5 Key Differential Protein Expression Boxplots"
+    },
+    {
+      "zh": "关键差异蛋白箱线图",
+      "en": "Key differential protein boxplots"
+    },
+    {
+      "zh": "图 3.4 关键差异蛋白表达箱线图",
+      "en": "Figure 3.4 Expression boxplots of key differential proteins"
+    },
+    {
+      "zh": "3.6 差异蛋白结果表格",
+      "en": "3.6 Differential Protein Result Tables"
+    },
+    {
+      "zh": "下表展示显著差异蛋白（Top 20）；完整结果见结果目录中的 CSV / Excel。",
+      "en": "The table below shows the significant differential proteins (Top 20); the full results are available in the CSV / Excel files in the output directory."
+    },
+    {
+      "zh": "差异蛋白结果表",
+      "en": "Differential protein results"
+    },
+    {
+      "zh": "3.7 差异结果说明",
+      "en": "3.7 Notes on the Differential Results"
+    },
+    {
+      "zh": "显著差异蛋白的完整结果（含 logFC、AveExpr、t、P.Value、adj.P.Val）随报告导出为 CSV 与 Excel（04_de_limma_results_all.csv / 05_de_significant_proteins.csv）。",
+      "en": "The full results for the significant differential proteins (with logFC, AveExpr, t, P.Value, adj.P.Val) are exported with the report as CSV and Excel (04_de_limma_results_all.csv / 05_de_significant_proteins.csv)."
+    },
+    {
+      "zh": "对比 <b>%s<\/b>：显著差异蛋白 <b>%d<\/b> 个（上调 %d，下调 %d）。",
+      "en": "Comparison <b>%s<\/b>: <b>%d<\/b> significant differential proteins (%d up, %d down)."
+    },
+    {
+      "zh": "火山图",
+      "en": "Volcano plot"
+    },
+    {
+      "zh": "图 %s 火山图",
+      "en": "Figure %s volcano plot"
+    },
+    {
+      "zh": "数量统计",
+      "en": "counts"
+    },
+    {
+      "zh": "图 %s 上下调数量",
+      "en": "Figure %s up/down counts"
+    },
+    {
+      "zh": "热图",
+      "en": "heatmap"
+    },
+    {
+      "zh": "图 %s 差异热图",
+      "en": "Figure %s differential heatmap"
+    },
+    {
+      "zh": "箱线图",
+      "en": "boxplot"
+    },
+    {
+      "zh": "图 %s 关键蛋白箱线图",
+      "en": "Figure %s key protein boxplots"
+    },
+    {
+      "zh": "差异结果表",
+      "en": "Differential results table"
+    },
+    {
+      "zh": "%s 显著差异蛋白表",
+      "en": "%s significant differential proteins"
+    },
+    {
+      "zh": "全局差异热图",
+      "en": "global differential heatmap"
+    },
+    {
+      "zh": "图 3.2 全局显著差异蛋白热图",
+      "en": "Figure 3.2 Heatmap of globally significant differential proteins"
+    },
+    {
+      "zh": "共 %d 个实验分组，出于完整性考虑执行全局差异检验与全部 %d 个两两对比。",
+      "en": "There are %d experimental groups in total; for completeness, a global test and all %d pairwise comparisons were performed."
+    },
+    {
+      "zh": "3.2 全局差异检验（F 检验）",
+      "en": "3.2 Global Test (F-test)"
+    },
+    {
+      "zh": "以 %s 为基准组的多重对比 F 检验（H<sub>0<\/sub>：各组均值全相等），BH 校正后显著蛋白 <b>%s<\/b> 个。",
+      "en": "Multiple-contrast F-test against %s as the reference group (H<sub>0<\/sub>: all group means are equal); <b>%s<\/b> proteins are significant after BH correction."
+    },
+    {
+      "zh": "全局 F 检验结果表",
+      "en": "Global F-test results"
+    },
+    {
+      "zh": "3.3 两两对比概览",
+      "en": "3.3 Pairwise Comparison Overview"
+    },
+    {
+      "zh": "两两对比汇总表",
+      "en": "Pairwise comparison summary"
+    },
+    {
+      "zh": "3.4 两两对比详情",
+      "en": "3.4 Pairwise Comparison Details"
+    },
+    {
+      "zh": "3.5 结果说明",
+      "en": "3.5 Notes on the Results"
+    },
+    {
+      "zh": "全部两两对比显著蛋白的并集为 <b>%s<\/b> 个蛋白，该并集用于后续功能富集分析。",
+      "en": "The union of significant proteins across all pairwise comparisons contains <b>%s<\/b> proteins; this union is used for the subsequent enrichment analysis."
+    },
+    {
+      "zh": "3 差异蛋白分析",
+      "en": "3 Differential Protein Analysis"
+    },
+    {
+      "zh": "%s：暂无结果",
+      "en": "%s: no results yet"
+    },
+    {
+      "zh": "未执行功能富集模块。",
+      "en": "The functional enrichment module was not executed."
+    },
+    {
+      "zh": "4 功能富集分析",
+      "en": "4 Functional Enrichment Analysis"
+    },
+    {
+      "zh": "未获得富集结果。",
+      "en": "No enrichment results were obtained."
+    },
+    {
+      "zh": "GO/KEGG 富集对差异蛋白数量较为敏感，建议结合生物学背景适当放宽筛选阈值或增加生物学重复后重新分析。",
+      "en": "GO/KEGG enrichment is sensitive to the number of differential proteins; consider relaxing the filtering thresholds appropriately in light of the biological context, or adding biological replicates and re-running the analysis."
+    },
+    {
+      "zh": "GO 富集结果表",
+      "en": "GO enrichment results"
+    },
+    {
+      "zh": "KEGG 富集结果表",
+      "en": "KEGG enrichment results"
+    },
+    {
+      "zh": "使用 %s 注释库对显著差异蛋白（%s 个，可映射 ENTREZID %s 个；背景基因 %s 个）进行 GO 与 KEGG 富集，BH 校正后共获得 <b>%s<\/b> 条显著条目。",
+      "en": "Using the %s annotation database, GO and KEGG enrichment was performed on the significant differential proteins (%s in total, %s with mappable ENTREZID; %s background genes); <b>%s<\/b> significant entries were obtained after BH correction."
+    },
+    {
+      "zh": "4.1 GO 功能富集分析",
+      "en": "4.1 GO Functional Enrichment Analysis"
+    },
+    {
+      "zh": "BP（生物过程）",
+      "en": "BP (biological process)"
+    },
+    {
+      "zh": "MF（分子功能）",
+      "en": "MF (molecular function)"
+    },
+    {
+      "zh": "CC（细胞组分）",
+      "en": "CC (cellular component)"
+    },
+    {
+      "zh": "GO-BP 富集条形图",
+      "en": "GO-BP enrichment barplot"
+    },
+    {
+      "zh": "图 4.1 GO-BP 富集（top 10）",
+      "en": "Figure 4.1 GO-BP enrichment (top 10)"
+    },
+    {
+      "zh": "GO-MF 富集条形图",
+      "en": "GO-MF enrichment barplot"
+    },
+    {
+      "zh": "图 4.2 GO-MF 富集（top 10）",
+      "en": "Figure 4.2 GO-MF enrichment (top 10)"
+    },
+    {
+      "zh": "GO-CC 富集条形图",
+      "en": "GO-CC enrichment barplot"
+    },
+    {
+      "zh": "图 4.3 GO-CC 富集（top 10）",
+      "en": "Figure 4.3 GO-CC enrichment (top 10)"
+    },
+    {
+      "zh": "GO 富集气泡图",
+      "en": "GO enrichment dotplot"
+    },
+    {
+      "zh": "图 4.4 GO 富集气泡图（各 ontology top 5）",
+      "en": "Figure 4.4 GO enrichment dotplot (top 5 per ontology)"
+    },
+    {
+      "zh": "4.2 KEGG 通路富集分析",
+      "en": "4.2 KEGG Pathway Enrichment Analysis"
+    },
+    {
+      "zh": "KEGG 富集气泡图",
+      "en": "KEGG enrichment dotplot"
+    },
+    {
+      "zh": "图 4.5 KEGG 通路富集气泡图（top 15）",
+      "en": "Figure 4.5 KEGG pathway enrichment dotplot (top 15)"
+    },
+    {
+      "zh": "未执行差异分析。",
+      "en": "Differential analysis was not executed."
+    },
+    {
+      "zh": "在比较组 %s 中，按阈值 |log2(FC)| > %s 且 P 值 < %s 共检出显著差异蛋白 <b>%s<\/b> 个（上调 %s 个，下调 %s 个）。",
+      "en": "In the %s comparison group, at the thresholds |log2(FC)| > %s and P value < %s, <b>%s<\/b> significant differential proteins were detected (%s up-regulated, %s down-regulated)."
+    },
+    {
+      "zh": "多组（%s 组）比较中，全局 F 检验检出 <b>%s<\/b> 个组间差异蛋白，%d 个两两对比的显著蛋白并集为 <b>%s<\/b> 个。",
+      "en": "In the multi-group comparison (%s groups), the global F-test detected <b>%s<\/b> proteins differing between groups, and the union of significant proteins across the %d pairwise comparisons contains <b>%s<\/b> proteins."
+    },
+    {
+      "zh": "功能富集未获得显著结果（%s）。",
+      "en": "The functional enrichment yielded no significant results (%s)."
+    },
+    {
+      "zh": "未执行富集模块",
+      "en": "enrichment module not executed"
+    },
+    {
+      "zh": "GO/KEGG 富集共获得 <b>%s<\/b> 条显著条目（%s）。",
+      "en": "GO/KEGG enrichment produced <b>%s<\/b> significant entries in total (%s)."
+    },
+    {
+      "zh": "5 结论",
+      "en": "5 Conclusions"
+    },
+    {
+      "zh": "<b>数据质量<\/b>：%s 个样本、%s 个分组，预处理后保留 %s 个蛋白（剔除低检出 %s 个），%s；QC 各项指标正常。",
+      "en": "<b>Data quality<\/b>: %s samples in %s groups; %s proteins retained after preprocessing (%s low-detection proteins removed); %s; all QC metrics are normal."
+    },
+    {
+      "zh": "<b>样本关系<\/b>：PCA（PC1 %s / PC2 %s）与层次聚类显示组内样本聚集，组间分离%s。",
+      "en": "<b>Sample relationships<\/b>: PCA (PC1 %s / PC2 %s) and hierarchical clustering show within-group clustering with between-group separation%s."
+    },
+    {
+      "zh": "，与实验分组设计基本一致",
+      "en": ", largely consistent with the experimental group design"
+    },
+    {
+      "zh": "<b>定量重复性<\/b>：各组组内 CV 中位数为 %s（详见 2.9 节 CV 箱线图）。",
+      "en": "<b>Quantitative reproducibility<\/b>: the median within-group CV is %s (see the CV boxplots in Section 2.9)."
+    },
+    {
+      "zh": "<b>差异蛋白<\/b>：%s",
+      "en": "<b>Differential proteins<\/b>: %s"
+    },
+    {
+      "zh": "<b>功能富集<\/b>：%s",
+      "en": "<b>Functional enrichment<\/b>: %s"
+    },
+    {
+      "zh": "<b>建议：<\/b>显著蛋白数量较少时，可结合生物学背景适当放宽筛选阈值（如 |log2FC| ≥ 0.58 / P 值 &lt; 0.05），或增加生物学重复后重新评估。",
+      "en": "<b>Recommendation:<\/b> when the number of significant proteins is small, consider relaxing the filtering thresholds appropriately in light of the biological context (e.g. |log2FC| ≥ 0.58 / P value &lt; 0.05), or adding biological replicates and re-evaluating."
+    },
+    {
+      "zh": "k = 10（impute::impute.knn）",
+      "en": "k = 10 (impute::impute.knn)"
+    },
+    {
+      "zh": "k = 10（按缺失率升序逐蛋白）",
+      "en": "k = 10 (proteins processed in ascending order of missing rate)"
+    },
+    {
+      "zh": "偏移 %.1f SD / 缩放 %.1f SD / 种子 %s",
+      "en": "shift %.1f SD / scale %.1f SD / seed %s"
+    },
+    {
+      "zh": "1. 数据与分组",
+      "en": "1. Data and Grouping"
+    },
+    {
+      "zh": "数据来源",
+      "en": "Data source"
+    },
+    {
+      "zh": "Spectronaut 蛋白组矩阵",
+      "en": "Spectronaut protein matrix"
+    },
+    {
+      "zh": "DIA-NN 蛋白水平矩阵 (pg_matrix)",
+      "en": "DIA-NN protein-level matrix (pg_matrix)"
+    },
+    {
+      "zh": "数据文件",
+      "en": "Data file"
+    },
+    {
+      "zh": "随应用提供",
+      "en": "bundled with the app"
+    },
+    {
+      "zh": "样本数 / 分组数",
+      "en": "Samples / groups"
+    },
+    {
+      "zh": "分析模块",
+      "en": "Analysis modules"
+    },
+    {
+      "zh": "2. 预处理",
+      "en": "2. Preprocessing"
+    },
+    {
+      "zh": "是（contaminant / REV / DECOY）",
+      "en": "Yes (contaminant / REV / DECOY)"
+    },
+    {
+      "zh": "低检出过滤",
+      "en": "Low-detection filtering"
+    },
+    {
+      "zh": "检出率 ≥ %s",
+      "en": "detection rate ≥ %s"
+    },
+    {
+      "zh": "分组内最少检出样本数",
+      "en": "Min. detected samples per group"
+    },
+    {
+      "zh": "0（不启用）",
+      "en": "0 (disabled)"
+    },
+    {
+      "zh": "log2 变换",
+      "en": "log2 transform"
+    },
+    {
+      "zh": "是",
+      "en": "Yes"
+    },
+    {
+      "zh": "缺失值插补方法",
+      "en": "Missing-value imputation method"
+    },
+    {
+      "zh": "插补参数",
+      "en": "Imputation parameters"
+    },
+    {
+      "zh": "缺失值（个 / 占比）",
+      "en": "Missing values (count / share)"
+    },
+    {
+      "zh": "中位数归一化",
+      "en": "Median normalization"
+    },
+    {
+      "zh": "各样本中位数平移至最大值 %.2f",
+      "en": "each sample's median shifted to the maximum value %.2f"
+    },
+    {
+      "zh": "ComBat 去批次",
+      "en": "ComBat batch correction"
+    },
+    {
+      "zh": "未启用",
+      "en": "Not enabled"
+    },
+    {
+      "zh": "启用（%d 个批次，%s）",
+      "en": "Enabled (%d batches, %s)"
+    },
+    {
+      "zh": "已执行",
+      "en": "executed"
+    },
+    {
+      "zh": "未执行",
+      "en": "not executed"
+    },
+    {
+      "zh": "3. 质量控制",
+      "en": "3. Quality Control"
+    },
+    {
+      "zh": "相关性方法",
+      "en": "Correlation method"
+    },
+    {
+      "zh": "相关性热图色阶下限",
+      "en": "Correlation heatmap color-scale lower limit"
+    },
+    {
+      "zh": "QC 直方图分箱数",
+      "en": "QC histogram bins"
+    },
+    {
+      "zh": "4. 差异分析",
+      "en": "4. Differential Analysis"
+    },
+    {
+      "zh": "多组（全局 F + 两两对比）",
+      "en": "Multi-group (global F-test + pairwise comparisons)"
+    },
+    {
+      "zh": "对照组",
+      "en": "Control group"
+    },
+    {
+      "zh": "|log2FC| 阈值",
+      "en": "|log2FC| threshold"
+    },
+    {
+      "zh": "P 值阈值",
+      "en": "P-value threshold"
+    },
+    {
+      "zh": "P 值校正方法",
+      "en": "P value correction method"
+    },
+    {
+      "zh": "火山图标注基因数",
+      "en": "Genes labelled on the volcano plot"
+    },
+    {
+      "zh": "关键蛋白箱线图数量",
+      "en": "Key protein boxplots"
+    },
+    {
+      "zh": "热图最多展示蛋白数",
+      "en": "Max. proteins shown in the heatmap"
+    },
+    {
+      "zh": "热图显示行名上限",
+      "en": "Heatmap row-name display limit"
+    },
+    {
+      "zh": "5. 功能富集",
+      "en": "5. Functional Enrichment"
+    },
+    {
+      "zh": "启用（本地 KEGG.db 不含斑马鱼，已跳过）",
+      "en": "Enabled (local KEGG.db lacks zebrafish pathways; skipped)"
+    },
+    {
+      "zh": "启用（在线 KEGG, 需联网）",
+      "en": "Enabled (online KEGG, requires internet)"
+    },
+    {
+      "zh": "启用（本地 KEGG.db）",
+      "en": "Enabled (local KEGG.db)"
+    },
+    {
+      "zh": "pvalue / qvalue 阈值",
+      "en": "pvalue / qvalue thresholds"
+    },
+    {
+      "zh": "%s / 不适用（未校正，qvalue 不参与）",
+      "en": "%s / not applicable (uncorrected; qvalue not used)"
+    },
+    {
+      "zh": "基因集大小范围",
+      "en": "Gene-set size range"
+    },
+    {
+      "zh": "最小显著蛋白数",
+      "en": "Min. significant proteins"
+    },
+    {
+      "zh": "条形图 / 气泡图 Top N",
+      "en": "Barplot / dotplot Top N"
+    },
+    {
+      "zh": "6. 报告",
+      "en": "6. Report"
+    },
+    {
+      "zh": "生成时间",
+      "en": "Generated at"
+    },
+    {
+      "zh": "生成工具",
+      "en": "Generated with"
+    },
+    {
+      "zh": "DIA-NN GUI 结果分析模块 (diann.gui) + %s",
+      "en": "DIA-NN GUI downstream analysis module (diann.gui) + %s"
+    },
+    {
+      "zh": "6 附录",
+      "en": "6 Appendix"
+    },
+    {
+      "zh": "6.1 方法学说明",
+      "en": "6.1 Methods"
+    },
+    {
+      "zh": "数据来源：",
+      "en": "Data source:"
+    },
+    {
+      "zh": "DIA-NN 蛋白水平定量矩阵（pg_matrix）。",
+      "en": "DIA-NN protein-level quantification matrix (pg_matrix)."
+    },
+    {
+      "zh": "预处理：",
+      "en": "Preprocessing:"
+    },
+    {
+      "zh": "剔除污染/反库条目；按检出率 ≥ %s 过滤低检出蛋白；%s%s",
+      "en": "contaminant/reverse-library entries removed; low-detection proteins filtered at a detection rate ≥ %s; %s%s"
+    },
+    {
+      "zh": "强度取 log2 后不填补缺失值，再做样本中位数归一化；",
+      "en": "after taking log2 of the intensities, missing values are not imputed and sample median normalization is applied; "
+    },
+    {
+      "zh": "强度取 log2 后做缺失值插补，再做样本中位数归一化；",
+      "en": "after taking log2 of the intensities, missing values are imputed and sample median normalization is applied; "
+    },
+    {
+      "zh": "差异分析：",
+      "en": "Differential analysis:"
+    },
+    {
+      "zh": "limma 经验贝叶斯线性模型；多组时另做相对基准组的多重对比 F 检验，并输出全部两两对比；",
+      "en": "limma empirical-Bayes linear models; for multi-group designs, multiple-contrast F-tests against the reference group are additionally performed and all pairwise comparisons are reported; "
+    },
+    {
+      "zh": "P 值未校正（按原始 P 值筛选）。",
+      "en": "P values are not corrected (filtered on raw P values)."
+    },
+    {
+      "zh": "P 值经 BH（Benjamini-Hochberg）校正。",
+      "en": "P values are corrected with BH (Benjamini-Hochberg)."
+    },
+    {
+      "zh": "PCA：",
+      "en": "PCA:"
+    },
+    {
+      "zh": "基于插补并归一化后的 log2 矩阵，中心化 + 标准化后取前两个主成分。",
+      "en": "Based on the imputed and normalized log2 matrix; the first two principal components are taken after centering and scaling."
+    },
+    {
+      "zh": "功能富集：",
+      "en": "Functional enrichment:"
+    },
+    {
+      "zh": "GO 富集采用 clusterProfiler::enrichGO（%s），KEGG 采用%s；背景为全部可映射基因，%s",
+      "en": "GO enrichment uses clusterProfiler::enrichGO (%s), KEGG uses %s; the background is all mappable genes; %s"
+    },
+    {
+      "zh": "KEGG REST 在线通路库（enrichKEGG）",
+      "en": "the KEGG REST online pathway database (enrichKEGG)"
+    },
+    {
+      "zh": "本地 KEGG.db 通路库",
+      "en": "the local KEGG.db pathway database"
+    },
+    {
+      "zh": "P 值未校正（按原始 p 值筛选），pvalueCutoff = %s。",
+      "en": "P values are not corrected (filtered on raw p values), pvalueCutoff = %s."
+    },
+    {
+      "zh": "P 值经 BH（Benjamini-Hochberg）校正，pvalueCutoff = %s、qvalueCutoff = %s。",
+      "en": "P values are corrected with BH (Benjamini-Hochberg), pvalueCutoff = %s, qvalueCutoff = %s."
+    },
+    {
+      "zh": "6.2 分析参数",
+      "en": "6.2 Analysis Parameters"
+    },
+    {
+      "zh": "6.3 分析软件与工具",
+      "en": "6.3 Software and Tools"
+    },
+    {
+      "zh": "蛋白水平定量（pg_matrix）",
+      "en": "protein-level quantification (pg_matrix)"
+    },
+    {
+      "zh": "缺失值插补、log2 变换、差异分析（Ritchie et al., 2015）",
+      "en": "missing-value imputation, log2 transform, differential analysis (Ritchie et al., 2015)"
+    },
+    {
+      "zh": "统计图形绘制与矢量输出",
+      "en": "statistical graphics and vector output"
+    },
+    {
+      "zh": "GO / KEGG 富集分析（Yu et al., 2012）",
+      "en": "GO / KEGG enrichment analysis (Yu et al., 2012)"
+    },
+    {
+      "zh": "参考文献：",
+      "en": "References:"
+    },
+    {
+      "zh": "未执行 QC 可视化模块。",
+      "en": "The QC visualization module was not executed."
+    },
+    {
+      "zh": "未执行差异分析模块。",
+      "en": "The differential analysis module was not executed."
+    },
+    {
+      "zh": "报告日期",
+      "en": "Report date"
+    },
+    {
+      "zh": "责任人",
+      "en": "Responsible person"
+    },
+    {
+      "zh": "联系邮箱",
+      "en": "Contact e-mail"
+    },
+    {
+      "zh": "报告编码",
+      "en": "Report code"
+    },
+    {
+      "zh": "样本 / 分组",
+      "en": "Samples / groups"
+    },
+    {
+      "zh": "本报告由 DIA-NN GUI 结果分析模块自动生成 · 生成时间 %s",
+      "en": "This report was generated automatically by the DIA-NN GUI downstream analysis module · generated at %s"
+    },
+    {
+      "zh": "返回顶部",
+      "en": "Back to top"
+    },
+    {
+      "zh": "预处理与 QC 可视化",
+      "en": "Preprocessing and QC visualization"
+    },
+    {
+      "zh": "差异分析 (limma)",
+      "en": "Differential analysis (limma)"
+    },
+    {
+      "zh": "功能富集 (GO/KEGG)",
+      "en": "Functional enrichment (GO/KEGG)"
+    },
+    {
+      "zh": "报告生成与打包下载",
+      "en": "Report generation and packaged download"
+    },
+    {
+      "zh": "kNN 缺失值插补 (缺失时退回行中位数)",
+      "en": "KNN missing-value imputation (falls back to row medians when unavailable)"
+    },
+    {
+      "zh": "本地 KEGG 通路库 (已被 Bioconductor 移除, 需从 archive 安装; 或改用在线 KEGG)",
+      "en": "Local KEGG pathway database (removed from Bioconductor; install from the archive, or use online KEGG instead)"
+    },
+    {
+      "zh": "人注释库 (富集)",
+      "en": "Human annotation database (enrichment)"
+    },
+    {
+      "zh": "小鼠注释库 (富集)",
+      "en": "Mouse annotation database (enrichment)"
+    },
+    {
+      "zh": "大鼠注释库 (富集)",
+      "en": "Rat annotation database (enrichment)"
+    },
+    {
+      "zh": "斑马鱼注释库 (富集)",
+      "en": "Zebrafish annotation database (enrichment)"
+    },
+    {
+      "zh": "sample_group_map 须为 NULL / data.frame(Sample,Group) / 命名 list",
+      "en": "sample_group_map must be NULL / a data.frame(Sample, Group) / a named list"
+    },
+    {
+      "zh": "sample_group_map 必须包含 Sample 与 Group 两列",
+      "en": "sample_group_map must contain the columns Sample and Group"
+    },
+    {
+      "zh": "sample_group_map 中存在重复的 Sample: %s",
+      "en": "sample_group_map contains duplicated samples: %s"
+    },
+    {
+      "zh": "sample_group_map 为空, 请检查填写内容",
+      "en": "sample_group_map is empty; please check the input"
+    },
+    {
+      "zh": "分组表为空。",
+      "en": "The group table is empty."
+    },
+    {
+      "zh": "分组表缺少 Sample / Group 列。",
+      "en": "The group table is missing the Sample / Group columns."
+    },
+    {
+      "zh": "存在空组名。",
+      "en": "There are empty group names."
+    },
+    {
+      "zh": "至少需要 2 个分组。",
+      "en": "At least 2 groups are required."
+    },
+    {
+      "zh": "每个分组至少需要 2 个样本；当前 %s 组仅 1 个样本。",
+      "en": "Each group requires at least 2 samples; the following groups currently have only 1 sample: %s"
+    },
+    {
+      "zh": "sample_batch_map 须为 NULL / data.frame(Sample,Batch) / 命名 list",
+      "en": "sample_batch_map must be NULL / a data.frame(Sample, Batch) / a named list"
+    },
+    {
+      "zh": "sample_batch_map 必须包含 Sample 与 Batch 两列",
+      "en": "sample_batch_map must contain the columns Sample and Batch"
+    },
+    {
+      "zh": "sample_batch_map 中存在重复的 Sample: %s",
+      "en": "sample_batch_map contains duplicated samples: %s"
+    },
+    {
+      "zh": "sample_batch_map 为空, 请检查填写内容",
+      "en": "sample_batch_map is empty; please check the input"
+    },
+    {
+      "zh": "批次表为空。",
+      "en": "The batch table is empty."
+    },
+    {
+      "zh": "批次表缺少 Sample / Batch 列。",
+      "en": "The batch table is missing the Sample / Batch columns."
+    },
+    {
+      "zh": "存在空批次名。",
+      "en": "There are empty batch names."
+    },
+    {
+      "zh": "至少需要 2 个批次（全部样本同属一批时无需去批次）。",
+      "en": "At least 2 batches are required (batch correction is unnecessary when all samples belong to a single batch)."
+    },
+    {
+      "zh": "每个批次至少需要 2 个样本；当前 %s 批仅 1 个样本。",
+      "en": "Each batch requires at least 2 samples; the following batches currently have only 1 sample: %s"
+    },
+    {
+      "zh": "批次表未覆盖以下样本：%s",
+      "en": "The batch table does not cover the following samples: %s"
+    },
+    {
+      "zh": "无法从样本列名自动推断分组 (已尝试\"尾部序号\"与\"末段后缀\"两种命名约定, 仍得不到 >=2 组且每组 >=2 样本)。\n  样本列: %s\n  请在「分组设置」中显式指定 样本->组 映射",
+      "en": "Failed to infer groups automatically from the sample column names (both naming conventions were tried - trailing index and last suffix segment - but no split into >=2 groups of >=2 samples each was found).\n  Sample columns: %s\n  Please specify the sample-to-group mapping explicitly under \"Group settings\""
+    },
+    {
+      "zh": "分组表中的以下样本未在数据列中找到: %s",
+      "en": "The following samples in the group table were not found among the data columns: %s"
+    },
+    {
+      "zh": "数据中以下样本列未被分组表覆盖: %s",
+      "en": "The following sample columns in the data are not covered by the group table: %s"
+    },
+    {
+      "zh": "未检测到明确物种标识，默认按 Human (org.Hs.eg.db) 注释",
+      "en": "No clear species identifier detected; defaulting to Human (org.Hs.eg.db) annotation"
+    },
+    {
+      "zh": "未安装 sva 包 (Bioconductor), 无法执行 ComBat",
+      "en": "The sva package (Bioconductor) is not installed; ComBat cannot be executed"
+    },
+    {
+      "zh": "矩阵含缺失值, ComBat 需要完整矩阵 (请先选择一种插补方法)",
+      "en": "The matrix contains missing values; ComBat requires a complete matrix (please choose an imputation method first)"
+    },
+    {
+      "zh": "批次数 < 2",
+      "en": "Fewer than 2 batches"
+    },
+    {
+      "zh": "批次与分组完全混杂（每个批次只含一个分组），去批次会连组间差异一起抹掉",
+      "en": "Batches and groups are fully confounded (each batch contains only one group); batch correction would also wipe out the between-group differences"
+    },
+    {
+      "zh": "参数经验贝叶斯",
+      "en": "parametric empirical Bayes"
+    },
+    {
+      "zh": "非参数经验贝叶斯",
+      "en": "non-parametric empirical Bayes"
+    },
+    {
+      "zh": "ComBat 计算失败（批次与分组可能完全混杂, 或存在零方差蛋白）",
+      "en": "ComBat computation failed (batches and groups may be fully confounded, or there are zero-variance proteins)"
+    },
+    {
+      "zh": "ComBat 返回矩阵维度异常, 已放弃校正",
+      "en": "ComBat returned a matrix with unexpected dimensions; the correction was discarded"
+    },
+    {
+      "zh": "未能识别蛋白 ID 注释列。请检查输入列名, 或在「高级设置」中指定 ID 列。",
+      "en": "Could not identify the protein ID annotation column. Please check the input column names, or specify the ID column under \"Advanced settings\"."
+    },
+    {
+      "zh": "未识别到 Genes 注释列, 基因注释相关输出(火山图标注/富集)将受限",
+      "en": "No Genes annotation column found; gene-annotation related outputs (volcano plot labels / enrichment) will be limited"
+    },
+    {
+      "zh": "未识别到样本定量列，请检查输入格式",
+      "en": "No sample quantification columns identified; please check the input format"
+    },
+    {
+      "zh": "以下列既不是注释列也非数值样本列, 请检查输入:\n  %s",
+      "en": "The following columns are neither annotation columns nor numeric sample columns; please check the input:\n  %s"
+    },
+    {
+      "zh": "需要至少两个分组才能进行差异分析",
+      "en": "At least two groups are required for differential analysis"
+    },
+    {
+      "zh": "过滤了 %d 条污染/反库(REV/DECOY)条目",
+      "en": "Filtered %d contaminant/reverse-library (REV/DECOY) entries"
+    },
+    {
+      "zh": "低检出过滤 (>=%.0f%%检出) 剔除 %d 个蛋白",
+      "en": "Low-detection filtering (>=%.0f%% detected) removed %d proteins"
+    },
+    {
+      "zh": "过滤后无剩余蛋白，请降低低检出过滤阈值 (min_detect_frac)",
+      "en": "No proteins remain after filtering; please lower the low-detection filtering threshold (min_detect_frac)"
+    },
+    {
+      "zh": "分组内最少检测样本数过滤 (任一分组 >= %d 个样本检出) 剔除 %d 个蛋白",
+      "en": "Min-detected-samples-per-group filtering (detected in >= %d samples in any group) removed %d proteins"
+    },
+    {
+      "zh": "分组内最少检测样本数过滤后无剩余蛋白，请降低该阈值",
+      "en": "No proteins remain after min-detected-samples-per-group filtering; please lower that threshold"
+    },
+    {
+      "zh": "以下样本无任何蛋白定量值 (全缺失), 请检查原始文件或样本映射后重试: %s",
+      "en": "The following samples have no protein quantification values (all missing); please check the raw file or the sample mapping and retry: %s"
+    },
+    {
+      "zh": "缺失值处理方式：不填补（保留 %d 个缺失值，占 %.2f%%）；已停用差异分析与功能富集",
+      "en": "Missing-value handling: no imputation (%d missing values retained, %.2f%% of the matrix); differential analysis and enrichment are disabled"
+    },
+    {
+      "zh": "缺失值插补：随机缺失型（k 近邻, k=10）",
+      "en": "Missing-value imputation: MAR-type (k-nearest neighbours, k=10)"
+    },
+    {
+      "zh": "缺失值插补：随机缺失型 — k 近邻不可用, 实际回退为行中位数填充（安装 impute 包后重跑可得 k 近邻插补）",
+      "en": "Missing-value imputation: MAR-type - k-nearest neighbours unavailable, actually fell back to row-median filling (re-run after installing the impute package to get KNN imputation)"
+    },
+    {
+      "zh": "样本中位数归一化：各样本中位数对齐到最大值 %.2f（平移 %.2f ~ %.2f）",
+      "en": "Sample median normalization: sample medians aligned to the maximum value %.2f (shift %.2f ~ %.2f)"
+    },
+    {
+      "zh": "未提供批次表",
+      "en": "no batch table provided"
+    },
+    {
+      "zh": "（请在「① 数据与分组」的批次设置中填写并应用）",
+      "en": "(please fill in and apply the batch settings in step 1 \"Data & Groups\")"
+    },
+    {
+      "zh": "去批次未执行：%s",
+      "en": "Batch correction not executed: %s"
+    },
+    {
+      "zh": "去批次校正：ComBat（%s），%d 个批次（%s），分组作为协变量保留",
+      "en": "Batch correction: ComBat (%s), %d batches (%s), groups preserved as covariates"
+    },
+    {
+      "zh": "中位数归一化前后对比箱线图",
+      "en": "Boxplots before/after median normalization"
+    },
+    {
+      "zh": "平均丰度 vs 缺失率",
+      "en": "Mean abundance vs missing rate"
+    },
+    {
+      "zh": "不同缺失率蛋白的丰度分布",
+      "en": "Abundance distribution of proteins by missing rate"
+    },
+    {
+      "zh": "每样本检出蛋白数 + 蛋白检出频率分布",
+      "en": "Detected proteins per sample + protein detection frequency distribution"
+    },
+    {
+      "zh": "每样本缺失率 + 蛋白缺失率分布",
+      "en": "Missing rate per sample + protein missing-rate distribution"
+    },
+    {
+      "zh": "未做缺失值插补：PCA / 样本相关性 / 层次聚类仅基于 %d 个完全检出蛋白",
+      "en": "No missing-value imputation: PCA / sample correlation / hierarchical clustering are based on only %d fully detected proteins"
+    },
+    {
+      "zh": "样本 PCA 得分图",
+      "en": "Sample PCA score plot"
+    },
+    {
+      "zh": "样本间相关性热图",
+      "en": "Sample-to-sample correlation heatmap"
+    },
+    {
+      "zh": "完全检出蛋白不足 3 个，未生成 PCA / 样本相关性热图 / 样本层次聚类图",
+      "en": "Fewer than 3 fully detected proteins; PCA / sample correlation heatmap / sample hierarchical clustering not generated"
+    },
+    {
+      "zh": "组内变异系数分布",
+      "en": "Within-group coefficient of variation distribution"
+    },
+    {
+      "zh": "组内 CV 无法计算（每组有效重复不足），未生成 CV 箱线图",
+      "en": "Within-group CV could not be computed (insufficient valid replicates per group); CV boxplot not generated"
+    },
+    {
+      "zh": "对比 %s vs %s: 未检出显著差异蛋白",
+      "en": "Comparison %s vs %s: no significant differential proteins detected"
+    },
+    {
+      "zh": "对比 %s vs %s: 差异蛋白超过 %d 个, 热图仅展示 |logFC| 最大的 %d 个",
+      "en": "Comparison %s vs %s: more than %d differential proteins; the heatmap shows only the %d with the largest |logFC|"
+    },
+    {
+      "zh": "差异蛋白 Z-score 热图",
+      "en": "Differential protein Z-score heatmap"
+    },
+    {
+      "zh": "上/下调蛋白数量统计",
+      "en": "Up/down-regulated protein counts"
+    },
+    {
+      "zh": "关键差异蛋白表达箱线图",
+      "en": "Key differential protein expression boxplots"
+    },
+    {
+      "zh": "多组全局 F 检验未检出显著蛋白 (所有组间均无差异)",
+      "en": "The multi-group global F-test detected no significant proteins (no differences between any groups)"
+    },
+    {
+      "zh": "全局显著差异蛋白热图",
+      "en": "Global significant differential protein heatmap"
+    },
+    {
+      "zh": "未检出任何显著差异蛋白, 后续热图/富集将跳过或降级",
+      "en": "No significant differential proteins detected; subsequent heatmap/enrichment steps will be skipped or degraded"
+    },
+    {
+      "zh": "未安装 KEGG.db 包 (Bioconductor 已移除, 需从 archive 安装), 本地 KEGG 分析不可用; 可在富集参数中改用「在线 KEGG (需联网)」",
+      "en": "The KEGG.db package is not installed (removed from Bioconductor; install from the archive), so local KEGG analysis is unavailable; switch to \"Online KEGG (requires internet)\" in the enrichment parameters"
+    },
+    {
+      "zh": "KEGG.db 内不含物种 %s 的通路数据",
+      "en": "KEGG.db contains no pathway data for species %s"
+    },
+    {
+      "zh": "KEGG 富集失败（%s）: %s",
+      "en": "KEGG enrichment failed (%s): %s"
+    },
+    {
+      "zh": "P 值未校正：按原始 p 值筛选，qvalue 阈值不参与",
+      "en": "P values are not corrected: filtering uses raw p values and the qvalue threshold is not applied"
+    },
+    {
+      "zh": "显著差异蛋白 < %d（当前 %d 个），跳过功能富集",
+      "en": "Significant differential proteins < %d (%d currently); skipping functional enrichment"
+    },
+    {
+      "zh": "当前显著差异蛋白仅 %d 个（少于富集分析所需的最小数量 %d），未执行 GO/KEGG 富集。",
+      "en": "Only %d significant differential proteins are available (fewer than the minimum of %d required for enrichment); GO/KEGG enrichment was not executed."
+    },
+    {
+      "zh": "缺少富集依赖包: %s",
+      "en": "Missing enrichment dependency packages: %s"
+    },
+    {
+      "zh": "缺少富集依赖包: %s。请在 R 中执行 BiocManager::install(c(\"%s\")) 后重试。",
+      "en": "Missing enrichment dependency packages: %s. Please run BiocManager::install(c(\"%s\")) in R and retry."
+    },
+    {
+      "zh": "未安装 KEGG.db (Bioconductor 已移除), 本次 KEGG 富集跳过; 可在富集参数中启用「在线 KEGG (需联网)」",
+      "en": "KEGG.db is not installed (removed from Bioconductor); KEGG enrichment is skipped this time; you can enable \"Online KEGG (requires internet)\" in the enrichment parameters"
+    },
+    {
+      "zh": "本地 KEGG.db 不含斑马鱼（dre）通路，斑马鱼仅支持 GO 富集（或改用在线 KEGG）",
+      "en": "The local KEGG.db contains no zebrafish (dre) pathways; only GO enrichment is supported for zebrafish (or switch to online KEGG)"
+    },
+    {
+      "zh": "注释库 %s 不可用，跳过功能富集",
+      "en": "Annotation database %s is unavailable; skipping functional enrichment"
+    },
+    {
+      "zh": "注释库 %s 不可用。",
+      "en": "Annotation database %s is unavailable."
+    },
+    {
+      "zh": "背景基因 ID 转换失败: %s",
+      "en": "Background gene ID mapping failed: %s"
+    },
+    {
+      "zh": "背景基因 ID 转换失败，跳过功能富集",
+      "en": "Background gene ID mapping failed; skipping functional enrichment"
+    },
+    {
+      "zh": "背景基因无法映射到 ENTREZID。",
+      "en": "Background genes could not be mapped to ENTREZID."
+    },
+    {
+      "zh": "差异基因 ID 转换失败: %s",
+      "en": "Differential gene ID mapping failed: %s"
+    },
+    {
+      "zh": "显著差异基因映射后不足 3 个，跳过功能富集",
+      "en": "Fewer than 3 significant differential genes after mapping; skipping functional enrichment"
+    },
+    {
+      "zh": "显著差异基因映射到 ENTREZID 后不足 3 个。",
+      "en": "Fewer than 3 significant differential genes map to ENTREZID."
+    },
+    {
+      "zh": "%d 个基因 ID 为多基因形式 (如 \"A;B\"), ID 映射只取第一个基因",
+      "en": "%d gene IDs are in multi-gene form (e.g. \"A;B\"); ID mapping keeps only the first gene"
+    },
+    {
+      "zh": "GO-%s 富集失败: %s",
+      "en": "GO-%s enrichment failed: %s"
+    },
+    {
+      "zh": "GO-%s: 无显著富集结果",
+      "en": "GO-%s: no significant enrichment results"
+    },
+    {
+      "zh": "KEGG: 无显著富集结果",
+      "en": "KEGG: no significant enrichment results"
+    },
+    {
+      "zh": "GO-%s 富集条形图",
+      "en": "GO-%s enrichment barplot"
+    },
+    {
+      "zh": "KEGG 通路富集气泡图",
+      "en": "KEGG pathway enrichment dotplot"
+    },
+    {
+      "zh": "无功能富集结果，未输出富集图表",
+      "en": "No functional enrichment results; no enrichment plots or tables were produced"
+    },
+    {
+      "zh": "SVG 输出失败 (%s)，降级为 300dpi PNG: %s",
+      "en": "SVG output failed (%s); falling back to 300dpi PNG: %s"
+    },
+    {
+      "zh": "PNG 输出失败: %s (%s)",
+      "en": "PNG output failed: %s (%s)"
+    },
+    {
+      "zh": "图形渲染失败: %s",
+      "en": "Plot rendering failed: %s"
+    },
+    {
+      "zh": "未知错误",
+      "en": "Unknown error"
+    },
+    {
+      "zh": "在线 KEGG, 需联网",
+      "en": "online KEGG, requires internet"
+    },
+    {
+      "zh": "本地 KEGG.db",
+      "en": "Local KEGG.db"
+    },
+    {
+      "zh": "EXEC_BACKEND 必须是 auto|slurm|local, 当前: %s",
+      "en": "EXEC_BACKEND must be auto|slurm|local, current: %s"
+    },
+    {
+      "zh": "EXEC_BACKEND=slurm 但 PATH 上找不到 sbatch: 提交会失败。请先加载 Slurm 模块/修正 PATH, 或改配置 EXEC_BACKEND=\"local\"。",
+      "en": "EXEC_BACKEND=slurm but sbatch is not on PATH: submission will fail. Load the Slurm module/fix PATH first, or set EXEC_BACKEND=\"local\" in the config."
+    },
+    {
+      "zh": "已显式指定 EXEC_BACKEND=local, 但本机检测到 Slurm 痕迹 (集群登录节点?)。GUI 将直接在本机运行 DIA-NN, 可能违反集群使用政策, 请确认。",
+      "en": "EXEC_BACKEND=local was set explicitly, but Slurm traces were detected on this machine (cluster login node?). The GUI will run DIA-NN directly on this host, which may violate cluster usage policy — please confirm."
+    },
+    {
+      "zh": "检测到 Slurm 痕迹 (squeue/sacct/scontrol/sinfo 或 /etc/slurm), 但 PATH 上没有 sbatch。\n为避免在 HPC 登录节点上直接运行计算任务, auto 模式拒绝静默回退到本地执行。\n请二选一:\n  1) 先加载 Slurm 模块 / 修正 PATH 后重新启动 run_app() (推荐);\n  2) 确认本机是单机服务器后, 在 config.R 设置 EXEC_BACKEND <- \"local\" (或启动前 export DIANN_GUI_EXEC_BACKEND=local)。",
+      "en": "Slurm traces were detected (squeue/sacct/scontrol/sinfo or /etc/slurm), but sbatch is not on PATH.\nTo avoid running compute jobs directly on an HPC login node, auto mode refuses to silently fall back to local execution.\nChoose one:\n  1) Load the Slurm module / fix PATH and restart run_app() (recommended);\n  2) After confirming this machine is a standalone server, set EXEC_BACKEND <- \"local\" in config.R (or export DIANN_GUI_EXEC_BACKEND=local before starting)."
+    },
+    {
+      "zh": "检测到 Slurm 痕迹但 sbatch 不在 PATH: 已按 LOCAL_REQUIRE_EXCLUSIVE_HOST=FALSE 回退到本地执行, 请确认这不是 HPC 登录节点。",
+      "en": "Slurm traces detected but sbatch is not on PATH: fell back to local execution with LOCAL_REQUIRE_EXCLUSIVE_HOST=FALSE — please confirm this is not an HPC login node."
+    },
+    {
+      "zh": "本地单机",
+      "en": "Local workstation"
+    },
+    {
+      "zh": "Slurm 集群",
+      "en": "Slurm cluster"
+    },
+    {
+      "zh": "sbatch 未返回 JobID (命令可能不存在或提交被拒绝)",
+      "en": "sbatch returned no JobID (command may be missing or the submission was rejected)"
+    },
+    {
+      "zh": "提交失败: %s",
+      "en": "Submission failed: %s"
+    },
+    {
+      "zh": "无效的 Slurm 作业 ID: %s",
+      "en": "Invalid Slurm job ID: %s"
+    },
+    {
+      "zh": "已发送 scancel %d",
+      "en": "scancel %d sent"
+    },
+    {
+      "zh": "取消失败: %s",
+      "en": "Cancel failed: %s"
+    },
+    {
+      "zh": "missing(退化为子树取消)",
+      "en": "missing (falls back to subtree cancel)"
+    },
+    {
+      "zh": "(备份失败)",
+      "en": "(backup failed)"
+    },
+    {
+      "zh": "本地作业状态文件损坏 (%s), 已备份为 %s — 在跑作业已从面板移除, 进程可能仍在运行: 可用 ps -ef | grep local_runner 查看/手动结束; 详见 diann_gui_local_state.log",
+      "en": "Local job state file corrupted (%s), backed up to %s — running jobs were removed from the panel; their processes may still be running: check/kill them with ps -ef | grep local_runner; see diann_gui_local_state.log for details"
+    },
+    {
+      "zh": "尚未创建 (无本地作业历史)",
+      "en": "Not created yet (no local job history)"
+    },
+    {
+      "zh": "文件存在但不可解析: %s",
+      "en": "File exists but cannot be parsed: %s"
+    },
+    {
+      "zh": "%d 条记录, %s",
+      "en": "%d record(s), %s"
+    },
+    {
+      "zh": "当前没有本地作业在运行",
+      "en": "No local jobs are currently running"
+    },
+    {
+      "zh": "当前 %d 个本地作业在运行, 均未设时限, 结束时间未知",
+      "en": "%d local jobs are running, none has a time limit; end time unknown"
+    },
+    {
+      "zh": "最早作业 (ID %s) 已到/超过时限, 预计即将结束",
+      "en": "Earliest job (ID %s) has reached/exceeded its time limit and should end soon"
+    },
+    {
+      "zh": "最早作业 (ID %s) 预计 %s 前结束 (约 %d 分钟)",
+      "en": "Earliest job (ID %s) expected to finish by %s (about %d minutes)"
+    },
+    {
+      "zh": "; 另有 %d 个未设时限",
+      "en": "; %d more without a time limit"
+    },
+    {
+      "zh": "本地模式提交失败: 输出目录为空",
+      "en": "Local submission failed: output directory is empty"
+    },
+    {
+      "zh": "本地模式提交失败: 输出目录不存在且无法创建: %s",
+      "en": "Local submission failed: output directory does not exist and cannot be created: %s"
+    },
+    {
+      "zh": "本地模式提交失败: 作业脚本不存在: %s",
+      "en": "Local submission failed: job script does not exist: %s"
+    },
+    {
+      "zh": "本地模式提交失败: 找不到 local_runner.sh (包安装不完整?), 请重新安装 diann.gui",
+      "en": "Local submission failed: local_runner.sh not found (incomplete package install?); please reinstall diann.gui"
+    },
+    {
+      "zh": "本地模式提交失败: 缺少本地执行所需工具 (%s)",
+      "en": "Local submission failed: missing tools required for local execution (%s)"
+    },
+    {
+      "zh": "本地模式提交失败: 无法分配本地作业 ID (状态目录不可写?)",
+      "en": "Local submission failed: cannot allocate a local job ID (state directory not writable?)"
+    },
+    {
+      "zh": "本地模式提交失败: 无法写入本地作业状态文件 (%s)",
+      "en": "Local submission failed: cannot write the local job state file (%s)"
+    },
+    {
+      "zh": "本地模式提交失败: 无法派生本地运行器 (%s)",
+      "en": "Local submission failed: cannot spawn the local runner (%s)"
+    },
+    {
+      "zh": "本地模式提交失败: 运行器未在 3 秒内启动 (检查状态目录权限/setsid/nohup)",
+      "en": "Local submission failed: runner did not start within 3 seconds (check state directory permissions/setsid/nohup)"
+    },
+    {
+      "zh": "; 启动日志: %s",
+      "en": "; startup log: %s"
+    },
+    {
+      "zh": "已启动本地作业 %d (pid %d)",
+      "en": "Local job %d started (pid %d)"
+    },
+    {
+      "zh": "未找到本地作业 %s 的记录",
+      "en": "No record found for local job %s"
+    },
+    {
+      "zh": "本地作业 %s 已结束",
+      "en": "Local job %s has already finished"
+    },
+    {
+      "zh": "无权取消其他用户的本地进程",
+      "en": "Not allowed to cancel another user's local processes"
+    },
+    {
+      "zh": "已取消本地作业 %s",
+      "en": "Local job %s cancelled"
+    },
+    {
+      "zh": "本地作业 %s 已强制取消",
+      "en": "Local job %s force-cancelled"
+    },
+    {
+      "zh": "apptainer ≥ %d.0 或 singularity ≥ %d.0",
+      "en": "apptainer ≥ %d.0 or singularity ≥ %d.0"
+    },
+    {
+      "zh": "singularity 2.x 只能读 squashfs/ext3 的 .simg, 读 .sif 会报 \"Unknown image format/type\" (ABORT: Retval = 255)",
+      "en": "singularity 2.x can only read squashfs/ext3 .simg files; reading a .sif fails with \"Unknown image format/type\" (ABORT: Retval = 255)"
+    },
+    {
+      "zh": "路径为空",
+      "en": "Path is empty"
+    },
+    {
+      "zh": "必须是服务器绝对路径 (以 / 开头)",
+      "en": "Must be an absolute server path (starting with /)"
+    },
+    {
+      "zh": "目录下没有 apptainer/singularity: %s",
+      "en": "No apptainer/singularity found in this directory: %s"
+    },
+    {
+      "zh": "文件不存在: %s",
+      "en": "File not found: %s"
+    },
+    {
+      "zh": "不可执行: %s",
+      "en": "Not executable: %s"
+    },
+    {
+      "zh": "无法执行 --version: %s",
+      "en": "Cannot run --version: %s"
+    },
+    {
+      "zh": "不支持 SIF 镜像 (需要 %s): %s",
+      "en": "Does not support SIF images (requires %s): %s"
+    },
+    {
+      "zh": "版本过低",
+      "en": "outdated version"
+    },
+    {
+      "zh": "(版本未知)",
+      "en": "(version unknown)"
+    },
+    {
+      "zh": " ⚠ 不支持 SIF",
+      "en": " ⚠ SIF not supported"
+    },
+    {
+      "zh": "镜像不存在: %s",
+      "en": "Image does not exist: %s"
+    },
+    {
+      "zh": "GUI 运行身份 (%s) 无权读取该镜像",
+      "en": "The GUI runtime user (%s) is not allowed to read this image"
+    },
+    {
+      "zh": "SIF 魔数校验失败 — 不是有效的 SIF 镜像 (可能损坏或下载截断)",
+      "en": "SIF magic check failed — not a valid SIF image (may be corrupted or a truncated download)"
+    },
+    {
+      "zh": "GUI 节点无可用 apptainer/singularity, 版本未识别 (不影响提交; 作业脚本在计算节点自行回退查找运行时)",
+      "en": "No usable apptainer/singularity on the GUI node, version left unidentified (submission is not affected; the job script falls back to finding a runtime on the compute node)"
+    },
+    {
+      "zh": "所选 apptainer 在 GUI 节点不可执行: %s (计算节点可见时作业仍可运行)",
+      "en": "The selected apptainer is not executable on the GUI node: %s (the job can still run if it is visible on the compute node)"
+    },
+    {
+      "zh": "inspect 出错: %s",
+      "en": "inspect error: %s"
+    },
+    {
+      "zh": "exec 出错: %s",
+      "en": "exec error: %s"
+    },
+    {
+      "zh": "容器内执行超时 (%ss); 若计算节点正常, 可稍后重试 (超时不落缓存, 会自动重试)",
+      "en": "Execution inside the container timed out (%ss); if compute nodes are fine, retry later (timeouts are not cached and will retry automatically)"
+    },
+    {
+      "zh": "容器内 DIA-NN 可执行, 实际版本: %s",
+      "en": "DIA-NN runs inside the container, actual version: %s"
+    },
+    {
+      "zh": "%s (镜像基础: %s)",
+      "en": "%s (base image: %s)"
+    },
+    {
+      "zh": "(无输出)",
+      "en": "(no output)"
+    },
+    {
+      "zh": "容器内找不到 diann-linux — 镜像未把 DIA-NN 目录加入 PATH (构建说明见 README「构建 DIA-NN 容器镜像」章节)",
+      "en": "diann-linux not found inside the container — the image does not add the DIA-NN directory to PATH (see the README section on building the DIA-NN container image)"
+    },
+    {
+      "zh": "容器已启动但未解析到 DIA-NN 版本: %s",
+      "en": "Container started but no DIA-NN version was parsed: %s"
+    },
+    {
+      "zh": "识别异常: %s",
+      "en": "Identification error: %s"
+    },
+    {
+      "zh": "未识别 · %s",
+      "en": "unidentified · %s"
+    },
+    {
+      "zh": "执行后端",
+      "en": "Execution backend"
+    },
+    {
+      "zh": "R 环境",
+      "en": "R environment"
+    },
+    {
+      "zh": "依赖包",
+      "en": "R packages"
+    },
+    {
+      "zh": "apptainer 依赖",
+      "en": "apptainer dependencies"
+    },
+    {
+      "zh": "SIF 镜像",
+      "en": "SIF images"
+    },
+    {
+      "zh": "其他环境",
+      "en": "Other environment"
+    },
+    {
+      "zh": "结果分析依赖",
+      "en": "Downstream analysis dependencies"
+    },
+    {
+      "zh": "Slurm 依赖",
+      "en": "Slurm dependencies"
+    },
+    {
+      "zh": "配置指定",
+      "en": "specified in config"
+    },
+    {
+      "zh": "自动检测",
+      "en": "auto-detected"
+    },
+    {
+      "zh": "无 Slurm, 本机执行",
+      "en": "no Slurm, runs on this machine"
+    },
+    {
+      "zh": "sbatch 提交队列",
+      "en": "jobs submitted via sbatch queue"
+    },
+    {
+      "zh": "R 版本",
+      "en": "R version"
+    },
+    {
+      "zh": "diann.gui 版本",
+      "en": "diann.gui version"
+    },
+    {
+      "zh": "依赖包 %s",
+      "en": "package %s"
+    },
+    {
+      "zh": "未安装",
+      "en": "not installed"
+    },
+    {
+      "zh": "PATH 上找不到 (可退化: 取消改为递归子树 kill)",
+      "en": "not found on PATH (degradable: cancel falls back to recursive subtree kill)"
+    },
+    {
+      "zh": "PATH 上找不到 (本地模式必需)",
+      "en": "not found on PATH (required in local mode)"
+    },
+    {
+      "zh": "%s (文件不可执行)",
+      "en": "%s (not executable)"
+    },
+    {
+      "zh": "本地原语 %s",
+      "en": "local primitive %s"
+    },
+    {
+      "zh": "本地 /proc",
+      "en": "local /proc"
+    },
+    {
+      "zh": "可读 (本地作业判活/取消依赖)",
+      "en": "readable (local job liveness/cancel depends on it)"
+    },
+    {
+      "zh": "不可读: 本地作业判活与取消会退化",
+      "en": "not readable: local job liveness and cancellation degrade"
+    },
+    {
+      "zh": "%d 个可用: %s",
+      "en": "%d usable: %s"
+    },
+    {
+      "zh": "识别到可执行文件但版本解析失败, 可在 GUI 手动验证",
+      "en": "Executable found but version parsing failed; verify manually in the GUI"
+    },
+    {
+      "zh": "未自动识别到; 可在 GUI「1. apptainer 运行环境」手动指定路径",
+      "en": "Not auto-detected; set the path manually in the GUI \"1. apptainer runtime\""
+    },
+    {
+      "zh": "SIF 运行时 (%s)",
+      "en": "SIF runtime (%s)"
+    },
+    {
+      "zh": "候选均读不了 .sif: %s (2.x 只支持 squashfs/ext3 的 .simg; 请改选或升级)",
+      "en": "Candidates cannot read .sif: %s (2.x only supports squashfs/ext3 .simg; pick another or upgrade)"
+    },
+    {
+      "zh": "版本未解析, 无法判定; 在 GUI 用「识别并验证」确认",
+      "en": "Version not parsed, cannot judge; confirm in the GUI with \"Identify and verify\""
+    },
+    {
+      "zh": "SIF 目录",
+      "en": "SIF directories"
+    },
+    {
+      "zh": "未发现含 .sif 的目录; 可在 config.R 设置 SIF_DIRS (任意文件名)",
+      "en": "No directory containing .sif found; set SIF_DIRS in config.R (any file names)"
+    },
+    {
+      "zh": "%d 个 *.sif (文件名无关)",
+      "en": "%d *.sif files (name-agnostic)"
+    },
+    {
+      "zh": "未发现 .sif; 构建/放置后自动出现在 GUI 下拉 (README 见构建章节)",
+      "en": "No .sif found; images appear in the GUI dropdown automatically once built or placed (see the build section of the README)"
+    },
+    {
+      "zh": "SIF 版本识别",
+      "en": "SIF version identification"
+    },
+    {
+      "zh": "已识别 %d/%d (容器内实测)",
+      "en": "Identified %d/%d (tested inside the container)"
+    },
+    {
+      "zh": "已识别 %d/%d; 未识别 %d 个%s",
+      "en": "Identified %d/%d; %d unidentified%s"
+    },
+    {
+      "zh": " (上次失败: %s — %s)",
+      "en": " (last failure: %s — %s)"
+    },
+    {
+      "zh": " — 在 GUI 选中自动识别或点「识别所有未识别镜像」",
+      "en": " — identify automatically when selected in the GUI, or click \"Identify all unidentified images\""
+    },
+    {
+      "zh": " (不可读)",
+      "en": " (unreadable)"
+    },
+    {
+      "zh": "(未设置)",
+      "en": "(not set)"
+    },
+    {
+      "zh": "可浏览数据根",
+      "en": "Browsable data roots"
+    },
+    {
+      "zh": "配置文件",
+      "en": "Config file"
+    },
+    {
+      "zh": "未找到 (使用内置默认; 可运行 diann.gui::init_config())",
+      "en": "Not found (using built-in defaults; run diann.gui::init_config())"
+    },
+    {
+      "zh": "权限 600, 安全",
+      "en": "permissions 600, secure"
+    },
+    {
+      "zh": "权限过宽, 建议 chmod 600",
+      "en": "permissions too broad; chmod 600 recommended"
+    },
+    {
+      "zh": "邮件配置",
+      "en": "Mail configuration"
+    },
+    {
+      "zh": "%s, 但未找到 python3, 邮件通知停用 (安装: sudo apt install python3; 或在 config.R 设 MAIL_PYTHON)",
+      "en": "%s, but python3 not found; e-mail notification disabled (install: sudo apt install python3; or set MAIL_PYTHON in config.R)"
+    },
+    {
+      "zh": "未找到 %s, 邮件通知停用 (file.copy('%s', '%s') 后填写 SMTP 账号, 建议 chmod 600)",
+      "en": "%s not found; e-mail notification disabled (run file.copy('%s', '%s'), fill in the SMTP account; chmod 600 recommended)"
+    },
+    {
+      "zh": "状态目录",
+      "en": "State directory"
+    },
+    {
+      "zh": " (不可写)",
+      "en": " (not writable)"
+    },
+    {
+      "zh": "本地作业状态文件",
+      "en": "Local job state file"
+    },
+    {
+      "zh": "Slurm 模式未使用本地作业状态文件",
+      "en": "Local job state file not used in Slurm mode"
+    },
+    {
+      "zh": "运行身份",
+      "en": "Run identity"
+    },
+    {
+      "zh": "分析依赖包",
+      "en": "Analysis packages"
+    },
+    {
+      "zh": "缺失 %d/%d: %s (安装: %s)",
+      "en": "Missing %d/%d: %s (install: %s)"
+    },
+    {
+      "zh": "全部就绪 (%d 个)",
+      "en": "All ready (%d)"
+    },
+    {
+      "zh": "分析可选增强",
+      "en": "Optional analysis extras"
+    },
+    {
+      "zh": "全部就绪",
+      "en": "All ready"
+    },
+    {
+      "zh": "Slurm 命令 %s",
+      "en": "Slurm command %s"
+    },
+    {
+      "zh": "PATH 上找不到 (不在提交节点?)",
+      "en": "Not found on PATH (not on a submit node?)"
+    },
+    {
+      "zh": "Slurm 分区",
+      "en": "Slurm partitions"
+    },
+    {
+      "zh": "sinfo 无输出 (未配置 Slurm?)",
+      "en": "sinfo returned nothing (Slurm not configured?)"
+    },
+    {
+      "zh": "本地模式未启用 (可选后端)",
+      "en": "Not enabled in local mode (optional backend)"
+    },
+    {
+      "zh": "汇总: ✓ %d  ⚠ %d  ✗ %d  – %d  (共 %d 项, 环境: %s)",
+      "en": "Summary: ✓ %d  ⚠ %d  ✗ %d  – %d  (%d items, backend: %s)"
+    },
+    {
+      "zh": "找不到配置模板 config.example.R (包安装不完整?)",
+      "en": "Config template config.example.R not found (incomplete package install?)"
+    },
+    {
+      "zh": "配置已存在, 未改动: %s (需要覆盖请传 overwrite = TRUE)",
+      "en": "Config already exists, left unchanged: %s (pass overwrite = TRUE to overwrite)"
+    },
+    {
+      "zh": "已生成配置: %s",
+      "en": "Config written: %s"
+    },
+    {
+      "zh": "执行后端: %s (写入 EXEC_BACKEND <- \"%s\"; 换机器可改回 \"auto\")",
+      "en": "Execution backend: %s (written as EXEC_BACKEND <- \"%s\"; change back to \"auto\" on another machine)"
+    },
+    {
+      "zh": "下一步: 按需编辑该文件 (SIF_DIRS / APPTAINER_PATHS / DATA_HOME / EXEC_BACKEND), 然后运行 diann.gui::run_app()",
+      "en": "Next: edit the file as needed (SIF_DIRS / APPTAINER_PATHS / DATA_HOME / EXEC_BACKEND), then run diann.gui::run_app()"
+    },
+    {
+      "zh": "DIA-NN GUI %s — 结果分析模式 (仅下游分析; 不含 DIA-NN 运行管理)",
+      "en": "DIA-NN GUI %s — downstream analysis mode (downstream analysis only; no DIA-NN run management)"
+    },
+    {
+      "zh": "DIA-NN GUI %s — 运行身份: %s (作业将以该身份执行)",
+      "en": "DIA-NN GUI %s — running as %s (jobs will run under this identity)"
+    },
+    {
+      "zh": "执行后端: %s (%s)",
+      "en": "Execution backend: %s (%s)"
+    },
+    {
+      "zh": "SIF 镜像: %d 个 (已识别 %d 个)",
+      "en": "SIF images: %d (%d identified)"
+    },
+    {
+      "zh": "邮件通知: %s",
+      "en": "E-mail notification: %s"
+    },
+    {
+      "zh": "已启用 (作业完成自动发信)",
+      "en": "enabled (an e-mail is sent automatically when a job finishes)"
+    },
+    {
+      "zh": "停用 — %s。%s",
+      "en": "disabled — %s. %s"
+    },
+    {
+      "zh": "配置文件: %s",
+      "en": "Config file: %s"
+    },
+    {
+      "zh": "(内置默认)",
+      "en": "(built-in defaults)"
+    },
+    {
+      "zh": "访问地址: http://%s:%s/",
+      "en": "Access URL: http://%s:%s/"
+    },
+    {
+      "zh": "(随机)",
+      "en": "(random)"
+    },
+    {
+      "zh": "远程集群: 先建隧道 ssh -L %d:127.0.0.1:%d <用户>@<集群>",
+      "en": "Remote cluster: open a tunnel first: ssh -L %d:127.0.0.1:%d <user>@<cluster>"
+    },
+    {
+      "zh": "停止: Ctrl+C",
+      "en": "Stop: Ctrl+C"
+    },
+    {
+      "zh": "未找到邮件配置 %s",
+      "en": "Mail config not found: %s"
+    },
+    {
+      "zh": "在 R 里执行 file.copy('%s', '%s') 并填写 smtp_host/smtp_user/smtp_pass (终端: cp <示例> %s && chmod 600 %s) 后重启应用",
+      "en": "In R run file.copy('%s', '%s') and fill in smtp_host/smtp_user/smtp_pass (shell: cp <example> %s && chmod 600 %s), then restart the app"
+    },
+    {
+      "zh": "; 注意该功能还需 python3 发送邮件 (无则: sudo apt install python3, WSL2 同)",
+      "en": "; note this feature also needs python3 to send mail (if missing: sudo apt install python3, same in WSL2)"
+    },
+    {
+      "zh": "未找到 python3 (发送脚本 mail_notify.py 依赖), 配置文件 %s 已就绪",
+      "en": "python3 not found (required by mail_notify.py); config file %s is in place"
+    },
+    {
+      "zh": "安装 python3 (Ubuntu/WSL2: sudo apt install python3), 或在 config.R 设 MAIL_PYTHON 指向可用解释器",
+      "en": "Install python3 (Ubuntu/WSL2: sudo apt install python3), or set MAIL_PYTHON in config.R to a working interpreter"
+    },
+    {
+      "zh": "MAIL_ENABLED 为 FALSE (配置在启动后未重新加载)",
+      "en": "MAIL_ENABLED is FALSE (config not reloaded after startup)"
+    },
+    {
+      "zh": "重新运行 diann.gui::diann_load_config() 并重启应用",
+      "en": "Re-run diann.gui::diann_load_config() and restart the app"
+    },
+    {
+      "zh": "作业仍在队列中",
+      "en": "Job is still in the queue"
+    },
+    {
+      "zh": "程序退出 0 且产物为新 (sacct 不可用, 未核对调度终态)",
+      "en": "Program exited 0 and the artifact is new (sacct unavailable; scheduler final state not checked)"
+    },
+    {
+      "zh": "产物已生成但程序层退出 %s (疑容器卸载异常; sacct 不可用)",
+      "en": "Artifact generated but the program exited %s (suspected container teardown issue; sacct unavailable)"
+    },
+    {
+      "zh": "程序退出码 %d (sacct 不可用)",
+      "en": "Program exit code %d (sacct unavailable)"
+    },
+    {
+      "zh": "发现新产物但退出码未知 (sacct 不可用)",
+      "en": "New artifact found but exit code unknown (sacct unavailable)"
+    },
+    {
+      "zh": "sacct 无记录, 日志/产物均不足以判定",
+      "en": "No sacct record; log and artifacts are not enough to determine"
+    },
+    {
+      "zh": "调度完成且产物为新",
+      "en": "Scheduler completed and the artifact is new"
+    },
+    {
+      "zh": "调度完成但未见本次产物 (检查输出路径或目录清理)",
+      "en": "Scheduler completed but no artifact from this run was found (check the output path or directory cleanup)"
+    },
+    {
+      "zh": "调度完成 (产物未核验)",
+      "en": "Scheduler completed (artifact not verified)"
+    },
+    {
+      "zh": "调度报告 %s 但主报告为本次新写 (程序层退出 %s, 疑容器卸载异常), 请核对产物完整性",
+      "en": "Scheduler reported %s but the main report was newly written by this run (program exited %s; suspected container teardown issue) — verify artifact integrity"
+    },
+    {
+      "zh": "调度状态 %s, 程序退出码 %s",
+      "en": "Scheduler state %s, program exit code %s"
+    },
+    {
+      "zh": "未知(见日志)",
+      "en": "unknown (see log)"
+    },
+    {
+      "zh": "作业超时被终止, 但存在新产物, 请核对",
+      "en": "The job was terminated on timeout, but a new artifact exists — please verify"
+    },
+    {
+      "zh": "作业超时被终止, 未见新产物",
+      "en": "The job was terminated on timeout; no new artifact was found"
+    },
+    {
+      "zh": "作业被取消",
+      "en": "The job was cancelled"
+    },
+    {
+      "zh": "sacct 记录与队列不一致 (记账滞后), 稍后刷新",
+      "en": "sacct record inconsistent with the queue (accounting lag); refresh later"
+    },
+    {
+      "zh": "调度状态 %s, 程序退出 0 且产物为新",
+      "en": "Scheduler state %s, program exited 0 and the artifact is new"
+    },
+    {
+      "zh": "状态未知, 等待 sacct/产物就绪后再发送",
+      "en": "Status unknown; waiting for sacct/artifacts before sending"
+    },
+    {
+      "zh": "watcher 未能启动, 详见 %s",
+      "en": "watcher failed to start; see %s for details"
+    },
+    {
+      "zh": "已有 watcher 运行 (pid %s), 本实例退出",
+      "en": "A watcher is already running (pid %s); this instance exits"
+    },
+    {
+      "zh": "watcher 启动 pid = %s state = %s interval = %s s",
+      "en": "watcher started pid = %s state = %s interval = %s s"
+    },
+    {
+      "zh": "tick 出错: %s",
+      "en": "tick error: %s"
+    },
+    {
+      "zh": "空闲超过 %s s 且无待发记录, watcher 退出",
+      "en": "Idle for more than %s s with no pending records; watcher exits"
+    },
+    {
+      "zh": "watcher 结束",
+      "en": "watcher finished"
+    },
+    {
+      "zh": "`month` 需要 YYYY-MM 格式, 例如 2026-10",
+      "en": "`month` must be in YYYY-MM format, e.g. 2026-10"
+    },
+    {
+      "zh": "注册表为空或不可读 (%s): 无统计数据。可用 registry 参数指定路径。",
+      "en": "Registry is empty or unreadable (%s): no statistics. Use the registry argument to specify a path."
+    },
+    {
+      "zh": "注册表中 %s 无提交记录 (注册表覆盖 %s ~ %s)。",
+      "en": "No submissions in %s in the registry (registry covers %s ~ %s)."
+    },
+    {
+      "zh": "状态合成异常",
+      "en": "status synthesis error"
+    },
+    {
+      "zh": "%d时%02d分%02d秒",
+      "en": "%dh %02dm %02ds"
+    },
+    {
+      "zh": "%d分%02d秒",
+      "en": "%dm %02ds"
+    },
+    {
+      "zh": "未识别",
+      "en": "Unidentified"
+    },
+    {
+      "zh": "本地",
+      "en": "Local"
+    },
+    {
+      "zh": "# DIA-NN GUI 使用统计 — %s",
+      "en": "# DIA-NN GUI Usage Report — %s"
+    },
+    {
+      "zh": "- GUI 提交作业数: **%d**",
+      "en": "- GUI-submitted jobs: **%d**"
+    },
+    {
+      "zh": "- 执行后端: Slurm **%d** 条 / 本地 **%d** 条",
+      "en": "- Execution backend: Slurm **%d** / local **%d**"
+    },
+    {
+      "zh": "- 数据源: 提交注册表 (%s ~ %s)",
+      "en": "- Data source: submission registry (%s ~ %s)"
+    },
+    {
+      "zh": "## 状态分布",
+      "en": "## Status breakdown"
+    },
+    {
+      "zh": "| 状态 | 数量 |",
+      "en": "| Status | Count |"
+    },
+    {
+      "zh": "耗时: 平均 **%.0f 分钟**, 中位 **%.0f 分钟**, 最长 %s (JobID %s)",
+      "en": "Elapsed: mean **%.0f min**, median **%.0f min**, longest %s (JobID %s)"
+    },
+    {
+      "zh": "耗时: 无数据",
+      "en": "Elapsed: no data"
+    },
+    {
+      "zh": "## 失败 / 待核实明细",
+      "en": "## Failed / needs-review details"
+    },
+    {
+      "zh": "| JobID | 任务名 | 后端 | 状态 | 原因 |",
+      "en": "| JobID | Task | Backend | Status | Reason |"
+    },
+    {
+      "zh": "本月无失败或待核实作业。",
+      "en": "No failed or needs-review jobs this month."
+    },
+    {
+      "zh": "## 逐作业明细",
+      "en": "## Per-job details"
+    },
+    {
+      "zh": "> 生成时间: %s; 状态由四层模型合成 (调度终态/本地进程态 → 程序退出码 → 产物验证 → 展示合成)",
+      "en": "> Generated at: %s; status synthesized by the four-layer model (scheduler final state/local process state → program exit code → artifact check → display synthesis)"
+    },
+    {
+      "zh": "报告已写入: %s (GUI 作业 %d [Slurm %d / 本地 %d], 成功 %d, 失败 %d, 待核实 %d)\n",
+      "en": "Report written: %s (GUI jobs %d [Slurm %d / local %d], success %d, failed %d, needs-review %d)\n"
+    },
+    {
+      "zh": "请粘贴「样本名 + %s」两列内容。",
+      "en": "Please paste the two columns \"sample name + %s\" below."
+    },
+    {
+      "zh": "第 %d 行无法解析出两列（样本名、%s）。",
+      "en": "Line %d could not be parsed into two columns (sample name, %s)."
+    },
+    {
+      "zh": "以下 %d 个样本未在粘贴内容中：%s%s",
+      "en": "The following %d samples are not in the pasted content: %s%s"
+    },
+    {
+      "zh": "已忽略不属于本数据集的 %d 个样本",
+      "en": "Ignored %d samples that do not belong to this dataset"
+    },
+    {
+      "zh": "输出目录为空。",
+      "en": "The output directory is empty."
+    },
+    {
+      "zh": "该路径已存在且不是文件夹：%s",
+      "en": "The path already exists and is not a folder: %s"
+    },
+    {
+      "zh": "无法创建输出目录（请检查路径与权限）：%s",
+      "en": "Cannot create the output directory (check the path and permissions): %s"
+    },
+    {
+      "zh": "输出目录不可写：%s",
+      "en": "The output directory is not writable: %s"
+    },
+    {
+      "zh": "报告目录不存在：%s",
+      "en": "The report directory does not exist: %s"
+    },
+    {
+      "zh": "未安装 zip 包，无法打包（install.packages(\"zip\")）；可先用「新窗口打开」查看/另存。",
+      "en": "The zip package is not installed; cannot pack (install.packages(\"zip\")). Use \"Open in new window\" to view or save the report first."
+    },
+    {
+      "zh": "报告目录为空，无内容可打包。",
+      "en": "The report directory is empty; nothing to pack."
+    },
+    {
+      "zh": "打包 zip 失败：%s",
+      "en": "Failed to create the zip archive: %s"
+    },
+    {
+      "zh": "未知原因",
+      "en": "unknown reason"
+    },
+    {
+      "zh": "打包 zip 失败：生成的压缩包为空。",
+      "en": "Failed to create the zip archive: the generated archive is empty."
+    },
+    {
+      "zh": "%s 缺少依赖包：%s。请在 R 中执行：%s",
+      "en": "%s is missing dependency packages: %s. Please run in R: %s"
+    },
+    {
+      "zh": "结果分析模块缺少 %d 个依赖包：%s。",
+      "en": "The Downstream Analysis module is missing %d dependency packages: %s."
+    },
+    {
+      "zh": "安装命令（可复制）:",
+      "en": "Install commands (copy to run):"
+    },
+    {
+      "zh": "可选增强: ",
+      "en": "Optional enhancements: "
+    },
+    {
+      "zh": "QC 可视化",
+      "en": "QC visualization"
+    },
+    {
+      "zh": "差异分析",
+      "en": "Differential analysis"
+    },
+    {
+      "zh": "功能富集",
+      "en": "Functional enrichment"
+    },
+    {
+      "zh": "请先填写矩阵文件路径。",
+      "en": "Please fill in the matrix file path first."
+    },
+    {
+      "zh": "矩阵读取失败: %s",
+      "en": "Failed to read the matrix: %s"
+    },
+    {
+      "zh": "尚未读取矩阵。",
+      "en": "Matrix not loaded yet."
+    },
+    {
+      "zh": " 矩阵不可用 (见上方提示)。",
+      "en": " Matrix unavailable (see the message above)."
+    },
+    {
+      "zh": "已读取 %s：%d 行 × %d 列（识别 %d 个注释列, %d 个样本列）",
+      "en": "Loaded %s: %d rows x %d columns (%d annotation columns, %d sample columns)"
+    },
+    {
+      "zh": "请先在上方填写并读取 pg_matrix 路径",
+      "en": "Please fill in and load the pg_matrix path above first"
+    },
+    {
+      "zh": "DIA-NN 作业完成后, 可在「任务队列」页点「进入下游分析」自动带入。",
+      "en": "After the DIA-NN job finishes, click \"Enter downstream analysis\" on the Job Queue tab to load it automatically."
+    },
+    {
+      "zh": " 未安装 DT 包, 可编辑分组表不可用; 请用「批量填入分组…」粘贴设置分组",
+      "en": " The DT package is not installed; the editable group table is unavailable. Use \"Batch fill groups...\" to set groups by pasting"
+    },
+    {
+      "zh": "（install.packages(\"DT\")）。",
+      "en": " (install.packages(\"DT\"))."
+    },
+    {
+      "zh": " 自动推断成功：%d 个样本 → %d 组（%s）",
+      "en": " Auto-inference succeeded: %d samples → %d groups (%s)"
+    },
+    {
+      "zh": " 无法从列名自动推断分组，请在下表中手动填写每个样本的组名后点「应用分组」。",
+      "en": " Cannot infer groups from column names automatically. Please fill in a group for each sample in the table below, then click \"Apply groups\"."
+    },
+    {
+      "zh": "样本名不能为空。",
+      "en": "Sample names cannot be empty."
+    },
+    {
+      "zh": "样本名重复：%s",
+      "en": "Duplicate sample names: %s"
+    },
+    {
+      "zh": "分组无效： %s",
+      "en": "Invalid grouping: %s"
+    },
+    {
+      "zh": "分组已应用：%d 组（%s）",
+      "en": "Groups applied: %d groups (%s)"
+    },
+    {
+      "zh": "无法从列名自动推断分组（需 ≥2 组且每组 ≥2 样本）。请手动填写组名后点「应用分组」。",
+      "en": "Cannot infer groups from column names automatically (requires ≥ 2 groups with ≥ 2 samples each). Please fill in group names manually, then click \"Apply groups\"."
+    },
+    {
+      "zh": "已恢复为自动推断分组（%d 组）。",
+      "en": "Restored to the auto-inferred grouping (%d groups)."
+    },
+    {
+      "zh": "批量填入分组",
+      "en": "Batch fill groups"
+    },
+    {
+      "zh": "从 Excel 复制「样本名 + 分组」两列粘贴到下面（每行一个样本）。",
+      "en": "Copy the two columns \"sample name + group\" from Excel and paste below (one sample per line)."
+    },
+    {
+      "zh": "样本名 <Tab/逗号/空格> 分组\n如：\nA1\tCtrl\nA2\tCtrl\nB1\tKO",
+      "en": "Sample <Tab/comma/space> Group\nE.g.:\nA1\tCtrl\nA2\tCtrl\nB1\tKO"
+    },
+    {
+      "zh": "填入分组表",
+      "en": "Fill group table"
+    },
+    {
+      "zh": "关闭",
+      "en": "Close"
+    },
+    {
+      "zh": "将得到 %d 个分组：%s",
+      "en": "This will produce %d groups: %s"
+    },
+    {
+      "zh": "；%s",
+      "en": "; %s"
+    },
+    {
+      "zh": "填入分组失败： %s",
+      "en": "Failed to fill in groups: %s"
+    },
+    {
+      "zh": "已填入分组表，但该分组暂不可用于下游：%s",
+      "en": "The group table was filled in, but the grouping is not usable downstream yet: %s"
+    },
+    {
+      "zh": "已填入 %d 个分组。",
+      "en": "Filled in %d groups."
+    },
+    {
+      "zh": "要求 ≥2 个批次、每批 ≥2 个样本; ComBat 把「分组」作为协变量, 只去批次效应。",
+      "en": "Requires ≥ 2 batches with ≥ 2 samples each; ComBat uses the \"group\" as a covariate and removes only the batch effect."
+    },
+    {
+      "zh": "若批次与分组完全混杂 (每批只含一组) 会被拒绝执行。",
+      "en": "If batches are fully confounded with groups (each batch contains only one group), the removal will be rejected."
+    },
+    {
+      "zh": "批量生成方式",
+      "en": "Bulk generation method"
+    },
+    {
+      "zh": "粘贴 样本→批次 对照表",
+      "en": "Paste a sample→batch mapping table"
+    },
+    {
+      "zh": "按顺序每批 N 个",
+      "en": "Assign N samples per batch in order"
+    },
+    {
+      "zh": "生成并填入批次表",
+      "en": "Generate and fill batch table"
+    },
+    {
+      "zh": "每批样本数",
+      "en": "Samples per batch"
+    },
+    {
+      "zh": "批次名前缀",
+      "en": "Batch name prefix"
+    },
+    {
+      "zh": "每行: 样本名 <Tab/逗号/空格> 批次\n如：\nA1\tRun1\nA2\tRun1\nB1\tRun2",
+      "en": "Each line: sample <Tab/comma/space> batch\nE.g.:\nA1\tRun1\nA2\tRun1\nB1\tRun2"
+    },
+    {
+      "zh": "「每批样本数」需为 ≥1 的整数。",
+      "en": "\"Samples per batch\" must be an integer ≥ 1."
+    },
+    {
+      "zh": "批次",
+      "en": "batch"
+    },
+    {
+      "zh": " 将生成 %d 个批次：%s%s",
+      "en": " Will generate %d batches: %s%s"
+    },
+    {
+      "zh": " 注意：批次与分组完全混杂，去批次会被拒绝；请改用与分组交叉的分批方式。",
+      "en": " Note: batches are fully confounded with groups; batch removal will be rejected. Use a batching scheme that crosses the groups."
+    },
+    {
+      "zh": "批量设置失败： %s",
+      "en": "Failed to set batches: %s"
+    },
+    {
+      "zh": "已填入批次表，但暂不可用于去批次：%s",
+      "en": "The batch table was filled in, but it is not usable for batch removal yet: %s"
+    },
+    {
+      "zh": "已填入 %d 个批次。",
+      "en": "Filled in %d batches."
+    },
+    {
+      "zh": "对照组 (差异分析基准):",
+      "en": "Control group (differential analysis baseline):"
+    },
+    {
+      "zh": "预处理失败: %s",
+      "en": "Preprocessing failed: %s"
+    },
+    {
+      "zh": "%s（手动指定）",
+      "en": "%s (manually specified)"
+    },
+    {
+      "zh": " 请先在「① 数据与分组」读取矩阵。",
+      "en": " Please load the matrix in \"① Data & groups\" first."
+    },
+    {
+      "zh": "原始蛋白",
+      "en": "Raw proteins"
+    },
+    {
+      "zh": "低检出剔除",
+      "en": "Low-detection removed"
+    },
+    {
+      "zh": "保留蛋白",
+      "en": "Retained proteins"
+    },
+    {
+      "zh": "插补占比",
+      "en": "Imputed"
+    },
+    {
+      "zh": "缺失占比",
+      "en": "Missing"
+    },
+    {
+      "zh": "物种: %s | 插补: %s | 对照组: %s | 分组来源: %s",
+      "en": "Species: %s | Imputation: %s | Control group: %s | Grouping source: %s"
+    },
+    {
+      "zh": " 无告警",
+      "en": " No warnings"
+    },
+    {
+      "zh": "当前数据没有可用于绘图的定量值。",
+      "en": "The current data has no quantitative values available for plotting."
+    },
+    {
+      "zh": "图 A：平均丰度 (log2) 与缺失率的关系",
+      "en": "Figure A: mean abundance (log2) vs. missing rate"
+    },
+    {
+      "zh": "图 B：不同缺失率区间的丰度分布",
+      "en": "Figure B: abundance distribution by missing-rate bin"
+    },
+    {
+      "zh": "导出全部 QC 图 (zip)",
+      "en": "Export all QC plots (zip)"
+    },
+    {
+      "zh": "　共 %d 张图。",
+      "en": "  %d plots in total."
+    },
+    {
+      "zh": "未安装 zip 包",
+      "en": "The zip package is not installed"
+    },
+    {
+      "zh": "没有可导出的图形",
+      "en": "No plots to export"
+    },
+    {
+      "zh": " 未执行 QC 模块：请在上方「分析模块」勾选「QC 可视化」。",
+      "en": " QC module not run: check \"QC visualization\" under \"Analysis modules\" above."
+    },
+    {
+      "zh": "PC1 方差",
+      "en": "PC1 variance"
+    },
+    {
+      "zh": "PC2 方差",
+      "en": "PC2 variance"
+    },
+    {
+      "zh": "样本相关范围 (%s)",
+      "en": "Sample correlation range (%s)"
+    },
+    {
+      "zh": "最低组内 CV 中位数",
+      "en": "Lowest within-group median CV"
+    },
+    {
+      "zh": "未勾选「limma 差异分析」模块。",
+      "en": "The \"limma differential analysis\" module is not checked."
+    },
+    {
+      "zh": "缺失值处理为「不填补」，差异分析已停用（请改选插补方法）。",
+      "en": "Missing values are set to \"no imputation\"; differential analysis is disabled (choose an imputation method instead)."
+    },
+    {
+      "zh": "依赖缺失 (见上方提示)。",
+      "en": "Dependencies missing (see the message above)."
+    },
+    {
+      "zh": "%s（%s）",
+      "en": "%s (%s)"
+    },
+    {
+      "zh": "结果表需要 DT 包（install.packages(\"DT\")）。",
+      "en": "The result table requires the DT package (install.packages(\"DT\"))."
+    },
+    {
+      "zh": " %s：显著差异蛋白 %d 个（上调 %d / 下调 %d）",
+      "en": " %s: %d significant differential proteins (up %d / down %d)"
+    },
+    {
+      "zh": "上下调数量统计",
+      "en": "Up/down-regulated counts"
+    },
+    {
+      "zh": "结果表",
+      "en": "Result table"
+    },
+    {
+      "zh": " 显著差异蛋白 %d 个（上调 %d / 下调 %d）",
+      "en": " %d significant differential proteins (up %d / down %d)"
+    },
+    {
+      "zh": "全局 F 检验",
+      "en": "Global F-test"
+    },
+    {
+      "zh": "全局显著差异蛋白热图 (F 降序前 100)",
+      "en": "Global significant protein heatmap (top 100 by F)"
+    },
+    {
+      "zh": " %d 组：全局 F 检验显著 %s 个；两两对比 %d 组，显著并集 %d 个",
+      "en": " %d groups: %s significant in the global F-test; %d pairwise contrasts, %d significant in the union"
+    },
+    {
+      "zh": "「功能富集」依赖差异分析的显著蛋白结果，但「④ 差异分析」模块未勾选；请同时勾选两者。",
+      "en": "\"Functional enrichment\" depends on the significant proteins from differential analysis, but the \"④ Differential analysis\" module is not checked; check both."
+    },
+    {
+      "zh": "缺失值处理为「不填补」导致差异分析停用，功能富集随之不可用（请改选插补方法）。",
+      "en": "Missing values are set to \"no imputation\", which disables differential analysis and therefore functional enrichment (choose an imputation method instead)."
+    },
+    {
+      "zh": "差异分析依赖缺失（见 ④ 差异分析页提示）。",
+      "en": "Differential analysis dependencies missing (see the note on the ④ Differential analysis tab)."
+    },
+    {
+      "zh": "未勾选「GO/KEGG 功能富集」模块。",
+      "en": "The \"GO/KEGG functional enrichment\" module is not checked."
+    },
+    {
+      "zh": "富集依赖缺失（见上方安装命令）。",
+      "en": "Enrichment dependencies missing (see the install commands above)."
+    },
+    {
+      "zh": " 富集已跳过：",
+      "en": " Enrichment skipped: "
+    },
+    {
+      "zh": " 显著条目 %d 条（来源: %s | KEGG: %s | 可映射背景基因 %d 个）",
+      "en": " %d significant terms (sources: %s | KEGG: %s | %d mappable background genes)"
+    },
+    {
+      "zh": "在线",
+      "en": "online"
+    },
+    {
+      "zh": "GO 富集气泡图 (各 ontology top 5)",
+      "en": "GO enrichment dot plot (top 5 per ontology)"
+    },
+    {
+      "zh": "GO 结果表",
+      "en": "GO result table"
+    },
+    {
+      "zh": "KEGG 结果表",
+      "en": "KEGG result table"
+    },
+    {
+      "zh": "报告将生成于: %s",
+      "en": "The report will be generated in: %s"
+    },
+    {
+      "zh": " 请先读取数据并完成预处理。",
+      "en": " Please load data and finish preprocessing first."
+    },
+    {
+      "zh": " 数据就绪：%d 样本 / %d 组 / %d 个蛋白；已选模块：%s",
+      "en": " Data ready: %d samples / %d groups / %d proteins; modules selected: %s"
+    },
+    {
+      "zh": "预处理",
+      "en": "Preprocessing"
+    },
+    {
+      "zh": "至少勾选一个分析模块 (QC / 差异 / 富集)。",
+      "en": "Check at least one analysis module (QC / differential / enrichment)."
+    },
+    {
+      "zh": "报告目录不可用： %s",
+      "en": "The report directory is unavailable: %s"
+    },
+    {
+      "zh": "正在生成 HTML 报告…",
+      "en": "Generating HTML report..."
+    },
+    {
+      "zh": "输出图形与表格",
+      "en": "Rendering plots and tables"
+    },
+    {
+      "zh": "打包 zip",
+      "en": "Packing zip"
+    },
+    {
+      "zh": "报告生成失败: %s",
+      "en": "Report generation failed: %s"
+    },
+    {
+      "zh": "报告已生成，但打包 zip 失败：%s",
+      "en": "The report was generated, but packing the zip failed: %s"
+    },
+    {
+      "zh": "报告生成完成，可预览或下载 zip。",
+      "en": "Report generated. You can preview it or download the zip."
+    },
+    {
+      "zh": "下载报告 (zip)",
+      "en": "Download report (zip)"
+    },
+    {
+      "zh": " 新窗口打开",
+      "en": " Open in new window"
+    },
+    {
+      "zh": "复制压缩包到下载临时文件失败",
+      "en": "Failed to copy the archive to the download temp file"
+    },
+    {
+      "zh": "报告已生成",
+      "en": "Report generated"
+    },
+    {
+      "zh": "输出目录: %s ｜ %d 个图形、%d 个表格。",
+      "en": "Output directory: %s | %d plots, %d tables."
+    },
+    {
+      "zh": "zip 压缩包 %.1f MB。",
+      "en": "zip archive %.1f MB."
+    },
+    {
+      "zh": "报告预览",
+      "en": "Report preview"
+    },
+    {
+      "zh": "尚未导入命令",
+      "en": "No command imported yet"
+    },
+    {
+      "zh": "未选择镜像",
+      "en": "No image selected"
+    },
+    {
+      "zh": "识别镜像版本 (容器内运行 diann-linux)…",
+      "en": "Identifying image version (running diann-linux inside the container)…"
+    },
+    {
+      "zh": "已识别: DIA-NN v%s (已缓存)",
+      "en": "Identified: DIA-NN v%s (cached)"
+    },
+    {
+      "zh": "识别已在进行中 (可点「取消识别」终止)",
+      "en": "Identification already in progress (click \"Cancel identification\" to stop)"
+    },
+    {
+      "zh": "没有未识别的镜像",
+      "en": "No unidentified images"
+    },
+    {
+      "zh": "已取消识别 (完成 %d / %d, 跳过 %d)",
+      "en": "Identification cancelled (completed %d / %d, skipped %d)"
+    },
+    {
+      "zh": "识别完成: 成功 %d / 失败 %d。失败明细:\n%s",
+      "en": "Identification finished: %d succeeded / %d failed. Failure details:\n%s"
+    },
+    {
+      "zh": "识别完成: 成功 %d / %d",
+      "en": "Identification finished: %d / %d succeeded"
+    },
+    {
+      "zh": "识别中 %d/%d (剩余 %d)…",
+      "en": "Identifying %d/%d (%d remaining)…"
+    },
+    {
+      "zh": "版本: v%s (已识别, 缓存)",
+      "en": "Version: v%s (identified, cached)"
+    },
+    {
+      "zh": "版本未识别 — 上次失败: %s (点「识别版本并深度验证」重试)",
+      "en": "Version unidentified — last attempt failed: %s (click \"Identify version and deep-verify\" to retry)"
+    },
+    {
+      "zh": "版本未识别 — 选中后自动尝试; 也可点「识别版本并深度验证」",
+      "en": "Version unidentified — tried automatically once selected; you can also click \"Identify version and deep-verify\""
+    },
+    {
+      "zh": "(未填写自定义路径)",
+      "en": "(custom path not filled in)"
+    },
+    {
+      "zh": "未找到可用镜像",
+      "en": "No usable image found"
+    },
+    {
+      "zh": "(自定义",
+      "en": "(custom"
+    },
+    {
+      "zh": "未自动识别到 apptainer/singularity: 请在「1. apptainer 运行环境」中手动指定路径",
+      "en": "No apptainer/singularity found automatically: please specify the path manually in \"1. apptainer runtime environment\""
+    },
+    {
+      "zh": "正在扫描 apptainer…",
+      "en": "Scanning apptainer…"
+    },
+    {
+      "zh": "识别到 %d 个 apptainer/singularity 候选",
+      "en": "Found %d apptainer/singularity candidates"
+    },
+    {
+      "zh": "未选择 (未自动识别到, 请手动指定路径)",
+      "en": "Not selected (not found automatically, please specify the path manually)"
+    },
+    {
+      "zh": " ⚠ 不支持 SIF (需 %s)",
+      "en": " ⚠ SIF not supported (requires %s)"
+    },
+    {
+      "zh": "未验证 — %s (点击「识别并验证」)",
+      "en": "Not verified — %s (click \"Identify and verify\")"
+    },
+    {
+      "zh": "版本未知",
+      "en": "Unknown version"
+    },
+    {
+      "zh": "运行身份: <b>%s<\/b> · 配置: %s",
+      "en": "Running as: <b>%s<\/b> · Config: %s"
+    },
+    {
+      "zh": " <b style='color:#dd4b39'>⚠ 不支持 SIF<\/b> <small>需 %s<\/small>",
+      "en": " <b style='color:#dd4b39'>⚠ SIF not supported<\/b> <small>requires %s<\/small>"
+    },
+    {
+      "zh": " <b>← 当前选中<\/b>",
+      "en": " <b>← currently selected<\/b>"
+    },
+    {
+      "zh": "未找到 apptainer/singularity<br><small>请手动指定路径, 或在 config.R 配置 APPTAINER_PATHS<\/small>",
+      "en": "No apptainer/singularity found<br><small>Please specify the path manually, or configure APPTAINER_PATHS in config.R<\/small>"
+    },
+    {
+      "zh": "module 回退 <code>%s<\/code> %s<small>%s<\/small>",
+      "en": "Module fallback <code>%s<\/code> %s<small>%s<\/small>"
+    },
+    {
+      "zh": "可用 ",
+      "en": "available "
+    },
+    {
+      "zh": "不可用 ",
+      "en": "unavailable "
+    },
+    {
+      "zh": "状态目录: %s",
+      "en": "State directory: %s"
+    },
+    {
+      "zh": "文件存在但无法读取大小: %s",
+      "en": "File exists but its size cannot be read: %s"
+    },
+    {
+      "zh": "文件仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)",
+      "en": "File is only %.2f MB, suspicious (a normal DIA-NN image is hundreds of MB)"
+    },
+    {
+      "zh": "文件存在, %.0f MB",
+      "en": "File exists, %.0f MB"
+    },
+    {
+      "zh": "GUI 运行身份 (%s) 无权读取该镜像, 作业将无法启动容器",
+      "en": "The GUI runtime identity (%s) cannot read this image; jobs will fail to start the container"
+    },
+    {
+      "zh": "GUI 运行身份可读取",
+      "en": "Readable by the GUI runtime identity"
+    },
+    {
+      "zh": "SIF 魔数校验失败 — 文件不是有效的 SIF 镜像 (可能损坏或下载截断)",
+      "en": "SIF magic check failed — the file is not a valid SIF image (may be corrupted or a truncated download)"
+    },
+    {
+      "zh": "SIF 镜像格式有效",
+      "en": "SIF image format is valid"
+    },
+    {
+      "zh": "未选择在 GUI 节点可用的 apptainer, 跳过容器级检查 (作业脚本内自行回退查找)",
+      "en": "No apptainer usable on the GUI node selected; skipping container-level checks (the job script falls back to its own lookup)"
+    },
+    {
+      "zh": "apptainer 可用: %s",
+      "en": "apptainer usable: %s"
+    },
+    {
+      "zh": "%s 不支持 SIF 镜像 (需要 %s): %s",
+      "en": "%s does not support SIF images (requires %s): %s"
+    },
+    {
+      "zh": "请改选 apptainer ≥ 1.0 / singularity ≥ 3.0 的路径; 该路径已被写入作业脚本时, 作业同样会在启动容器时失败",
+      "en": "Please switch to an apptainer ≥ 1.0 / singularity ≥ 3.0 path; if this path has already been written into a job script, the job will likewise fail when starting the container"
+    },
+    {
+      "zh": "运行时版本满足 SIF 要求: %s (需 %s)",
+      "en": "Runtime version meets SIF requirements: %s (requires %s)"
+    },
+    {
+      "zh": "快速验证通过; 需要确认容器内能启动 diann-linux 请点「识别版本并深度验证」",
+      "en": "Quick check passed; to confirm diann-linux starts inside the container, click \"Identify version and deep-verify\""
+    },
+    {
+      "zh": "探测出错: %s",
+      "en": "Probe error: %s"
+    },
+    {
+      "zh": " (镜像来源: %s)",
+      "en": " (image source: %s)"
+    },
+    {
+      "zh": "apptainer inspect 通过%s",
+      "en": "apptainer inspect passed%s"
+    },
+    {
+      "zh": "apptainer inspect 失败: %s",
+      "en": "apptainer inspect failed: %s"
+    },
+    {
+      "zh": "该报错说明运行时读不了 SIF 镜像头: 需要 %s",
+      "en": "This error means the runtime cannot read the SIF image header: requires %s"
+    },
+    {
+      "zh": "容器内启动 diann-linux…",
+      "en": "Starting diann-linux inside the container…"
+    },
+    {
+      "zh": "容器内启动 diann-linux 未成功 — 若为 GUI 节点限制 (FUSE/命名空间) 可忽略, 以作业实际运行为准",
+      "en": "diann-linux did not start inside the container — ignore if this is a GUI node limitation (FUSE/namespaces); actual job runs are authoritative"
+    },
+    {
+      "zh": "深度验证镜像 (最长约 45 秒)…",
+      "en": "Deep-verifying image (up to ~45 seconds)…"
+    },
+    {
+      "zh": "(导入) ",
+      "en": "(imported) "
+    },
+    {
+      "zh": "未选 RAW 文件",
+      "en": "No RAW file selected"
+    },
+    {
+      "zh": "未选目录",
+      "en": "No directory selected"
+    },
+    {
+      "zh": "未选光谱库",
+      "en": "No spectral library selected"
+    },
+    {
+      "zh": "未选校准库",
+      "en": "No calibration library selected"
+    },
+    {
+      "zh": "未选 FASTA",
+      "en": "No FASTA selected"
+    },
+    {
+      "zh": "未选输出目录",
+      "en": "No output directory selected"
+    },
+    {
+      "zh": "未选临时目录 (使用默认)",
+      "en": "No temp directory selected (using default)"
+    },
+    {
+      "zh": "未指定 (自动定位: 手动目录 → 本会话提交记录 → GUI 注册表 → scontrol → sacct 工作目录)",
+      "en": "Not specified (auto-locate: manual directory → this session's submissions → GUI registry → scontrol → sacct working directory)"
+    },
+    {
+      "zh": "✗ 未选择 sif 镜像",
+      "en": "✗ No sif image selected"
+    },
+    {
+      "zh": "✗ sif 镜像不存在: %s",
+      "en": "✗ sif image does not exist: %s"
+    },
+    {
+      "zh": "✗ GUI 运行身份 (%s) 无权读取该镜像, 作业将无法启动容器: %s",
+      "en": "✗ The GUI runtime identity (%s) cannot read this image; jobs will fail to start the container: %s"
+    },
+    {
+      "zh": "✗ 该文件不是有效的 SIF 镜像 (魔数校验失败, 可能损坏或下载截断); 可用版本页「验证镜像可用性」按钮逐项排查",
+      "en": "✗ This file is not a valid SIF image (magic check failed, may be corrupted or truncated); use the \"Verify image usability\" button on the version tab to troubleshoot step by step"
+    },
+    {
+      "zh": "⚠ 镜像仅 %.2f MB, 可疑 (正常 DIA-NN 镜像为数百 MB)",
+      "en": "⚠ Image is only %.2f MB, suspicious (a normal DIA-NN image is hundreds of MB)"
+    },
+    {
+      "zh": "ℹ 镜像版本已识别 (容器内实测)",
+      "en": "ℹ Image version identified (measured inside the container)"
+    },
+    {
+      "zh": "⚠ 镜像版本识别失败: %s (可在「2. DIA-NN 版本」点「识别版本并深度验证」重试)",
+      "en": "⚠ Image version identification failed: %s (retry via \"Identify version and deep-verify\" in \"2. DIA-NN version\")"
+    },
+    {
+      "zh": "ℹ 镜像版本未识别 (不影响提交; 选中镜像后会自动识别)",
+      "en": "ℹ Image version unidentified (does not block submission; identified automatically once the image is selected)"
+    },
+    {
+      "zh": "ℹ 本地模式要求 GUI 所在主机可运行 apptainer/singularity (作业在本机执行)",
+      "en": "ℹ Local mode requires apptainer/singularity to run on the host running the GUI (jobs execute on this machine)"
+    },
+    {
+      "zh": "✗ 未选择 apptainer 运行环境 (未自动识别到, 请手动指定路径)",
+      "en": "✗ No apptainer runtime selected (not found automatically, please specify the path manually)"
+    },
+    {
+      "zh": "✗ apptainer 路径必须是服务器绝对路径 (以 / 开头)",
+      "en": "✗ The apptainer path must be an absolute server path (starting with /)"
+    },
+    {
+      "zh": "⚠ GUI 节点看不到该 apptainer: %s (若为计算节点专用安装可继续; 作业会按回退链查找)",
+      "en": "⚠ The GUI node cannot see this apptainer: %s (fine if it is a compute-node-only install; jobs look it up via the fallback chain)"
+    },
+    {
+      "zh": "⚠ apptainer 不可执行: %s",
+      "en": "⚠ apptainer is not executable: %s"
+    },
+    {
+      "zh": "✗ 所选 %s %s 不支持 SIF 镜像 (需要 %s): %s",
+      "en": "✗ The selected %s %s does not support SIF images (requires %s): %s"
+    },
+    {
+      "zh": "ℹ 当前使用 singularity 命令 (与 apptainer 等价; SIF 需 singularity ≥ %d.0)",
+      "en": "ℹ Currently using the singularity command (equivalent to apptainer; SIF requires singularity ≥ %d.0)"
+    },
+    {
+      "zh": "✗ 线程数无效 (需 1–1024 的整数): Slurm --cpus-per-task 与 DIA-NN --threads 均使用该值",
+      "en": "✗ Invalid thread count (integer from 1 to 1024 required): used for both Slurm --cpus-per-task and DIA-NN --threads"
+    },
+    {
+      "zh": "✗ 任务名不能为空",
+      "en": "✗ Job name must not be empty"
+    },
+    {
+      "zh": "✗ 任务名不能包含 / \\ 或换行/制表符 (会破坏脚本文件名)",
+      "en": "✗ Job name must not contain / \\ or newline/tab (it would break the script file name)"
+    },
+    {
+      "zh": "✗ 任务名长度不能超过 64 个字符",
+      "en": "✗ Job name must not exceed 64 characters"
+    },
+    {
+      "zh": "✗ 时限至少 1 分钟",
+      "en": "✗ Time limit must be at least 1 minute"
+    },
+    {
+      "zh": "ℹ 时限按 %d 分钟执行 (本地模式到点由运行器终止)",
+      "en": "ℹ Time limit applied as %d minutes at runtime (in local mode the runner terminates the job when time is up)"
+    },
+    {
+      "zh": "ℹ 时限按 %d 分钟提交 (Slurm -t %d)",
+      "en": "ℹ Time limit submitted as %d minutes (Slurm -t %d)"
+    },
+    {
+      "zh": "✗ 未选择 RAW 文件/目录",
+      "en": "✗ No RAW file/directory selected"
+    },
+    {
+      "zh": "✗ 未选择输出目录",
+      "en": "✗ No output directory selected"
+    },
+    {
+      "zh": "✗ 输出目录对 GUI 运行身份 (%s) 不可写, 将无法保存脚本/结果: %s — 请改用输出工作区目录 (如 project/), 或请目录属主为 GUI 账户授权 (setfacl -m u:%s:rwx 或 chgrp+2770)",
+      "en": "✗ The output directory is not writable by the GUI runtime identity (%s); scripts/results cannot be saved: %s — use an output workspace directory (e.g. project/) instead, or have the directory owner grant the GUI account access (setfacl -m u:%s:rwx or chgrp+2770)"
+    },
+    {
+      "zh": "ℹ 已填写邮箱, 但%s, 将不会发送通知邮件。%s",
+      "en": "ℹ An e-mail address is set, but %s, so no notification e-mail will be sent. %s"
+    },
+    {
+      "zh": "✗ 邮箱通知格式不正确 (多个邮箱用英文逗号分隔)",
+      "en": "✗ Invalid e-mail notification format (separate multiple addresses with commas)"
+    },
+    {
+      "zh": "ℹ 转换模式: 命令仅包含文件与 --convert, .dia 文件将保存在 RAW 文件所在目录",
+      "en": "ℹ Convert mode: the command only contains files and --convert; .dia files will be saved next to the RAW files"
+    },
+    {
+      "zh": "✗ 主报告文件名不能为空",
+      "en": "✗ Main report file name must not be empty"
+    },
+    {
+      "zh": "✗ 主报告文件名不能包含 / \\ 或换行",
+      "en": "✗ Main report file name must not contain / \\ or newline"
+    },
+    {
+      "zh": "✗ 光谱库与 FASTA 至少需提供一个",
+      "en": "✗ Provide at least a spectral library or FASTA files"
+    },
+    {
+      "zh": "✗ 无光谱库时必须勾选 --fasta-search (无库搜索) 或 --gen-spec-lib (生成预测库)",
+      "en": "✗ Without a spectral library you must enable --fasta-search (library-free search) or --gen-spec-lib (predict a library)"
+    },
+    {
+      "zh": "✗ 生成预测库必须提供 FASTA (或选择光谱库以生成经验谱库)",
+      "en": "✗ Predicting a library requires FASTA (or select a spectral library to generate an empirical library)"
+    },
+    {
+      "zh": "ℹ FASTA 预测建库与搜库将同场执行 (组合模式); DIA-NN 建议先不选 RAW 独立生成预测库, 再用该库搜库 (库可复用, 结果更稳)",
+      "en": "ℹ FASTA library prediction and search will run together (combined mode); DIA-NN recommends first generating the predicted library without RAW files, then searching with that library (reusable, more stable)"
+    },
+    {
+      "zh": "ℹ 经验谱库工作流: 以光谱库搜库, 并用本次鉴定精修输出谱库 (--out-lib); 该库可用于全部样本的后续搜索",
+      "en": "ℹ Empirical library workflow: search with the spectral library and refine it with this run's identifications into an output library (--out-lib); that library can be reused for later searches of all samples"
+    },
+    {
+      "zh": "ℹ 污染物 cRAP 将编入输出谱库, 便于后续搜库时鉴定并经 --cont-quant-exclude 从定量矩阵扣除",
+      "en": "ℹ Contaminant cRAP will be compiled into the output library so later searches can identify it and remove it from the quantification matrix via --cont-quant-exclude"
+    },
+    {
+      "zh": "ℹ 已同时选择光谱库与 FASTA: FASTA 预测前体将并入搜索空间 (可扩充库覆盖; 若 FASTA 与库内容相同则为重复预测, 清除 FASTA 可提速)",
+      "en": "ℹ Both a spectral library and FASTA are selected: precursors predicted from FASTA will be merged into the search space (may extend library coverage; if the FASTA matches the library the prediction is redundant, clearing FASTA is faster)"
+    },
+    {
+      "zh": "✗ 污染物 FASTA 不存在: %s",
+      "en": "✗ Contaminant FASTA does not exist: %s"
+    },
+    {
+      "zh": "✗ 可变修饰行不完整: %s (需 名称,质量,位点)",
+      "en": "✗ Incomplete variable modification row: %s (needs name,mass,site)"
+    },
+    {
+      "zh": "✗ 固定修饰行不完整: %s",
+      "en": "✗ Incomplete fixed modification row: %s"
+    },
+    {
+      "zh": "⚠ 可变修饰填了 %d 行, 但每肽段最大可变修饰数为 %d: 超出部分不会进入搜索空间 (建议调到 ≥%d)",
+      "en": "⚠ %d variable modification rows are filled but max variable modifications per peptide is %d: the extra rows will not enter the search space (consider raising it to ≥%d)"
+    },
+    {
+      "zh": "⚠ 以下路径不在 $HOME / 当前目录 / BIND_PATHS 内, 容器里可能看不到 (历史 v1.4 事故类别; 如属共享盘请加入 config.R 的 BIND_PATHS): %s",
+      "en": "⚠ The following paths are outside $HOME / the current directory / BIND_PATHS and may be invisible inside the container (historical v1.4 incident class; for shared drives add them to BIND_PATHS in config.R): %s"
+    },
+    {
+      "zh": "ℹ 未勾选「生成谱图库」, --out-lib 不会写入命令 (填写值已忽略)",
+      "en": "ℹ 'Generate spectral library' is not checked, so --out-lib will not be added to the command (the entered value is ignored)"
+    },
+    {
+      "zh": "✗ 谱库输出路径必须是服务器绝对路径 (以 / 开头)",
+      "en": "✗ The library output path must be an absolute server path (starting with /)"
+    },
+    {
+      "zh": "✗ 谱库输出路径的父目录不存在: %s",
+      "en": "✗ Parent directory of the library output path does not exist: %s"
+    },
+    {
+      "zh": "✗ --out-lib 是 Windows 盘符路径 (如 I:\\...), 服务器上不可用, 请清空或改为服务器路径",
+      "en": "✗ --out-lib is a Windows drive path (e.g. I:\\...), unusable on the server; clear it or use a server path"
+    },
+    {
+      "zh": "✗ 额外参数中 %s 缺少取值 (通常是命令导入时 Windows 路径被丢弃残留), 请清理「额外参数」",
+      "en": "✗ Extra argument %s is missing a value (usually a leftover from Windows paths dropped during command import); please clean up 'Extra arguments'"
+    },
+    {
+      "zh": "无法读取本地作业状态",
+      "en": "Unable to read local job status"
+    },
+    {
+      "zh": "请等作业完成或手动取消",
+      "en": "Please wait for jobs to finish or cancel them manually"
+    },
+    {
+      "zh": "此后可提交 (提前完成可提前提交)",
+      "en": "You can submit after that (submit earlier if a slot frees up sooner)"
+    },
+    {
+      "zh": "✗ 本地并发已达上限 LOCAL_MAX_JOBS=%d (%s); %s",
+      "en": "✗ Local concurrency has reached the LOCAL_MAX_JOBS=%d cap (%s); %s"
+    },
+    {
+      "zh": "ℹ 当前已有 %d 个本地作业在运行; 单机同时跑多个 DIA-NN 会争抢 CPU/内存%s",
+      "en": "ℹ %d local jobs are currently running; running multiple DIA-NN instances on one workstation competes for CPU/memory%s"
+    },
+    {
+      "zh": "⚠ 线程数 %d 超过本机 CPU 核数 %d; 本地模式没有排队机制, 可能拖慢整机",
+      "en": "⚠ Thread count %d exceeds this machine's CPU core count %d; local mode has no queueing and may slow down the whole machine"
+    },
+    {
+      "zh": "⚠ 申请内存 %.0f GB 超过本机当前可用 %.1f GB; 本地模式只做建议检查, 不会强制限制",
+      "en": "⚠ Requested memory %.0f GB exceeds currently available %.1f GB on this machine; local mode only advises and does not enforce"
+    },
+    {
+      "zh": "✔ 校验通过, 可提交",
+      "en": "✔ Validation passed, ready to submit"
+    },
+    {
+      "zh": "已应用预测库模板: 请选择 FASTA 与输出目录; --out-lib 留空时自动存为 <输出目录>/library.speclib (生成 library.predicted.speclib)",
+      "en": "Predicted-library preset applied: select FASTA files and an output directory; if --out-lib is left empty it is saved automatically as <output directory>/library.speclib (generating library.predicted.speclib)"
+    },
+    {
+      "zh": "已切换为 RAW→DIA 转换模式: 只需选择 RAW 文件与输出目录, 其余分析参数将被忽略",
+      "en": "Switched to RAW→DIA conversion mode: only RAW files and the output directory are needed; other analysis parameters will be ignored"
+    },
+    {
+      "zh": "请先在文本框中粘贴 DIA-NN 命令",
+      "en": "Please paste a DIA-NN command into the text box first"
+    },
+    {
+      "zh": "RAW 目录",
+      "en": "RAW directory"
+    },
+    {
+      "zh": "光谱库",
+      "en": "Spectral library"
+    },
+    {
+      "zh": "校准库",
+      "en": "Calibration library"
+    },
+    {
+      "zh": "临时目录",
+      "en": "Temporary directory"
+    },
+    {
+      "zh": "输出目录",
+      "en": "Output directory"
+    },
+    {
+      "zh": "✔ 已重置旧分析参数并填充: %d 个布尔旗标 | %d 个数值参数 | %d 行可变修饰 | %d 行固定修饰",
+      "en": "✔ Old analysis parameters reset and filled: %d boolean flags | %d numeric parameters | %d variable modification rows | %d fixed modification rows"
+    },
+    {
+      "zh": "⚠ 可变修饰超过 6 行, 仅导入前 6 行 (丢弃 %d 行)",
+      "en": "⚠ More than 6 variable modification rows; only the first 6 are imported (%d rows dropped)"
+    },
+    {
+      "zh": "⚠ 固定修饰超过 3 行, 仅导入前 3 行 (丢弃 %d 行)",
+      "en": "⚠ More than 3 fixed modification rows; only the first 3 are imported (%d rows dropped)"
+    },
+    {
+      "zh": "布尔旗标: %s",
+      "en": "Boolean flags: %s"
+    },
+    {
+      "zh": "数值: %s",
+      "en": "Numeric: %s"
+    },
+    {
+      "zh": "RAW 文件 ×%d (已写入导入覆盖层)",
+      "en": "RAW files ×%d (written to the import overlay)"
+    },
+    {
+      "zh": "RAW 目录 (--dir/--dir-all): %s",
+      "en": "RAW directory (--dir/--dir-all): %s"
+    },
+    {
+      "zh": "FASTA ×%d (已写入导入覆盖层)",
+      "en": "FASTA ×%d (written to the import overlay)"
+    },
+    {
+      "zh": "光谱库: %s",
+      "en": "Spectral library: %s"
+    },
+    {
+      "zh": "输出目录: %s",
+      "en": "Output directory: %s"
+    },
+    {
+      "zh": "⚠ 以下路径超出允许的数据范围 (%s), 已拒绝导入:",
+      "en": "⚠ The following paths are outside the allowed data scope (%s) and were rejected:"
+    },
+    {
+      "zh": "检测到内置污染物库 --fasta, 已自动转换为启用污染物扣除",
+      "en": "Detected the built-in contaminant library via --fasta; automatically converted to enabling contaminant removal"
+    },
+    {
+      "zh": "⚠ 以下为 Windows 路径, 服务器上不可用, 已跳过:",
+      "en": "⚠ The following are Windows paths, unusable on the server, and were skipped:"
+    },
+    {
+      "zh": "检测到裸 --lib 且命令无 RAW 文件 (Windows 预测库生成命令): 已自动勾选「生成谱图库」, 谱库默认存为 <输出目录>/library.speclib",
+      "en": "Detected a bare --lib with no RAW files in the command (a Windows library-prediction command): 'Generate spectral library' was checked automatically; the library is saved by default as <output directory>/library.speclib"
+    },
+    {
+      "zh": "以下无取值旗标已忽略: %s",
+      "en": "The following value-less flags were ignored: %s"
+    },
+    {
+      "zh": "以下旗标无取值 (Windows GUI 路径留空时导出), 已忽略: %s",
+      "en": "The following flags had no value (exported when Windows GUI path fields are left empty) and were ignored: %s"
+    },
+    {
+      "zh": "以下未知旗标已追加到「额外参数」:",
+      "en": "The following unknown flags were appended to 'Extra arguments':"
+    },
+    {
+      "zh": "命令解析完成, 参数已填充",
+      "en": "Command parsed and parameters filled in"
+    },
+    {
+      "zh": "本地模式: 无 Slurm 集群节点资源表",
+      "en": "Local mode: no Slurm cluster node resource table"
+    },
+    {
+      "zh": "(sinfo 无输出——无法获取集群节点信息)",
+      "en": "(no sinfo output; unable to get cluster node information)"
+    },
+    {
+      "zh": "%s %s 不支持 SIF 镜像 (需要 %s): %s",
+      "en": "%s %s does not support SIF images (requires %s): %s"
+    },
+    {
+      "zh": "✗ 已阻止提交: ",
+      "en": "✗ Submission blocked: "
+    },
+    {
+      "zh": "apptainer 未能验证: %s",
+      "en": "apptainer could not be verified: %s"
+    },
+    {
+      "zh": "✗ 本地模式在本机执行, ",
+      "en": "✗ Local mode runs on this machine, "
+    },
+    {
+      "zh": " — 请先在「1. apptainer 运行环境」识别并验证一个可用的运行时",
+      "en": " — please identify and verify a working runtime under '1. apptainer runtime environment' first"
+    },
+    {
+      "zh": "提示:",
+      "en": "Note:"
+    },
+    {
+      "zh": "— 作业将按回退链查找 apptainer",
+      "en": "— the job will look up apptainer via the fallback chain"
+    },
+    {
+      "zh": "无法创建脚本目录:",
+      "en": "Unable to create the script directory:"
+    },
+    {
+      "zh": "(GUI 运行身份对输出目录无写权限 — 请改用输出工作区目录, 或请目录属主为该身份授权)",
+      "en": "(the identity running the GUI has no write permission on the output directory; use an output workspace directory instead, or ask the directory owner to grant write access to that identity)"
+    },
+    {
+      "zh": "✗ 提交失败:<br>",
+      "en": "✗ Submission failed:<br>"
+    },
+    {
+      "zh": "⚠ 已提交, 但不会发送邮件通知: ",
+      "en": "⚠ Submitted, but no e-mail notification will be sent: "
+    },
+    {
+      "zh": "✔ 提交成功, %s JobID: %s\n脚本: %s",
+      "en": "✔ Submitted, %s JobID: %s\nScript: %s"
+    },
+    {
+      "zh": "已归档上次运行的遗留产物 (防掩盖本次状态):<br>",
+      "en": "Archived leftover artifacts from the previous run (to avoid masking this run's status):<br>"
+    },
+    {
+      "zh": "按保留策略清理了 %d 个过期脚本/归档产物 (RETENTION_DAYS=%s)",
+      "en": "Cleaned up %d expired scripts/archived artifacts per the retention policy (RETENTION_DAYS=%s)"
+    },
+    {
+      "zh": "✗ 提交异常: ",
+      "en": "✗ Submission error: "
+    },
+    {
+      "zh": "(本地队列空闲)",
+      "en": "(local queue is idle)"
+    },
+    {
+      "zh": "(squeue 无输出)",
+      "en": "(no squeue output)"
+    },
+    {
+      "zh": "(暂无已完成的本地作业)",
+      "en": "(no completed local jobs yet)"
+    },
+    {
+      "zh": "(sacct 无输出——本集群未开启作业记账 (accounting), 无法显示历史)",
+      "en": "(no sacct output; job accounting is not enabled on this cluster, history unavailable)"
+    },
+    {
+      "zh": "⚠ 邮件通知停用: %s。%s",
+      "en": "⚠ E-mail notification disabled: %s. %s"
+    },
+    {
+      "zh": "—— 提交记录与邮件通知 (最近 100 条) ——",
+      "en": "—— Submission records and e-mail notifications (last 100) ——"
+    },
+    {
+      "zh": "已处理",
+      "en": "Processed"
+    },
+    {
+      "zh": "等待完成…",
+      "en": "Waiting to finish…"
+    },
+    {
+      "zh": "请先输入要取消的作业 ID",
+      "en": "Please enter the job ID to cancel first"
+    },
+    {
+      "zh": "确认取消作业",
+      "en": "Confirm job cancellation"
+    },
+    {
+      "zh": "确认取消%s作业 %d 吗? 该操作不可撤销。",
+      "en": "Cancel %s job %d? This cannot be undone."
+    },
+    {
+      "zh": "返回",
+      "en": "Back"
+    },
+    {
+      "zh": "确认取消",
+      "en": "Confirm cancellation"
+    },
+    {
+      "zh": "作业 ID 无效",
+      "en": "Invalid job ID"
+    },
+    {
+      "zh": "手动指定目录",
+      "en": "manually specified directory"
+    },
+    {
+      "zh": "本会话提交记录",
+      "en": "Submissions in this session"
+    },
+    {
+      "zh": "GUI 提交注册表",
+      "en": "GUI submission registry"
+    },
+    {
+      "zh": "本地作业记录",
+      "en": "local job records"
+    },
+    {
+      "zh": "scontrol (Slurm 实时信息)",
+      "en": "scontrol (live Slurm info)"
+    },
+    {
+      "zh": "sacct 工作目录",
+      "en": "sacct working directory"
+    },
+    {
+      "zh": "请先输入作业 ID",
+      "en": "Please enter a job ID first"
+    },
+    {
+      "zh": "手动目录: %s",
+      "en": "Manual directory: %s"
+    },
+    {
+      "zh": "未手动指定日志目录",
+      "en": "No log directory manually specified"
+    },
+    {
+      "zh": "手动目录 → 本会话提交记录 → GUI 提交注册表 → 本地作业记录",
+      "en": "manual directory → this session's submission records → GUI submission registry → local job records"
+    },
+    {
+      "zh": "手动目录 → 本会话提交记录 → GUI 提交注册表 → scontrol (Slurm) → sacct 工作目录",
+      "en": "manual directory → this session's submission records → GUI submission registry → scontrol (Slurm) → sacct working directory"
+    },
+    {
+      "zh": "说明: 本地模式日志为 local-<ID>.out/.err, 位于作业的输出目录。",
+      "en": "Note: in local mode the logs are local-<ID>.out/.err, located in the job's output directory."
+    },
+    {
+      "zh": "说明: 运行中/排队中/刚结束的作业可经 scontrol 定位; 本 GUI 提交的作业永久记录在注册表;\n早已结束且非本 GUI 提交的作业, Slurm 记账库不保存日志路径 (20.11), 请手动指定日志目录。",
+      "en": "Note: running/queued/just-finished jobs can be located via scontrol; jobs submitted by this GUI are permanently recorded in the registry;\nfor jobs that finished long ago and were not submitted by this GUI, the Slurm accounting database does not keep log paths (20.11), please specify the log directory manually."
+    },
+    {
+      "zh": "未能自动定位作业 %d 的日志。\n已依次尝试: %s。\n%s\n%s",
+      "en": "Could not automatically locate the log of job %d.\nTried in order: %s.\n%s\n%s"
+    },
+    {
+      "zh": "=== %s (尾部 %d 行, 来源: %s) ===\n",
+      "en": "=== %s (last %d lines, source: %s) ===\n"
+    },
+    {
+      "zh": "\n\n=== %s (尾部 %d 行, 程序报错通常在这里) ===\n%s",
+      "en": "\n\n=== %s (last %d lines, program errors are usually here) ===\n%s"
+    },
+    {
+      "zh": "来源: %s (共 %d 个参数)\n官方文档: https://github.com/vdemichev/DiaNN",
+      "en": "Source: %s (%d parameters in total)\nOfficial docs: https://github.com/vdemichev/DiaNN"
+    },
+    {
+      "zh": "未找到参数说明文档 — 请自行从 DIA-NN 官方仓库获取命令行参考, 存为工作目录下的 DIANN_param_reference.md (v1.13 起不再随包分发)",
+      "en": "Parameter reference document not found; get the command-line reference from the official DIA-NN repository yourself and save it as DIANN_param_reference.md in the working directory (no longer shipped with the package since v1.13)"
+    },
+    {
+      "zh": "未扫描到 sif 镜像, 请检查 config.R 中的 SIF_DIRS",
+      "en": "No .sif images found; check SIF_DIRS in config.R"
+    },
+    {
+      "zh": "✔ 共 %d 个镜像, 已识别 %d 个 (其中 %d 个在 GUI 三种模式实测通过: RAW→DIA 转换 / 直接搜库+MBR+污染物扣除 / FASTA 生成预测库); 其余已识别版本尚无实测记录, 升级生产数据前建议先跑小样本回归。",
+      "en": "✔ %d images in total, %d identified (%d of them tested and passed in all three GUI modes: RAW→DIA conversion / direct search+MBR+contaminant removal / FASTA predicted library); the other identified versions have no test record yet, run a small-sample regression before upgrading production data."
+    },
+    {
+      "zh": "暂无实测说明。",
+      "en": "No test notes yet."
+    },
+    {
+      "zh": "版本未识别 — 在「2. DIA-NN 版本」选中后自动识别, 或点「识别所有未识别镜像」。",
+      "en": "Version unidentified; select it under '2. DIA-NN versions' to identify it automatically, or click 'Identify all unidentified images'."
+    },
+    {
+      "zh": "版本未识别",
+      "en": "Version unidentified"
+    },
+    {
+      "zh": "未扫描到 sif 镜像",
+      "en": "No .sif images found"
+    },
+    {
+      "zh": "已识别",
+      "en": "Identified"
+    },
+    {
+      "zh": "上次识别失败",
+      "en": "Last identification failed"
+    },
+    {
+      "zh": "尚无已完成作业的提交记录; 可直接在「结果分析」页填写矩阵路径。",
+      "en": "No submission records of completed jobs yet; you can enter the matrix path directly on the 'Downstream Analysis' page."
+    },
+    {
+      "zh": " 该作业输出目录未发现 *matrix*.tsv 蛋白矩阵",
+      "en": " No *matrix*.tsv protein matrix found in this job's output directory"
+    },
+    {
+      "zh": " (DIA-NN 需带 --matrices 导出; 主报告 report.tsv 是前体级, 不用于本页)。",
+      "en": " (DIA-NN must be run with --matrices to export it; the main report report.tsv is precursor-level and not used on this page)."
+    },
+    {
+      "zh": "蛋白矩阵 (%d 个候选, pg_matrix 优先):",
+      "en": "Protein matrix (%d candidates, pg_matrix preferred):"
+    },
+    {
+      "zh": "选中文件 %.1f MB",
+      "en": "Selected file %.1f MB"
+    },
+    {
+      "zh": "未找到可用矩阵; 请在「结果分析」页手动填写路径。",
+      "en": "No usable matrix found; please enter the path manually on the 'Downstream Analysis' page."
+    },
+    {
+      "zh": "<b>版本要求:<\/b> %s。SIF 是 Singularity 3.0 起的镜像格式, 2.x (如 conda 里的 2.4.6) 只能读 squashfs/ext3 的 .simg, 对 .sif 会报 <code>Unknown image format/type<\/code>; 候选里标注 <b style='color:#dd4b39'>⚠ 不支持 SIF<\/b> 的请勿选用。",
+      "en": "<b>Version requirement:<\/b> %s. SIF is the image format introduced with Singularity 3.0; 2.x (e.g. 2.4.6 from conda) can only read squashfs/ext3 .simg files and reports <code>Unknown image format/type<\/code> for .sif; do not choose candidates marked <b style='color:#dd4b39'>⚠ SIF not supported<\/b>."
+    },
+    {
+      "zh": "SIF 镜像需要 <b>%s<\/b>; 低于此版本的 singularity 能执行 <code>--version<\/code> 但读不了 .sif, 提交会被拦下。",
+      "en": "SIF images require <b>%s<\/b>; older singularity versions can run <code>--version<\/code> but cannot read .sif, so submission will be blocked."
+    },
+    {
+      "zh": "验证链: 文件存在/可读 → SIF 魔数 → 运行时版本 (<b>%s<\/b>) → apptainer inspect → 容器内启动 diann-linux。",
+      "en": "Verification chain: file exists/readable → SIF magic number → runtime version (<b>%s<\/b>) → apptainer inspect → launch diann-linux inside the container."
+    },
+    {
+      "zh": "结果分析",
+      "en": "Downstream Analysis"
+    },
+    {
+      "zh": "提交分析",
+      "en": "Submit Analysis"
+    },
+    {
+      "zh": "任务队列",
+      "en": "Job Queue"
+    },
+    {
+      "zh": "参数速查",
+      "en": "Parameter Reference"
+    },
+    {
+      "zh": "更新说明",
+      "en": "Changelog"
+    },
+    {
+      "zh": "<b>当前执行后端：本地单机（无 Slurm）<\/b> — 作业在本 GUI 所在主机直接运行；关闭浏览器不影响作业；日志为 <code>local-&lt;作业ID&gt;.out/.err<\/code>；并发上限见 LOCAL_MAX_JOBS。",
+      "en": "<b>Current execution backend: Local workstation (no Slurm)<\/b> — jobs run directly on the host running this GUI; closing the browser does not affect running jobs; logs are <code>local-&lt;jobID&gt;.out/.err<\/code>; see LOCAL_MAX_JOBS for the concurrency cap."
+    },
+    {
+      "zh": "<b>当前执行后端：Slurm 集群<\/b> — 作业提交到队列，需排队；日志为 <code>slurm-&lt;作业ID&gt;.out/.err<\/code>；进度在「任务队列」页查看。",
+      "en": "<b>Current execution backend: Slurm cluster<\/b> — jobs are submitted to the queue and may wait; logs are <code>slurm-&lt;jobID&gt;.out/.err<\/code>; check progress on the \"Job Queue\" page."
+    },
+    {
+      "zh": "1. apptainer 运行环境",
+      "en": "1. apptainer runtime environment"
+    },
+    {
+      "zh": "apptainer (自动识别, 共 %d 个):",
+      "en": "apptainer (auto-detected, %d in total):"
+    },
+    {
+      "zh": "重新扫描",
+      "en": "Rescan"
+    },
+    {
+      "zh": "扫描 PATH、APPTAINER_PATHS 与常见安装位置; 多版本按版本号列出。",
+      "en": "Scans PATH, APPTAINER_PATHS and common install locations; multiple versions are listed by version number."
+    },
+    {
+      "zh": "手动指定 apptainer 路径",
+      "en": "Specify the apptainer path manually"
+    },
+    {
+      "zh": "apptainer 可执行文件完整路径:",
+      "en": "Full path to the apptainer executable:"
+    },
+    {
+      "zh": "识别并验证",
+      "en": "Identify and verify"
+    },
+    {
+      "zh": "当前生效 apptainer:",
+      "en": "Currently active apptainer:"
+    },
+    {
+      "zh": "作业脚本优先使用该路径; 计算节点不可见时按 APPTAINER_PATHS → PATH → module 回退。",
+      "en": "Job scripts prefer this path; if it is not visible on compute nodes, fall back via APPTAINER_PATHS → PATH → module."
+    },
+    {
+      "zh": "运行环境自检 (GUI 节点):",
+      "en": "Runtime self-check (GUI node):"
+    },
+    {
+      "zh": "2. DIA-NN 版本 (sif 镜像)",
+      "en": "2. DIA-NN version (SIF image)"
+    },
+    {
+      "zh": "镜像 (扫描 SIF_DIRS 下所有 *.sif, 文件名无关):",
+      "en": "Image (scans all *.sif under SIF_DIRS, filename-agnostic):"
+    },
+    {
+      "zh": "版本来自容器内实测 (选中未识别镜像会自动识别); 若下拉为空请检查 config.R 中的 SIF_DIRS。",
+      "en": "Versions are measured inside the container (an unidentified image is identified automatically when selected); if the dropdown is empty, check SIF_DIRS in config.R."
+    },
+    {
+      "zh": "浏览/手动指定其他镜像",
+      "en": "Browse / specify another image manually"
+    },
+    {
+      "zh": "选择 SIF 镜像文件",
+      "en": "Select SIF image file"
+    },
+    {
+      "zh": "在数据卷内选择 .sif 镜像 (单个)",
+      "en": "Select a .sif image on the data volume (single)"
+    },
+    {
+      "zh": "sif 文件完整路径 (选择或手动输入):",
+      "en": "Full path to the .sif file (pick or type in):"
+    },
+    {
+      "zh": "镜像须位于计算节点可见的共享存储; 浏览范围限于数据卷, 之外的路径请手动输入。",
+      "en": "The image must be on shared storage visible to the compute nodes; browsing is limited to the data volume — type in other paths manually."
+    },
+    {
+      "zh": "当前生效镜像:",
+      "en": "Currently active image:"
+    },
+    {
+      "zh": "验证镜像可用性 (快速)",
+      "en": "Verify image usability (fast)"
+    },
+    {
+      "zh": "识别版本并深度验证 (容器内启动, 较慢)",
+      "en": "Identify version and deep-verify (launches the container, slower)"
+    },
+    {
+      "zh": "识别所有未识别镜像",
+      "en": "Identify all unidentified images"
+    },
+    {
+      "zh": "取消识别",
+      "en": "Cancel identification"
+    },
+    {
+      "zh": "3. 文件与数据库",
+      "en": "3. Files and databases"
+    },
+    {
+      "zh": "RAW 输入方式:",
+      "en": "RAW input mode:"
+    },
+    {
+      "zh": "选择文件",
+      "en": "Select files"
+    },
+    {
+      "zh": "扫描目录",
+      "en": "Scan directory"
+    },
+    {
+      "zh": "选择 RAW 文件",
+      "en": "Select RAW files"
+    },
+    {
+      "zh": "选择待分析的原始文件 (可多选)",
+      "en": "Select raw files to analyze (multiple allowed)"
+    },
+    {
+      "zh": "选择 RAW 目录",
+      "en": "Select RAW directory"
+    },
+    {
+      "zh": "选择包含原始文件的目录 (递归扫描)",
+      "en": "Select a directory containing raw files (recursive scan)"
+    },
+    {
+      "zh": "注意: DIA-NN 会在 RAW 目录生成 *.raw.quant 缓存并自动复用, 同一目录混用不同谱库/版本的分析可能报 library size mismatch, 必要时删除 *.raw.quant",
+      "en": "Note: DIA-NN creates and reuses *.raw.quant caches in the RAW directory; analyzing the same directory with different libraries/versions may report library size mismatch — delete *.raw.quant if needed"
+    },
+    {
+      "zh": "选择光谱库",
+      "en": "Select spectral library"
+    },
+    {
+      "zh": "选择光谱库 (可选, .speclib/.parquet/.tsv/.msp/.sptxt)",
+      "en": "Select a spectral library (optional, .speclib/.parquet/.tsv/.msp/.sptxt)"
+    },
+    {
+      "zh": "与 FASTA 至少提供一个",
+      "en": "At least one of this and the FASTA files is required"
+    },
+    {
+      "zh": "选择 FASTA",
+      "en": "Select FASTA"
+    },
+    {
+      "zh": "选择蛋白序列库 (可多选, 无库分析时必选)",
+      "en": "Select protein sequence files (multiple allowed; required for library-free analysis)"
+    },
+    {
+      "zh": "启用污染物扣除 (cRAP)",
+      "en": "Enable contaminant removal (cRAP)"
+    },
+    {
+      "zh": "排除标签 (--cont-quant-exclude):",
+      "en": "Exclusion tag (--cont-quant-exclude):"
+    },
+    {
+      "zh": "自动附加内置 cRAP 污染物库 (125 条) 并从定量中排除该类蛋白",
+      "en": "Automatically appends the built-in cRAP contaminant library (125 entries) and excludes such proteins from quantification"
+    },
+    {
+      "zh": "选择校准库",
+      "en": "Select calibration library"
+    },
+    {
+      "zh": "选择专用校准谱库 --ref (可选)",
+      "en": "Select a dedicated calibration library --ref (optional)"
+    },
+    {
+      "zh": "可选: 仅用于校准的小型谱库",
+      "en": "Optional: a small library used only for calibration"
+    },
+    {
+      "zh": "4. 输出设置",
+      "en": "4. Output settings"
+    },
+    {
+      "zh": "选择输出目录",
+      "en": "Select output directory"
+    },
+    {
+      "zh": "选择结果存放目录",
+      "en": "Choose where to store results"
+    },
+    {
+      "zh": "主报告文件名 (自动加 .tsv):",
+      "en": "Main report file name (.tsv appended automatically):"
+    },
+    {
+      "zh": "选择临时目录 --temp (可选)",
+      "en": "Select temp directory --temp (optional)"
+    },
+    {
+      "zh": "选择临时目录",
+      "en": "Select a temp directory"
+    },
+    {
+      "zh": "仅执行 RAW→DIA 转换 (--convert)",
+      "en": "RAW→DIA conversion only (--convert)"
+    },
+    {
+      "zh": "勾选后忽略分析参数; 转换后的 .dia 文件保存在 RAW 文件所在目录",
+      "en": "When checked, analysis parameters are ignored; the converted .dia files are saved in the RAW files' directory"
+    },
+    {
+      "zh": "5. 分析参数",
+      "en": "5. Analysis parameters"
+    },
+    {
+      "zh": "预设: FASTA 生成预测库",
+      "en": "Preset: predict library from FASTA"
+    },
+    {
+      "zh": "预设: RAW 转 DIA (仅转换)",
+      "en": "Preset: RAW to DIA (conversion only)"
+    },
+    {
+      "zh": "预设仅切换常用开关组合, 其余参数仍可手动调整。",
+      "en": "Presets only toggle common switch combinations; the remaining parameters can still be adjusted manually."
+    },
+    {
+      "zh": "命令导入 (自动识别并填充参数)",
+      "en": "Command import (auto-detect and fill parameters)"
+    },
+    {
+      "zh": "粘贴 DIA-NN 命令 (支持 Windows GUI 生成的命令、本页预览的 %s 脚本):",
+      "en": "Paste a DIA-NN command (supports Windows GUI commands and the %s script previewed on this page):"
+    },
+    {
+      "zh": "解析并填充参数",
+      "en": "Parse and fill parameters"
+    },
+    {
+      "zh": "覆盖 RAW 文件 (用导入路径)",
+      "en": "Override RAW files (use imported paths)"
+    },
+    {
+      "zh": "覆盖 RAW 目录 (用导入路径)",
+      "en": "Override RAW directory (use imported paths)"
+    },
+    {
+      "zh": "覆盖光谱库 library (用导入路径)",
+      "en": "Override spectral library (use imported paths)"
+    },
+    {
+      "zh": "覆盖 FASTA (用导入路径)",
+      "en": "Override FASTA (use imported paths)"
+    },
+    {
+      "zh": "覆盖校准库 ref (用导入路径)",
+      "en": "Override calibration library ref (use imported paths)"
+    },
+    {
+      "zh": "覆盖输出目录 (用导入路径)",
+      "en": "Override output directory (use imported paths)"
+    },
+    {
+      "zh": "覆盖临时目录 (用导入路径)",
+      "en": "Override temp directory (use imported paths)"
+    },
+    {
+      "zh": "6. 运行资源 (本地)",
+      "en": "6. Run resources (local)"
+    },
+    {
+      "zh": "6. Slurm 资源",
+      "en": "6. Slurm resources"
+    },
+    {
+      "zh": "任务名称:",
+      "en": "Job name:"
+    },
+    {
+      "zh": "计算分区:",
+      "en": "Partition:"
+    },
+    {
+      "zh": "内存建议 (GB, 仅提示不可强制):",
+      "en": "Memory suggestion (GB, advisory only):"
+    },
+    {
+      "zh": "内存 (GB):",
+      "en": "Memory (GB):"
+    },
+    {
+      "zh": "超时时限 (小时, 留空=不限):",
+      "en": "Timeout (hours, empty = unlimited):"
+    },
+    {
+      "zh": "时限 (小时, 留空=不限):",
+      "en": "Time limit (hours, empty = unlimited):"
+    },
+    {
+      "zh": "本地模式直接在 GUI 所在主机运行 (无排队/无 Slurm 记账); 线程数由「5. 分析参数 → 常规 → 线程数」决定, 时限到点由运行器 timeout 强制终止。",
+      "en": "Local mode runs directly on the host running this GUI (no queueing, no Slurm accounting); the thread count is set under \"5. Analysis parameters → General → Threads\", and the runner enforces the timeout when the limit is reached."
+    },
+    {
+      "zh": "CPU 核数不在此设置: Slurm 的 --cpus-per-task 与 DIA-NN 的 --threads 同源, 由「5. 分析参数 → 常规 → 线程数」决定。",
+      "en": "CPU cores are not set here: Slurm's --cpus-per-task and DIA-NN's --threads share the same source, set under \"5. Analysis parameters → General → Threads\"."
+    },
+    {
+      "zh": "7. 命令预览与提交 (本地执行)",
+      "en": "7. Command preview and submission (local execution)"
+    },
+    {
+      "zh": "7. 命令预览与提交 (Slurm 提交)",
+      "en": "7. Command preview and submission (Slurm submission)"
+    },
+    {
+      "zh": "邮箱通知 (可选):",
+      "en": "E-mail notification (optional):"
+    },
+    {
+      "zh": "作业结束时自动发送邮件, 含项目简介与结果简介; 多个邮箱用英文逗号分隔。",
+      "en": "An e-mail is sent automatically when the job finishes, with the project and result summary; separate multiple addresses with commas."
+    },
+    {
+      "zh": "需在服务器配置邮件凭据与 python3 (未配置时提交会提示, 不影响作业)。",
+      "en": "E-mail credentials and python3 must be configured on the server (submission prompts if unconfigured; the job itself is unaffected)."
+    },
+    {
+      "zh": "项目简介 (可选, 随完成邮件发送):",
+      "en": "Project description (optional, sent with the completion e-mail):"
+    },
+    {
+      "zh": "例如: 小鼠单细胞 DIA 数据, 考察 XX 处理组的蛋白组差异…",
+      "en": "e.g. mouse single-cell DIA data, profiling proteome differences across XX treatment groups…"
+    },
+    {
+      "zh": "提交本地任务",
+      "en": "Submit local job"
+    },
+    {
+      "zh": "提交 Slurm 任务",
+      "en": "Submit Slurm job"
+    },
+    {
+      "zh": "提交前请确认上方校验提示为空、命令预览符合预期。",
+      "en": "Before submitting, make sure the validation messages above are empty and the command preview looks as expected."
+    },
+    {
+      "zh": "本地脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 local-<任务ID>.out/.err;",
+      "en": "The local script is saved under output directory/diann_gui_scripts/, with stdout/stderr logs as local-<jobID>.out/.err in the output directory;"
+    },
+    {
+      "zh": "作业脱离浏览器会话运行, 关闭页面不影响执行。",
+      "en": "Jobs run independently of the browser session; closing the page does not affect execution."
+    },
+    {
+      "zh": "Slurm 脚本将保存到 输出目录/diann_gui_scripts/ 下, stdout/stderr 日志为输出目录下 slurm-<任务ID>.out/.err。",
+      "en": "The Slurm script is saved under output directory/diann_gui_scripts/, with stdout/stderr logs as slurm-<jobID>.out/.err in the output directory."
+    },
+    {
+      "zh": "<b>当前执行后端：本地单机（无 Slurm）<\/b> — 本地作业状态来自本机状态文件，无 Slurm 记账；日志为 <code>local-&lt;作业ID&gt;.out<\/code>。",
+      "en": "<b>Current execution backend: Local workstation (no Slurm)<\/b> — local job status comes from the local state file, with no Slurm accounting; logs are <code>local-&lt;jobID&gt;.out<\/code>."
+    },
+    {
+      "zh": "<b>当前执行后端：Slurm 集群<\/b> — 队列/记账数据来自 squeue/sacct；日志为 <code>slurm-&lt;作业ID&gt;.out<\/code>。",
+      "en": "<b>Current execution backend: Slurm cluster<\/b> — queue/accounting data comes from squeue/sacct; logs are <code>slurm-&lt;jobID&gt;.out<\/code>."
+    },
+    {
+      "zh": "集群节点资源 (sinfo)",
+      "en": "Cluster node resources (sinfo)"
+    },
+    {
+      "zh": "本地运行任务",
+      "en": "Locally running jobs"
+    },
+    {
+      "zh": "运行队列 (squeue)",
+      "en": "Job queue (squeue)"
+    },
+    {
+      "zh": "自动刷新 (10 秒)",
+      "en": "Auto refresh (10 s)"
+    },
+    {
+      "zh": "立即刷新",
+      "en": "Refresh now"
+    },
+    {
+      "zh": "近期历史 (本地作业, 最近 300 条)",
+      "en": "Recent history (local jobs, last 300)"
+    },
+    {
+      "zh": "近期历史 (sacct, 最近一天)",
+      "en": "Recent history (sacct, last day)"
+    },
+    {
+      "zh": "作业ID: 本地作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 (已完成/运行中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻",
+      "en": "Job ID: local job number | Job name: name given at submission | Status: job outcome (completed/running/failed/timeout/cancelled etc.) | Elapsed: actual run time | End: job exit time"
+    },
+    {
+      "zh": "作业ID: Slurm 作业号 | 作业名: 提交时的任务名称 | 状态: 作业结果 (已完成/运行中/排队中/失败/超时/已取消等) | 运行时长: 作业实际运行时间 | 结束时间: 作业退出时刻",
+      "en": "Job ID: Slurm job ID | Job name: name given at submission | Status: job outcome (completed/running/pending/failed/timeout/cancelled etc.) | Elapsed: actual run time | End: job exit time"
+    },
+    {
+      "zh": "取消作业",
+      "en": "Cancel jobs"
+    },
+    {
+      "zh": "作业 ID:",
+      "en": "Job ID:"
+    },
+    {
+      "zh": "取消该作业",
+      "en": "Cancel this job"
+    },
+    {
+      "zh": "scancel 取消该作业",
+      "en": "Cancel this job (scancel)"
+    },
+    {
+      "zh": "运行日志查看 (local-<ID>.out 尾部)",
+      "en": "View run log (tail of local-<ID>.out)"
+    },
+    {
+      "zh": "运行日志查看 (slurm-<ID>.out 尾部)",
+      "en": "View run log (tail of slurm-<ID>.out)"
+    },
+    {
+      "zh": "指定日志目录 (可选, 留空自动定位)",
+      "en": "Specify log directory (optional; auto-located if left empty)"
+    },
+    {
+      "zh": "选择包含日志的目录",
+      "en": "Select the directory containing logs"
+    },
+    {
+      "zh": "查看日志 (尾部 120 行)",
+      "en": "View log (last 120 lines)"
+    },
+    {
+      "zh": "结果分析入口 (已完成作业的蛋白矩阵)",
+      "en": "Downstream analysis entry point (protein matrices of completed jobs)"
+    },
+    {
+      "zh": "已完成作业 (提交记录):",
+      "en": "Completed jobs (from submission records):"
+    },
+    {
+      "zh": "进入下游分析",
+      "en": "Go to downstream analysis"
+    },
+    {
+      "zh": "从提交记录定位已完成作业输出目录内的 *matrix*.tsv 蛋白矩阵",
+      "en": "Locates *matrix*.tsv protein matrices in the output directory of completed jobs from the submission records"
+    },
+    {
+      "zh": "(DIA-NN --matrices 导出; pg_matrix 优先), 一键带入「结果分析」页。",
+      "en": "(exported by DIA-NN --matrices; pg_matrix preferred) and loads them into the \"Downstream Analysis\" page in one click."
+    },
+    {
+      "zh": "提交记录为空或作业较旧时, 请直接在「结果分析」页填写矩阵路径。",
+      "en": "If the submission records are empty or the job is older, enter the matrix path directly on the \"Downstream Analysis\" page."
+    },
+    {
+      "zh": "DIA-NN 命令行参数速查",
+      "en": "DIA-NN command-line parameter reference"
+    },
+    {
+      "zh": "DIA-NN 版本说明 (含实测结论)",
+      "en": "DIA-NN version notes (with hands-on findings)"
+    },
+    {
+      "zh": "本机已扫描到的 sif 镜像:",
+      "en": "SIF images scanned on this machine:"
+    },
+    {
+      "zh": "DIA-NN 2.0 系列官方更新日志 (Release Notes 原文, 新的在前)",
+      "en": "Official DIA-NN 2.x release notes (upstream text, newest first)"
+    },
+    {
+      "zh": "GUI 更新日志 (当前 v%s)",
+      "en": "GUI changelog (current v%s)"
+    },
+    {
+      "zh": "如 UniMod:35",
+      "en": "e.g. UniMod:35"
+    },
+    {
+      "zh": "如 15.994915",
+      "en": "e.g. 15.994915"
+    },
+    {
+      "zh": "如 M / STY / *n",
+      "en": "e.g. M / STY / *n"
+    },
+    {
+      "zh": "%s (%s) <span class='flag-hint'>%s<\/span>",
+      "en": "%s (%s) <span class='flag-hint'>%s<\/span>"
+    },
+    {
+      "zh": "%s; 留空 = 默认 %s–%s",
+      "en": "%s; leave empty = default %s–%s"
+    },
+    {
+      "zh": "常规",
+      "en": "General"
+    },
+    {
+      "zh": "日志详细度 (Verbosity):",
+      "en": "Verbosity:"
+    },
+    {
+      "zh": "质量与提取",
+      "en": "Quality & extraction"
+    },
+    {
+      "zh": "自动",
+      "en": "auto"
+    },
+    {
+      "zh": "留空 = 自动",
+      "en": "empty = auto"
+    },
+    {
+      "zh": "留空 = 默认 0.01",
+      "en": "empty = default 0.01"
+    },
+    {
+      "zh": "留空 = 默认",
+      "en": "empty = default"
+    },
+    {
+      "zh": "以上数值参数留空时保持 DIA-NN 自动优化行为, 不写入命令行。",
+      "en": "When left empty, the numeric parameters above keep DIA-NN's automatic optimization behavior and are not written to the command line."
+    },
+    {
+      "zh": "修饰",
+      "en": "Modifications"
+    },
+    {
+      "zh": "可变修饰 (Variable modifications)",
+      "en": "Variable modifications"
+    },
+    {
+      "zh": "--var-mod 名称,质量,位点",
+      "en": "--var-mod name,mass,sites"
+    },
+    {
+      "zh": "名称 (Name)",
+      "en": "Name"
+    },
+    {
+      "zh": "质量 (Mass)",
+      "en": "Mass"
+    },
+    {
+      "zh": "位点 (Sites)",
+      "en": "Sites"
+    },
+    {
+      "zh": "固定修饰 (Fixed modifications)",
+      "en": "Fixed modifications"
+    },
+    {
+      "zh": "--fixed-mod; 留空行忽略",
+      "en": "--fixed-mod; empty rows are ignored"
+    },
+    {
+      "zh": "FASTA搜索/库构建",
+      "en": "FASTA search / library building"
+    },
+    {
+      "zh": "无库(FASTA)分析时必须勾选; 仅用 FASTA 为谱库注释时保持不勾选",
+      "en": "Required for library-free (FASTA-only) analysis; keep unchecked when FASTA is only used to annotate an existing library"
+    },
+    {
+      "zh": "酶切特异性 (Specificity):",
+      "en": "Cut specificity:"
+    },
+    {
+      "zh": "默认 K*,R*,!*P (标准胰酶); Trypsin/P: K*,R*; Lys-C: K*,!*P; 非特异: **",
+      "en": "Default K*,R*,!*P (standard trypsin); Trypsin/P: K*,R*; Lys-C: K*,!*P; non-specific: **"
+    },
+    {
+      "zh": "留空 = 默认 1",
+      "en": "empty = default 1"
+    },
+    {
+      "zh": "输出目录/library.speclib",
+      "en": "output directory/library.speclib"
+    },
+    {
+      "zh": "留空 = <输出目录>/library.speclib",
+      "en": "empty = <output directory>/library.speclib"
+    },
+    {
+      "zh": "留空 = 默认 0.05",
+      "en": "empty = default 0.05"
+    },
+    {
+      "zh": "高级",
+      "en": "Advanced"
+    },
+    {
+      "zh": "留空 = 关闭",
+      "en": "empty = disabled"
+    },
+    {
+      "zh": "额外参数",
+      "en": "Extra arguments"
+    },
+    {
+      "zh": "其他参数 (Additional arguments, 原样追加到命令尾部, 空格分隔):",
+      "en": "Additional arguments (appended verbatim to the end of the command, space-separated):"
+    },
+    {
+      "zh": "例如: --cfg /path/to/config.txt --min-fr 3 --loc-factor 40",
+      "en": "e.g. --cfg /path/to/config.txt --min-fr 3 --loc-factor 40"
+    },
+    {
+      "zh": "未在以上面板覆盖的参数均可在此填写; 完整参数说明见\"参数速查\"页。",
+      "en": "Any parameter not covered by the panels above can be entered here; see the \"Parameter Reference\" page for full details."
+    },
+    {
+      "zh": "1. 数据来源 (蛋白定量矩阵)",
+      "en": "1. Data source (protein quantification matrix)"
+    },
+    {
+      "zh": "矩阵格式:",
+      "en": "Matrix format:"
+    },
+    {
+      "zh": "DIA-NN（pg_matrix）",
+      "en": "DIA-NN (pg_matrix)"
+    },
+    {
+      "zh": "Spectronaut（PG.* 矩阵）",
+      "en": "Spectronaut (PG.* matrix)"
+    },
+    {
+      "zh": "浏览服务器文件",
+      "en": "Browse server files"
+    },
+    {
+      "zh": "选择蛋白定量矩阵 (tsv/txt/csv)",
+      "en": "Select a protein quantification matrix (tsv/txt/csv)"
+    },
+    {
+      "zh": "矩阵文件完整路径:",
+      "en": "Full path to the matrix file:"
+    },
+    {
+      "zh": "读取矩阵",
+      "en": "Read matrix"
+    },
+    {
+      "zh": "数据在服务端共享存储上直接读取 (不上传); DIA-NN 作业完成后可在",
+      "en": "Data is read directly from server-side shared storage (no upload); after a DIA-NN job finishes, you can"
+    },
+    {
+      "zh": "「任务队列」页一键带入本页。",
+      "en": "load it into this page in one click from the \"Job Queue\" page."
+    },
+    {
+      "zh": "2. 全局参数",
+      "en": "2. Global parameters"
+    },
+    {
+      "zh": "低检出过滤 (检出率下限)",
+      "en": "Low-detection filter (detection rate floor)"
+    },
+    {
+      "zh": "分组内最少检测样本数 (0=不启用)",
+      "en": "Min detected samples per group (0 = disabled)"
+    },
+    {
+      "zh": "缺失值处理方法:",
+      "en": "Missing value handling:"
+    },
+    {
+      "zh": "不填补 (仅 QC)",
+      "en": "No imputation (QC only)"
+    },
+    {
+      "zh": "LoD 左截断高斯 (MNAR)",
+      "en": "LoD left-censored Gaussian (MNAR)"
+    },
+    {
+      "zh": "KNN (MAR)",
+      "en": "KNN (MAR)"
+    },
+    {
+      "zh": "seqKNN 顺序 KNN",
+      "en": "seqKNN (sequential KNN)"
+    },
+    {
+      "zh": "LoD: 检测限左删失 (逐样本列, 偏移 1.8 SD / 缩放 0.3 SD / 种子 42);",
+      "en": "LoD: left-censoring at the detection limit (per sample column, offset 1.8 SD / scaled 0.3 SD / seed 42);"
+    },
+    {
+      "zh": "选「不填补」时差异分析与功能富集自动停用。",
+      "en": "with \"No imputation\", differential analysis and functional enrichment are disabled automatically."
+    },
+    {
+      "zh": "物种 (功能富集注释库):",
+      "en": "Species (functional enrichment annotation):"
+    },
+    {
+      "zh": "Danio rerio（斑马鱼）",
+      "en": "Danio rerio (zebrafish)"
+    },
+    {
+      "zh": "分析模块 (数据预处理始终执行):",
+      "en": "Analysis modules (preprocessing always runs):"
+    },
+    {
+      "zh": "limma 差异分析",
+      "en": "limma differential analysis"
+    },
+    {
+      "zh": "GO/KEGG 功能富集",
+      "en": "GO/KEGG functional enrichment"
+    },
+    {
+      "zh": "① 数据与分组",
+      "en": "① Data & grouping"
+    },
+    {
+      "zh": "分组设置",
+      "en": "Group setup"
+    },
+    {
+      "zh": "应用分组",
+      "en": "Apply grouping"
+    },
+    {
+      "zh": "恢复自动推断",
+      "en": "Restore auto-inference"
+    },
+    {
+      "zh": "双击「样本名」或「组名」单元格即可修改; 改完点「应用分组」生效。",
+      "en": "Double-click a \"Sample\" or \"Group\" cell to edit; click \"Apply grouping\" to take effect."
+    },
+    {
+      "zh": "样本多时可点「批量填入分组…」从 Excel 粘贴。",
+      "en": "For many samples, use \"Batch fill groups…\" to paste from Excel."
+    },
+    {
+      "zh": "批量填入分组…",
+      "en": "Batch fill groups…"
+    },
+    {
+      "zh": "批次设置 (可选 ComBat 去批次)",
+      "en": "Batch setup (optional ComBat batch removal)"
+    },
+    {
+      "zh": "启用 ComBat 去批次校正",
+      "en": "Enable ComBat batch correction"
+    },
+    {
+      "zh": "数据预览 (前 30 行)",
+      "en": "Data preview (first 30 rows)"
+    },
+    {
+      "zh": "② 预处理",
+      "en": "② Preprocessing"
+    },
+    {
+      "zh": "处理明细",
+      "en": "Processing details"
+    },
+    {
+      "zh": "处理告警",
+      "en": "Processing warnings"
+    },
+    {
+      "zh": "缺失机制诊断 (平均丰度 vs 缺失率)",
+      "en": "Missingness mechanism diagnosis (mean abundance vs missing rate)"
+    },
+    {
+      "zh": "低丰度蛋白缺失率偏高 (左图负相关、右图箱体左移) 属 MNAR, 适合 LoD 插补。",
+      "en": "High missing rates among low-abundance proteins (negative correlation in the left plot, boxes shifted left in the right plot) indicate MNAR; LoD imputation is appropriate."
+    },
+    {
+      "zh": "归一化前后强度分布",
+      "en": "Intensity distributions before/after normalization"
+    },
+    {
+      "zh": "③ QC 可视化",
+      "en": "③ QC visualization"
+    },
+    {
+      "zh": "QC 直方图分箱数 (检出频率/缺失率分布)",
+      "en": "QC histogram bin count (detection frequency/missing rate)"
+    },
+    {
+      "zh": "④ 差异分析",
+      "en": "④ Differential analysis"
+    },
+    {
+      "zh": "P 值校正",
+      "en": "P-value correction"
+    },
+    {
+      "zh": "未校正 (原始 P)",
+      "en": "Uncorrected (raw P)"
+    },
+    {
+      "zh": "火山图标注数",
+      "en": "Volcano plot labels"
+    },
+    {
+      "zh": "热图最多蛋白",
+      "en": "Max proteins in heatmap"
+    },
+    {
+      "zh": "关键蛋白箱线数",
+      "en": "Key proteins in boxplots"
+    },
+    {
+      "zh": "⑤ 功能富集",
+      "en": "⑤ Functional enrichment"
+    },
+    {
+      "zh": "pvalue 阈值",
+      "en": "pvalue threshold"
+    },
+    {
+      "zh": "qvalue 阈值",
+      "en": "qvalue threshold"
+    },
+    {
+      "zh": "最少显著蛋白数",
+      "en": "Min significant proteins"
+    },
+    {
+      "zh": "KEGG 数据源",
+      "en": "KEGG data source"
+    },
+    {
+      "zh": "在线 KEGG (需联网)",
+      "en": "Online KEGG (internet required)"
+    },
+    {
+      "zh": "启用 KEGG",
+      "en": "Enable KEGG"
+    },
+    {
+      "zh": "⑥ 生成报告",
+      "en": "⑥ Generate report"
+    },
+    {
+      "zh": "生成 HTML 报告",
+      "en": "Generate HTML report"
+    },
+    {
+      "zh": "浏览目录",
+      "en": "Browse directories"
+    },
+    {
+      "zh": "选择报告生成位置",
+      "en": "Choose where to generate the report"
+    },
+    {
+      "zh": "报告输出目录 (留空 = ~/diann_gui_analysis_reports):",
+      "en": "Report output directory (empty = ~/diann_gui_analysis_reports):"
+    },
+    {
+      "zh": "生成报告",
+      "en": "Generate report"
+    },
+    {
+      "zh": "报告在服务端生成 (report.html + 图形 + 结果表 + analysis_params.json);",
+      "en": "The report is generated on the server (report.html + plots + result tables + analysis_params.json);"
+    },
+    {
+      "zh": "「下载报告 (zip)」由浏览器保存到本机。",
+      "en": "\"Download report (zip)\" is saved to your local machine by the browser."
+    },
+    {
+      "zh": "线程数 (Threads):",
+      "en": "Threads:"
+    },
+    {
+      "zh": "前体 q-value 阈值 (Precursor q-value):",
+      "en": "Precursor q-value threshold:"
+    },
+    {
+      "zh": "MS2 质量精度 ppm (MS2 mass accuracy):",
+      "en": "MS2 mass accuracy (ppm):"
+    },
+    {
+      "zh": "MS1 质量精度 ppm (MS1 mass accuracy):",
+      "en": "MS1 mass accuracy (ppm):"
+    },
+    {
+      "zh": "扫描窗口半径 (Window radius):",
+      "en": "Window radius:"
+    },
+    {
+      "zh": "最小峰高 (Min peak height):",
+      "en": "Min peak height:"
+    },
+    {
+      "zh": "RT 提取窗口下限 秒 (RT window (sec)):",
+      "en": "RT extraction window lower bound (sec):"
+    },
+    {
+      "zh": "IM 提取窗口下限 (IM window):",
+      "en": "IM extraction window lower bound:"
+    },
+    {
+      "zh": "定量 q-value (Quant q-value):",
+      "en": "Quant q-value:"
+    },
+    {
+      "zh": "蛋白定量 q-value (Protein q-value):",
+      "en": "Protein q-value:"
+    },
+    {
+      "zh": "矩阵过滤 q-value (Matrix q-value):",
+      "en": "Matrix q-value:"
+    },
+    {
+      "zh": "每肽段最大可变修饰数 (Max var mods per peptide):",
+      "en": "Max variable mods per peptide:"
+    },
+    {
+      "zh": "最大漏切位点数 (Missed cleavages):",
+      "en": "Max missed cleavages:"
+    },
+    {
+      "zh": "经验谱库 q-value 阈值 (Empirical library q-value):",
+      "en": "Empirical library q-value threshold:"
+    },
+    {
+      "zh": "XIC 提取秒数 (XIC extraction (sec)):",
+      "en": "XIC extraction (sec):"
+    },
+    {
+      "zh": "最小峰组相关分数 (Min peak correlation):",
+      "en": "Min peak-group correlation score:"
+    },
+    {
+      "zh": "谱库输出路径 (Library output path):",
+      "en": "Library output path:"
+    },
+    {
+      "zh": "肽段长度 (Peptide length)",
+      "en": "Peptide length"
+    },
+    {
+      "zh": "前体 m/z (Precursor m/z)",
+      "en": "Precursor m/z"
+    },
+    {
+      "zh": "前体电荷 (Precursor charge)",
+      "en": "Precursor charge"
+    },
+    {
+      "zh": "碎片 m/z (Fragment m/z)",
+      "en": "Fragment m/z"
+    },
+    {
+      "zh": "DIA-NN 控制台",
+      "en": "DIA-NN Console"
+    },
+    {
+      "zh": "%d 秒",
+      "en": "%d s"
+    },
+    {
+      "zh": "%d 分 %d 秒",
+      "en": "%d min %d s"
+    },
+    {
+      "zh": "%d 时 %d 分 %d 秒",
+      "en": "%d h %d min %d s"
+    },
+    {
+      "zh": "<li>无法读取输出目录: %s<\/li>",
+      "en": "<li>Cannot read output directory: %s<\/li>"
+    },
+    {
+      "zh": "输出目录共 %d 个文件, 合计 %s",
+      "en": "The output directory has %d files, %s in total"
+    },
+    {
+      "zh": "<li>… 其余 %d 个文件从略<\/li>",
+      "en": "<li>… %d more files omitted<\/li>"
+    },
+    {
+      "zh": "<b>%s<\/b> 数据行数: %d (前体/蛋白组识别)",
+      "en": "<b>%s<\/b> data rows: %d (precursor/protein identifications)"
+    },
+    {
+      "zh": "<b>%s<\/b> 行数: %d",
+      "en": "<b>%s<\/b> rows: %d"
+    },
+    {
+      "zh": "RAW 文件",
+      "en": "RAW files"
+    },
+    {
+      "zh": "FASTA",
+      "en": "FASTA"
+    },
+    {
+      "zh": "程序退出码 %d",
+      "en": "process exit code %d"
+    },
+    {
+      "zh": "调度状态 %s",
+      "en": "scheduler state %s"
+    },
+    {
+      "zh": "正常结束, 退出码 0",
+      "en": "finished normally, exit code 0"
+    },
+    {
+      "zh": "失败, 退出码 %s",
+      "en": "failed, exit code %s"
+    },
+    {
+      "zh": "未知(日志缺失)",
+      "en": "unknown (log missing)"
+    },
+    {
+      "zh": "DIA-NN 分析%s",
+      "en": "DIA-NN analysis %s"
+    },
+    {
+      "zh": "本邮件由实验室 DIA-NN GUI 自动发送, 请勿回复。",
+      "en": "This message was sent automatically by the lab DIA-NN GUI — please do not reply."
+    },
+    {
+      "zh": "任务名称",
+      "en": "Task name"
+    },
+    {
+      "zh": "作业状态",
+      "en": "Job status"
+    },
+    {
+      "zh": "耗时",
+      "en": "Elapsed"
+    },
+    {
+      "zh": "DIA-NN 版本",
+      "en": "DIA-NN version"
+    },
+    {
+      "zh": "📋 项目简介",
+      "en": "📋 Project description"
+    },
+    {
+      "zh": "📊 结果简介",
+      "en": "📊 Result summary"
+    },
+    {
+      "zh": "结果文件请登录集群在输出目录中查看/下载。",
+      "en": "Please log in to the cluster to view/download the result files in the output directory."
+    },
+    {
+      "zh": "… 共 %d 个",
+      "en": "… %d files in total"
+    },
+    {
+      "zh": "(未填写)",
+      "en": "(not provided)"
+    },
+    {
+      "zh": "(无)",
+      "en": "(none)"
+    },
+    {
+      "zh": "(简介文件不可读)",
+      "en": "(description file unreadable)"
+    },
+    {
+      "zh": "任务",
+      "en": "task"
+    },
+    {
+      "zh": "【DIA-NN GUI】%s (Job %s) 分析%s",
+      "en": "[DIA-NN GUI] %s (Job %s) analysis %s"
+    },
+    {
+      "zh": "【DIA-NN GUI】邮件通知自测",
+      "en": "[DIA-NN GUI] e-mail notification self-test"
+    },
+    {
+      "zh": "<html><body><h3>✅ DIA-NN GUI 邮件通知自测成功<\/h3><p>SMTP 账号 <code>%s<\/code> 配置正确, 通道可用。<\/p><\/body><\/html>",
+      "en": "<html><body><h3>✅ DIA-NN GUI e-mail notification self-test passed<\/h3><p>SMTP account <code>%s<\/code> is configured correctly; the channel works.<\/p><\/body><\/html>"
+    },
+    {
+      "zh": "CHECK FAIL: 配置不可用: %s",
+      "en": "CHECK FAIL: config unavailable: %s"
+    },
+    {
+      "zh": "CHECK OK: %s:%s 可达 (%s)",
+      "en": "CHECK OK: %s:%s reachable (%s)"
+    },
+    {
+      "zh": "CHECK FAIL: %s:%s 不可达: %s",
+      "en": "CHECK FAIL: %s:%s unreachable: %s"
+    },
+    {
+      "zh": "MAIL SKIPPED: 未提供收件人",
+      "en": "MAIL SKIPPED: no recipients given"
+    },
+    {
+      "zh": "MAIL SKIPPED: 邮件配置不可用 (%s), 请参考 mail_config.example.txt",
+      "en": "MAIL SKIPPED: mail config unavailable (%s), see mail_config.example.txt"
+    },
+    {
+      "zh": "WARNING: 邮件通知发送失败 (不影响作业): %s",
+      "en": "WARNING: failed to send the notification e-mail (job unaffected): %s"
+    },
+    {
+      "zh": "STARTTLS 不可用, 拒绝以明文发送凭据: %s",
+      "en": "STARTTLS unavailable, refusing to send credentials in plaintext: %s"
+    }
+  ]
+}

@@ -28,31 +28,31 @@ analysis_soft_fun <- function(pkg, fun) {
 an_deps_groups <- function() {
   list(
     qc = list(
-      label = "预处理与 QC 可视化",
+      label = tr_("预处理与 QC 可视化"),
       pkgs  = c(ggplot2 = FALSE, ggrepel = FALSE, gridExtra = FALSE,
                 pheatmap = FALSE, scales = FALSE, svglite = FALSE,
                 jsonlite = FALSE)),
     de = list(
-      label = "差异分析 (limma)",
+      label = tr_("差异分析 (limma)"),
       pkgs  = c(limma = TRUE, openxlsx = FALSE)),
     enrich = list(
-      label = "功能富集 (GO/KEGG)",
+      label = tr_("功能富集 (GO/KEGG)"),
       pkgs  = c(clusterProfiler = TRUE, AnnotationDbi = TRUE)),
     report = list(
-      label = "报告生成与打包下载",
+      label = tr_("报告生成与打包下载"),
       pkgs  = c(zip = FALSE))
   )
 }
 
 # 可选增强依赖 (缺失只降级功能, 不阻断)
 an_deps_optional <- function() {
-  c("sva" = "ComBat 去批次",
-    "impute" = "kNN 缺失值插补 (缺失时退回行中位数)",
-    "KEGG.db" = "本地 KEGG 通路库 (已被 Bioconductor 移除, 需从 archive 安装; 或改用在线 KEGG)",
-    "org.Hs.eg.db" = "人注释库 (富集)",
-    "org.Mm.eg.db" = "小鼠注释库 (富集)",
-    "org.Rn.eg.db" = "大鼠注释库 (富集)",
-    "org.Dr.eg.db" = "斑马鱼注释库 (富集)")
+  c("sva" = tr_("ComBat 去批次"),
+    "impute" = tr_("kNN 缺失值插补 (缺失时退回行中位数)"),
+    "KEGG.db" = tr_("本地 KEGG 通路库 (已被 Bioconductor 移除, 需从 archive 安装; 或改用在线 KEGG)"),
+    "org.Hs.eg.db" = tr_("人注释库 (富集)"),
+    "org.Mm.eg.db" = tr_("小鼠注释库 (富集)"),
+    "org.Rn.eg.db" = tr_("大鼠注释库 (富集)"),
+    "org.Dr.eg.db" = tr_("斑马鱼注释库 (富集)"))
 }
 
 # 单包安装命令

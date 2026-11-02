@@ -43,24 +43,24 @@ watch_daemon <- function(state = NULL, pidfile = NULL, interval = 60,
     if (file.exists(pidfile)) {
       p <- suppressWarnings(readLines(pidfile, warn = FALSE)[1])
       if (pid_alive(p) && as.integer(p) != Sys.getpid()) {
-        log_msg("已有 watcher 运行 (pid", p, "), 本实例退出")
+        log_msg(tr_("已有 watcher 运行 (pid %s), 本实例退出", p))
         return(invisible(FALSE))
       }
     }
     try(writeLines(as.character(Sys.getpid()), pidfile), silent = TRUE)
   }
-  log_msg("watcher 启动 pid =", Sys.getpid(), "state =", notify_state, "interval =", interval, "s")
+  log_msg(tr_("watcher 启动 pid = %s state = %s interval = %s s", Sys.getpid(), notify_state, interval))
 
   last_active <- as.numeric(Sys.time())
   repeat {
-    sent <- tryCatch(diann_notify_tick(), error = function(e) { log_msg("tick 出错:", conditionMessage(e)); FALSE })
+    sent <- tryCatch(diann_notify_tick(), error = function(e) { log_msg(tr_("tick 出错: %s", conditionMessage(e))); FALSE })
     if (isTRUE(sent)) last_active <- as.numeric(Sys.time())
     if (once) break
     pend <- tryCatch(any(!vapply(diann_notify_load()$recs, function(x) isTRUE(x$done), logical(1))),
                      error = function(e) FALSE)
     if (pend) last_active <- as.numeric(Sys.time())
     if (as.numeric(Sys.time()) - last_active > idle_exit_sec) {
-      log_msg("空闲超过", idle_exit_sec, "s 且无待发记录, watcher 退出")
+      log_msg(tr_("空闲超过 %s s 且无待发记录, watcher 退出", idle_exit_sec))
       break
     }
     Sys.sleep(interval)
@@ -69,6 +69,6 @@ watch_daemon <- function(state = NULL, pidfile = NULL, interval = 60,
     p <- suppressWarnings(as.integer(readLines(pidfile, warn = FALSE)[1]))
     if (identical(p, Sys.getpid())) try(unlink(pidfile), silent = TRUE)
   }
-  log_msg("watcher 结束")
+  log_msg(tr_("watcher 结束"))
   invisible(TRUE)
 }

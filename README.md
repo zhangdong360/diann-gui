@@ -221,8 +221,73 @@ see the maintainer's note in [DiaNN issue #1202](https://github.com/vdemichev/Di
   release ships an image-build script for Docker, and the README explains
   converting a Docker image to `.sif` with apptainer/singularity;
 - [DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202) — a
-  community-maintained Dockerfile discussion (build steps there are authoritative,
-  not this document).
+  community-maintained Dockerfile discussion (build steps there are authoritative).
+
+### Step-by-step build (community Dockerfile from issue #1202)
+
+The steps below follow the Dockerfile contributed by `rolivella` in
+[DiaNN issue #1202](https://github.com/vdemichev/DiaNN/issues/1202). Per the
+maintainer's note in the same issue, build instructions are not themselves
+subject to DIA-NN licensing — only binary/image redistribution is prohibited.
+This repository still ships no Dockerfile: copy the template below into a
+fresh directory yourself.
+
+**1. `Dockerfile`** — replace `<version>` with a DIA-NN release tag (e.g. `2.3.2`):
+
+```dockerfile
+FROM ubuntu:22.04
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y wget unzip libgomp1 locales
+
+# Locale (avoids runtime errors)
+RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# Download the official Linux build from the DIA-NN release page.
+# Check the exact asset name on the release page: 1.9.x ships
+# `diann-<version>.Linux.zip`, newer releases ship e.g.
+# `DIA-NN-<version>-Academia-Linux.zip`; the zip layout also changed over
+# versions, so adjust the extracted path in the two RUN lines below.
+RUN wget https://github.com/vdemichev/DiaNN/releases/download/<version>/diann-<version>.Linux.zip -O diann-<version>.Linux.zip
+RUN unzip diann-<version>.Linux.zip
+RUN chmod -R 775 /diann-<version>
+
+# GUI contract: `diann-linux` must be on the container's PATH
+ENV PATH="/diann-<version>:$PATH"
+
+# It is entirely the user's responsibility to ensure compliance with DIA-NN license terms.
+```
+
+**2. Build the Docker image and test it:**
+
+```bash
+docker build -t diann-<version> .
+docker run --rm diann-<version> diann-linux --version
+```
+
+**3. Convert to `.sif` via `docker save`:**
+
+```bash
+docker save -o diann-<version>.tar diann-<version>
+apptainer build diann-<version>.sif docker-archive://diann-<version>.tar
+```
+
+**4. Verify with the exact invocation the GUI relies on — bare `diann-linux`,
+no absolute path:**
+
+```bash
+apptainer exec diann-<version>.sif diann-linux --version
+```
+
+If you prefer the image-build script shipped with the official release over
+the template above, the same `docker save` → `apptainer build
+docker-archive://` conversion applies — just make sure the DIA-NN binary
+directory ends up on the container's `PATH`.
 
 **What the GUI requires from your image** (this is our only contract):
 
@@ -275,8 +340,26 @@ UI differences in local mode: the header shows `执行后端: 本地单机`; the
 box is titled `6. 运行资源 (本地)` and offers no partition; the submit button
 reads `提交本地任务`; the monitor page hides the `sinfo` node box and titles its
 blocks `本地运行任务` / `近期历史 (本地作业)`; the log viewer targets
-`local-<ID>.out`. The Slurm-mode UI is unchanged from v1.11, so existing
-screenshots remain valid.
+`local-<ID>.out`. The Slurm-mode layout is unchanged from v1.11, so existing
+screenshots remain valid (note: since v1.15 the UI text follows the language
+setting — the screenshots show the Chinese UI, see below).
+
+## UI language (English / Chinese, v1.15)
+
+The whole interface, validation messages, `doctor()` output, completion
+e-mails and the analysis HTML report are available in English and Chinese.
+**English is the default**; resolution order:
+
+1. environment variable `DIANN_GUI_LANG` (`en`/`zh`) — for site-wide pinning;
+2. `LANG` key in `~/.diann_gui/config.R`;
+3. default `"en"`.
+
+In the app, switch via the language dropdown in the header (top-right): the
+choice is written back to your `config.R` (`LANG <- "zh"`) and the page reloads
+once. Job status values (`运行中`, `已完成`, …) are protocol constants shared
+with scripts/logs and are not translated. Translations live in
+`inst/i18n/translations.json` (any missing entry falls back to the Chinese
+text; the test suite enforces full coverage).
 
 **HPC login nodes are protected.** If the host looks like a Slurm node
 (`squeue`/`sacct`/`scontrol`/`sinfo` on `PATH`, `/etc/slurm*`, or `SLURM_CONF`)

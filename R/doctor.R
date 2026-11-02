@@ -32,14 +32,17 @@
 #' @param deps 需要检查的依赖包
 #' @param backend 执行后端 "slurm"/"local"; NULL = 用配置解析结果 (默认 slurm)
 #' @param local_cmds 命名字符向量: 本地原语命令名 -> 路径 (默认 Sys.which)
+#' @param lang 输出语言 "zh"/"en" (v1.15); NULL = 按配置 LANG (默认 "en")
 #' @return data.frame(group, check, status, detail) (invisible)
 #' @export
 doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
                    sif_dirs = NULL, sif_probe = NULL, mail_conf = NULL, state_dir = NULL,
                    deps = c("shiny", "shinydashboard", "shinyFiles", "htmltools"),
-                   backend = NULL, local_cmds = NULL) {
-  groups <- c("执行后端", "R 环境", "依赖包", "apptainer 依赖", "SIF 镜像", "其他环境",
-              "结果分析依赖", "Slurm 依赖")
+                   backend = NULL, local_cmds = NULL, lang = NULL) {
+  i18n_push_lang(lang %||% i18n_lang())
+  on.exit(i18n_pop_lang(), add = TRUE)
+  groups <- c(tr_("执行后端"), tr_("R 环境"), tr_("依赖包"), tr_("apptainer 依赖"),
+              tr_("SIF 镜像"), tr_("其他环境"), tr_("结果分析依赖"), tr_("Slurm 依赖"))
   rows <- list()
   add <- function(group, check, status, detail = "") {
     rows[[length(rows) + 1L]] <<- list(group = group, check = check, status = status,
@@ -64,21 +67,21 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   }
   backend <- tolower(trimws(as.character(backend)[1]))
   if (!backend %in% c("slurm", "local")) backend <- "slurm"
-  backend_how <- if (backend_injected || !isTRUE(binfo$auto)) "配置指定" else "自动检测"
-  add(groups[1], "执行后端", "ok",
+  backend_how <- if (backend_injected || !isTRUE(binfo$auto)) tr_("配置指定") else tr_("自动检测")
+  add(groups[1], tr_("执行后端"), "ok",
       sprintf("%s (%s; %s)", backend_label(backend),
-              backend_how, if (identical(backend, "local")) "无 Slurm, 本机执行" else "sbatch 提交队列"))
+              backend_how, if (identical(backend, "local")) tr_("无 Slurm, 本机执行") else tr_("sbatch 提交队列")))
 
   # ---- [1] R 环境 ----
-  add(groups[2], "R 版本", if (getRversion() >= "4.1.0") "ok" else "fail", as.character(getRversion()))
-  add(groups[2], "diann.gui 版本", "ok",
+  add(groups[2], tr_("R 版本"), if (getRversion() >= "4.1.0") "ok" else "fail", as.character(getRversion()))
+  add(groups[2], tr_("diann.gui 版本"), "ok",
       tryCatch(as.character(utils::packageVersion("diann.gui")), error = function(e) "未知"))
 
   # ---- [2] 依赖包 (本地模式追加本地执行原语) ----
   for (d in deps) {
     ok <- isTRUE(requireNamespace(d, quietly = TRUE))
-    add(groups[3], sprintf("依赖包 %s", d), if (ok) "ok" else "fail",
-        if (ok) tryCatch(as.character(utils::packageVersion(d)), error = function(e) "") else "未安装")
+    add(groups[3], tr_("依赖包 %s", d), if (ok) "ok" else "fail",
+        if (ok) tryCatch(as.character(utils::packageVersion(d)), error = function(e) "") else tr_("未安装"))
   }
   if (identical(backend, "local")) {
     if (is.null(local_cmds)) {
@@ -91,16 +94,16 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
       detail <- if (ok) {
         p
       } else if (!nzchar(p)) {
-        if (identical(nm, "setsid")) "PATH 上找不到 (可退化: 取消改为递归子树 kill)"
-        else "PATH 上找不到 (本地模式必需)"
+        if (identical(nm, "setsid")) tr_("PATH 上找不到 (可退化: 取消改为递归子树 kill)")
+        else tr_("PATH 上找不到 (本地模式必需)")
       } else {
-        sprintf("%s (文件不可执行)", p)
+        tr_("%s (文件不可执行)", p)
       }
-      add(groups[3], sprintf("本地原语 %s", nm), if (ok) "ok" else "warn", detail)
+      add(groups[3], tr_("本地原语 %s", nm), if (ok) "ok" else "warn", detail)
     }
     proc_ok <- file.exists("/proc/self/stat") && file.access("/proc/self/stat", 4) == 0
-    add(groups[3], "本地 /proc", if (proc_ok) "ok" else "warn",
-        if (proc_ok) "可读 (本地作业判活/取消依赖)" else "不可读: 本地作业判活与取消会退化")
+    add(groups[3], tr_("本地 /proc"), if (proc_ok) "ok" else "warn",
+        if (proc_ok) tr_("可读 (本地作业判活/取消依赖)") else tr_("不可读: 本地作业判活与取消会退化"))
   }
 
   # ---- [3] apptainer 依赖 ----
@@ -108,11 +111,11 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   if (!is.null(apptainer_cands) && nrow(apptainer_cands)) {
     ok <- apptainer_cands[apptainer_cands$ok, , drop = FALSE]
     add(groups[4], "apptainer", if (nrow(ok)) "ok" else "warn",
-        if (nrow(ok)) sprintf("%d 个可用: %s", nrow(ok),
-                              paste(sprintf("%s %s", ok$kind, ok$version), collapse = "; "))
-        else "识别到可执行文件但版本解析失败, 可在 GUI 手动验证")
+        if (nrow(ok)) tr_("%d 个可用: %s", nrow(ok),
+                          paste(sprintf("%s %s", ok$kind, ok$version), collapse = "; "))
+        else tr_("识别到可执行文件但版本解析失败, 可在 GUI 手动验证"))
   } else {
-    add(groups[4], "apptainer", "warn", "未自动识别到; 可在 GUI「1. apptainer 运行环境」手动指定路径")
+    add(groups[4], "apptainer", "warn", tr_("未自动识别到; 可在 GUI「1. apptainer 运行环境」手动指定路径"))
   }
   # 版本下限单独一行: 2.x 的 --version 正常、看起来"可用", 但读不了 SIF —— 最容易踩的坑
   sif_cands <- tryCatch(apptainer_cands_sif(apptainer_cands), error = function(e) NULL)
@@ -120,15 +123,15 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     good <- sif_cands[sif_cands$ok & !is.na(sif_cands$sif_ok) & sif_cands$sif_ok, , drop = FALSE]
     bad <- sif_cands[sif_cands$ok & !is.na(sif_cands$sif_ok) & !sif_cands$sif_ok, , drop = FALSE]
     if (nrow(good)) {
-      add(groups[4], sprintf("SIF 运行时 (%s)", sif_min_version_text()), "ok",
+      add(groups[4], tr_("SIF 运行时 (%s)", sif_min_version_text()), "ok",
           paste(sprintf("%s %s", good$kind, good$version), collapse = "; "))
     } else if (nrow(bad)) {
-      add(groups[4], sprintf("SIF 运行时 (%s)", sif_min_version_text()), "fail",
-          sprintf("候选均读不了 .sif: %s (2.x 只支持 squashfs/ext3 的 .simg; 请改选或升级)",
-                  paste(sprintf("%s %s", bad$kind, bad$version), collapse = "; ")))
+      add(groups[4], tr_("SIF 运行时 (%s)", sif_min_version_text()), "fail",
+          tr_("候选均读不了 .sif: %s (2.x 只支持 squashfs/ext3 的 .simg; 请改选或升级)",
+              paste(sprintf("%s %s", bad$kind, bad$version), collapse = "; ")))
     } else {
-      add(groups[4], sprintf("SIF 运行时 (%s)", sif_min_version_text()), "warn",
-          "版本未解析, 无法判定; 在 GUI 用「识别并验证」确认")
+      add(groups[4], tr_("SIF 运行时 (%s)", sif_min_version_text()), "warn",
+          tr_("版本未解析, 无法判定; 在 GUI 用「识别并验证」确认"))
     }
   }
 
@@ -143,64 +146,64 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
                        error = function(e) NULL)
   n_all <- if (is.null(sif_scan)) 0L else nrow(sif_scan)
   n_ver <- if (is.null(sif_scan)) 0L else sum(sif_scan$verified)
-  add(groups[5], "SIF 目录", if (length(sif_dirs)) "ok" else "warn",
+  add(groups[5], tr_("SIF 目录"), if (length(sif_dirs)) "ok" else "warn",
       if (length(sif_dirs)) paste(sif_dirs, collapse = ", ")
-      else "未发现含 .sif 的目录; 可在 config.R 设置 SIF_DIRS (任意文件名)")
-  add(groups[5], "SIF 镜像", if (n_all > 0) "ok" else "warn",
-      if (n_all > 0) sprintf("%d 个 *.sif (文件名无关)", n_all)
-      else "未发现 .sif; 构建/放置后自动出现在 GUI 下拉 (README 见构建章节)")
+      else tr_("未发现含 .sif 的目录; 可在 config.R 设置 SIF_DIRS (任意文件名)"))
+  add(groups[5], tr_("SIF 镜像"), if (n_all > 0) "ok" else "warn",
+      if (n_all > 0) tr_("%d 个 *.sif (文件名无关)", n_all)
+      else tr_("未发现 .sif; 构建/放置后自动出现在 GUI 下拉 (README 见构建章节)"))
   if (n_all > 0) {
     un_id <- sif_scan[!sif_scan$verified, , drop = FALSE]
     fail_info <- un_id[nzchar(un_id$probe_message), , drop = FALSE]
-    add(groups[5], "SIF 版本识别",
+    add(groups[5], tr_("SIF 版本识别"),
         if (n_ver == n_all) "ok" else "warn",   # 未识别 0/N 也提示 (GUI 里点按钮识别)
-        if (n_ver == n_all) sprintf("已识别 %d/%d (容器内实测)", n_ver, n_all)
-        else sprintf("已识别 %d/%d; 未识别 %d 个%s", n_ver, n_all, nrow(un_id),
-                     if (nrow(fail_info))
-                       sprintf(" (上次失败: %s — %s)", basename(fail_info$path[1]),
-                               substr(fail_info$probe_message[1], 1, 80))
-                     else " — 在 GUI 选中自动识别或点「识别所有未识别镜像」"))
+        if (n_ver == n_all) tr_("已识别 %d/%d (容器内实测)", n_ver, n_all)
+        else tr_("已识别 %d/%d; 未识别 %d 个%s", n_ver, n_all, nrow(un_id),
+                 if (nrow(fail_info))
+                   tr_(" (上次失败: %s — %s)", basename(fail_info$path[1]),
+                       substr(fail_info$probe_message[1], 1, 80))
+                 else tr_(" — 在 GUI 选中自动识别或点「识别所有未识别镜像」")))
   }
 
   # ---- [5] 其他环境 ----
   dh <- cfg_get("DATA_HOME") %||% ""
   add(groups[6], "DATA_HOME", if (nzchar(dh) && dir.exists(dh) && file.access(dh, 4) == 0) "ok" else "warn",
-      if (nzchar(dh)) sprintf("%s%s", dh, if (dir.exists(dh) && file.access(dh, 4) == 0) "" else " (不可读)") else "(未设置)")
+      if (nzchar(dh)) sprintf("%s%s", dh, if (dir.exists(dh) && file.access(dh, 4) == 0) "" else tr_(" (不可读)")) else tr_("(未设置)"))
   bv <- tryCatch(unname(cfg_get("BASE_VOLUMES") %||% character(0)), error = function(e) character(0))
-  add(groups[6], "可浏览数据根", if (length(bv)) "ok" else "warn", paste(bv, collapse = ", "))
+  add(groups[6], tr_("可浏览数据根"), if (length(bv)) "ok" else "warn", paste(bv, collapse = ", "))
 
   config_file <- cfg_get("CONFIG_FILE") %||% ""
   if (!nzchar(config_file)) config_file <- tryCatch(resolve_user_config(), error = function(e) "")
-  add(groups[6], "配置文件", if (nzchar(config_file) && file.exists(config_file)) "ok" else "warn",
-      if (nzchar(config_file)) config_file else "未找到 (使用内置默认; 可运行 diann.gui::init_config())")
+  add(groups[6], tr_("配置文件"), if (nzchar(config_file) && file.exists(config_file)) "ok" else "warn",
+      if (nzchar(config_file)) config_file else tr_("未找到 (使用内置默认; 可运行 diann.gui::init_config())"))
 
   if (is.null(mail_conf)) mail_conf <- cfg_get("MAIL_CONF") %||% ""
   if (nzchar(mail_conf) && file.exists(mail_conf)) {
     mode_dec <- as.integer(file.info(mail_conf)$mode)
     world_bits <- bitwAnd(mode_dec, 63L)   # 组/其他用户权限位
     perm_msg <- sprintf("%s (%s)", mail_conf,
-                        if (world_bits == 0L) "权限 600, 安全" else "权限过宽, 建议 chmod 600")
+                        if (world_bits == 0L) tr_("权限 600, 安全") else tr_("权限过宽, 建议 chmod 600"))
     # v1.14.2: 配置在但缺 python3 时也告警 — 此前显示"权限 600, 安全"而邮件实际
     # 停用 (WSL2 盲区); 门控判据与 mail_gate_info 一致 (python3 非空)
     py <- as.character(cfg_get("MAIL_PYTHON") %||% "")
     if (!nzchar(py)) {
-      add(groups[6], "邮件配置", "warn",
-          sprintf("%s, 但未找到 python3, 邮件通知停用 (安装: sudo apt install python3; 或在 config.R 设 MAIL_PYTHON)",
-                  perm_msg))
+      add(groups[6], tr_("邮件配置"), "warn",
+          tr_("%s, 但未找到 python3, 邮件通知停用 (安装: sudo apt install python3; 或在 config.R 设 MAIL_PYTHON)",
+              perm_msg))
     } else {
-      add(groups[6], "邮件配置", if (world_bits == 0L) "ok" else "warn", perm_msg)
+      add(groups[6], tr_("邮件配置"), if (world_bits == 0L) "ok" else "warn", perm_msg)
     }
   } else {
     # v1.14.1: 缺配置时给出确切路径与复制命令 (与 mail_gate_info 文案一致)
     ex <- system.file("config", "mail_config.example.txt", package = "diann.gui")
-    add(groups[6], "邮件配置", "warn",
-        sprintf("未找到 %s, 邮件通知停用 (file.copy('%s', '%s') 后填写 SMTP 账号, 建议 chmod 600)",
-                mail_conf, ex, mail_conf))
+    add(groups[6], tr_("邮件配置"), "warn",
+        tr_("未找到 %s, 邮件通知停用 (file.copy('%s', '%s') 后填写 SMTP 账号, 建议 chmod 600)",
+            mail_conf, ex, mail_conf))
   }
 
   if (is.null(state_dir)) state_dir <- dirname(cfg_get("NOTIFY_STATE") %||% tempdir())
-  add(groups[6], "状态目录", if (dir.exists(state_dir) && file.access(state_dir, 2) == 0) "ok" else "fail",
-      sprintf("%s%s", state_dir, if (dir.exists(state_dir) && file.access(state_dir, 2) == 0) "" else " (不可写)"))
+  add(groups[6], tr_("状态目录"), if (dir.exists(state_dir) && file.access(state_dir, 2) == 0) "ok" else "fail",
+      sprintf("%s%s", state_dir, if (dir.exists(state_dir) && file.access(state_dir, 2) == 0) "" else tr_(" (不可写)")))
 
   # 本地作业状态文件 (只读; 损坏时 doctor 可见告警)
   if (identical(backend, "local")) {
@@ -208,30 +211,30 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     status <- if (isTRUE(st$ok)) (if (nzchar(st$warn %||% "")) "warn" else "ok") else "fail"
     detail <- st$detail
     if (nzchar(st$warn %||% "")) detail <- sprintf("%s (%s)", detail, substr(st$warn, 1, 120))
-    add(groups[6], "本地作业状态文件", status, detail)
+    add(groups[6], tr_("本地作业状态文件"), status, detail)
   } else {
-    add(groups[6], "本地作业状态文件", "na", "Slurm 模式未使用本地作业状态文件")
+    add(groups[6], tr_("本地作业状态文件"), "na", tr_("Slurm 模式未使用本地作业状态文件"))
   }
 
-  add(groups[6], "运行身份", "ok", sprintf("%s @ %s (HOME=%s)", Sys.info()[["user"]],
+  add(groups[6], tr_("运行身份"), "ok", sprintf("%s @ %s (HOME=%s)", Sys.info()[["user"]],
                                            Sys.info()[["nodename"]], path.expand("~")))
 
   # ---- [6.5] 结果分析依赖 (v1.14 可选模块; 缺包不阻断主链, 只给安装命令) ----
   adf <- tryCatch(an_deps_check(), error = function(e) NULL)
   if (!is.null(adf) && nrow(adf)) {
     amiss <- adf[!adf$installed, , drop = FALSE]
-    add(groups[7], "分析依赖包", if (nrow(amiss)) "warn" else "ok",
+    add(groups[7], tr_("分析依赖包"), if (nrow(amiss)) "warn" else "ok",
         if (nrow(amiss))
-          sprintf("缺失 %d/%d: %s (安装: %s)", nrow(amiss), nrow(adf),
-                  paste(amiss$pkg, collapse = ", "),
-                  paste(an_deps_install_hint(amiss$pkg, amiss$bioc), collapse = "; "))
-        else sprintf("全部就绪 (%d 个)", nrow(adf)))
+          tr_("缺失 %d/%d: %s (安装: %s)", nrow(amiss), nrow(adf),
+              paste(amiss$pkg, collapse = ", "),
+              paste(an_deps_install_hint(amiss$pkg, amiss$bioc), collapse = "; "))
+        else tr_("全部就绪 (%d 个)", nrow(adf)))
     aopt <- an_deps_optional()
     aopt_miss <- names(aopt)[!vapply(names(aopt), requireNamespace, logical(1), quietly = TRUE)]
-    add(groups[7], "分析可选增强", if (length(aopt_miss)) "warn" else "ok",
+    add(groups[7], tr_("分析可选增强"), if (length(aopt_miss)) "warn" else "ok",
         if (length(aopt_miss))
           paste(sprintf("%s (%s)", aopt_miss, unname(aopt[aopt_miss])), collapse = "; ")
-        else "全部就绪")
+        else tr_("全部就绪"))
   }
 
   # ---- [7] Slurm 依赖 (最后; 本地模式合并 1 行 na) ----
@@ -243,18 +246,18 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
     for (nm in names(slurm_cmds)) {
       p <- unname(slurm_cmds[[nm]])
       if (!nzchar(p)) {
-        add(groups[8], sprintf("Slurm 命令 %s", nm), "fail", "PATH 上找不到 (不在提交节点?)")
+        add(groups[8], tr_("Slurm 命令 %s", nm), "fail", tr_("PATH 上找不到 (不在提交节点?)"))
       } else if (file.access(p, 1) != 0) {
-        add(groups[8], sprintf("Slurm 命令 %s", nm), "fail", sprintf("%s (文件不可执行)", p))
+        add(groups[8], tr_("Slurm 命令 %s", nm), "fail", tr_("%s (文件不可执行)", p))
       } else {
-        add(groups[8], sprintf("Slurm 命令 %s", nm), "ok", p)
+        add(groups[8], tr_("Slurm 命令 %s", nm), "ok", p)
       }
     }
     if (is.null(partitions)) partitions <- tryCatch(detect_slurm_partitions(), error = function(e) character(0))
-    add(groups[8], "Slurm 分区", if (length(partitions)) "ok" else "warn",
-        if (length(partitions)) paste(partitions, collapse = ", ") else "sinfo 无输出 (未配置 Slurm?)")
+    add(groups[8], tr_("Slurm 分区"), if (length(partitions)) "ok" else "warn",
+        if (length(partitions)) paste(partitions, collapse = ", ") else tr_("sinfo 无输出 (未配置 Slurm?)"))
   } else {
-    add(groups[8], "Slurm 依赖", "na", "本地模式未启用 (可选后端)")
+    add(groups[8], tr_("Slurm 依赖"), "na", tr_("本地模式未启用 (可选后端)"))
   }
 
   # ---- 输出: 组标题 + 符号 + 对齐 + 汇总 ----
@@ -285,7 +288,7 @@ doctor <- function(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
   }
   n_ok <- sum(df$status == "ok"); n_warn <- sum(df$status == "warn")
   n_fail <- sum(df$status == "fail"); n_na <- sum(df$status == "na")
-  message(sprintf("汇总: ✓ %d  ⚠ %d  ✗ %d  – %d  (共 %d 项, 环境: %s)",
-                  n_ok, n_warn, n_fail, n_na, nrow(df), backend_label(backend)))
+  message(tr_("汇总: ✓ %d  ⚠ %d  ✗ %d  – %d  (共 %d 项, 环境: %s)",
+              n_ok, n_warn, n_fail, n_na, nrow(df), backend_label(backend)))
   invisible(df)
 }

@@ -45,100 +45,102 @@ analysis_ui <- function(id) {
 
     fluidRow(
       # ---- 1. 数据来源 ----
-      box(title = "1. 数据来源 (蛋白定量矩阵)", status = "primary", solidHeader = TRUE, width = 6,
-        radioButtons(ns("source"), "矩阵格式:",
-                     choices = c("DIA-NN（pg_matrix）" = "diann",
-                                 "Spectronaut（PG.* 矩阵）" = "spectronaut"),
+      box(title = tr_("1. 数据来源 (蛋白定量矩阵)"), status = "primary", solidHeader = TRUE, width = 6,
+        radioButtons(ns("source"), tr_("矩阵格式:"),
+                     choices = setNames(c("diann", "spectronaut"),
+                                        c(tr_("DIA-NN（pg_matrix）"), tr_("Spectronaut（PG.* 矩阵）"))),
                      selected = "diann", inline = TRUE),
-        shinyFilesButton(ns("matrix_pick"), "浏览服务器文件", "选择蛋白定量矩阵 (tsv/txt/csv)",
+        shinyFilesButton(ns("matrix_pick"), tr_("浏览服务器文件"), tr_("选择蛋白定量矩阵 (tsv/txt/csv)"),
                          multiple = FALSE),
-        textInput(ns("matrix_path"), "矩阵文件完整路径:",
+        textInput(ns("matrix_path"), tr_("矩阵文件完整路径:"),
                   placeholder = "/path/to/pg_matrix.tsv"),
-        actionButton(ns("matrix_load"), "读取矩阵", icon = icon("file-import"),
+        actionButton(ns("matrix_load"), tr_("读取矩阵"), icon = icon("file-import"),
                      class = "btn-primary"),
         uiOutput(ns("matrix_info")),
-        helpText("数据在服务端共享存储上直接读取 (不上传); DIA-NN 作业完成后可在",
-                 "「任务队列」页一键带入本页。")
+        helpText(tr_("数据在服务端共享存储上直接读取 (不上传); DIA-NN 作业完成后可在"),
+                 tr_("「任务队列」页一键带入本页。"))
       ),
       # ---- 2. 全局参数 ----
-      box(title = "2. 全局参数", status = "warning", solidHeader = TRUE, width = 6,
+      box(title = tr_("2. 全局参数"), status = "warning", solidHeader = TRUE, width = 6,
         fluidRow(
-          column(6, numericInput(ns("min_detect_frac"), "低检出过滤 (检出率下限)",
+          column(6, numericInput(ns("min_detect_frac"), tr_("低检出过滤 (检出率下限)"),
                                  value = 0.5, min = 0, max = 1, step = 0.05)),
-          column(6, numericInput(ns("min_group_detect"), "分组内最少检测样本数 (0=不启用)",
+          column(6, numericInput(ns("min_group_detect"), tr_("分组内最少检测样本数 (0=不启用)"),
                                  value = 0, min = 0, step = 1))
         ),
-        radioButtons(ns("impute_method"), "缺失值处理方法:",
-                     choiceNames = list("不填补 (仅 QC)", "LoD 左截断高斯 (MNAR)",
-                                        "KNN (MAR)", "seqKNN 顺序 KNN"),
+        radioButtons(ns("impute_method"), tr_("缺失值处理方法:"),
+                     choiceNames = list(tr_("不填补 (仅 QC)"), tr_("LoD 左截断高斯 (MNAR)"),
+                                        tr_("KNN (MAR)"), tr_("seqKNN 顺序 KNN")),
                      choiceValues = list("none", "mnar", "mar", "seq"),
                      selected = "mnar", inline = TRUE),
-        helpText("LoD: 检测限左删失 (逐样本列, 偏移 1.8 SD / 缩放 0.3 SD / 种子 42);",
-                 "选「不填补」时差异分析与功能富集自动停用。"),
+        helpText(tr_("LoD: 检测限左删失 (逐样本列, 偏移 1.8 SD / 缩放 0.3 SD / 种子 42);"),
+                 tr_("选「不填补」时差异分析与功能富集自动停用。")),
         uiOutput(ns("control_ui")),
-        selectInput(ns("species"), "物种 (功能富集注释库):",
-                    choices = c("自动检测" = "auto", "Homo sapiens" = "human",
-                                "Mus musculus" = "mouse", "Rattus norvegicus" = "rat",
-                                "Danio rerio（斑马鱼）" = "zebrafish"),
+        selectInput(ns("species"), tr_("物种 (功能富集注释库):"),
+                    choices = setNames(c("auto", "human", "mouse", "rat", "zebrafish"),
+                                       c(tr_("自动检测"), "Homo sapiens",
+                                         "Mus musculus", "Rattus norvegicus",
+                                         tr_("Danio rerio（斑马鱼）"))),
                     selected = "auto"),
-        checkboxGroupInput(ns("modules"), "分析模块 (数据预处理始终执行):",
-                           choices = c("QC 可视化" = "qc", "limma 差异分析" = "de",
-                                       "GO/KEGG 功能富集" = "enrich"),
+        checkboxGroupInput(ns("modules"), tr_("分析模块 (数据预处理始终执行):"),
+                           choices = setNames(c("qc", "de", "enrich"),
+                                              c(tr_("QC 可视化"), tr_("limma 差异分析"),
+                                                tr_("GO/KEGG 功能富集"))),
                            selected = c("qc", "de"), inline = TRUE)
       )
     ),
 
     tabsetPanel(id = ns("an_tabs"),
       # ---- ① 数据与分组 ----
-      tabPanel("① 数据与分组",
+      tabPanel(tr_("① 数据与分组"),
         uiOutput(ns("data_page")),
         div(class = "an-card",
-          h4("分组设置"),
+          h4(tr_("分组设置")),
           fluidRow(
             column(7, uiOutput(ns("infer_status"))),
             column(5, div(style = "text-align:right;padding-top:4px;",
-              actionButton(ns("grp_apply"), "应用分组", class = "btn-primary btn-sm",
+              actionButton(ns("grp_apply"), tr_("应用分组"), class = "btn-primary btn-sm",
                            icon = icon("check")),
-              actionButton(ns("grp_reset"), "恢复自动推断", class = "btn-sm",
+              actionButton(ns("grp_reset"), tr_("恢复自动推断"), class = "btn-sm",
                            icon = icon("rotate-left"))))
           ),
-          div(class = "an-hint", "双击「样本名」或「组名」单元格即可修改; 改完点「应用分组」生效。",
-              "样本多时可点「批量填入分组…」从 Excel 粘贴。"),
+          div(class = "an-hint", tr_("双击「样本名」或「组名」单元格即可修改; 改完点「应用分组」生效。"),
+              tr_("样本多时可点「批量填入分组…」从 Excel 粘贴。")),
           uiOutput(ns("dt_gate")),
           if (dt_ok) DT::DTOutput(ns("group_table")),
           div(style = "text-align:right;",
-              actionButton(ns("open_group_paste"), "批量填入分组…", class = "btn-sm",
+              actionButton(ns("open_group_paste"), tr_("批量填入分组…"), class = "btn-sm",
                            icon = icon("wand-magic-sparkles")))
         ),
         div(class = "an-card",
-          h4("批次设置 (可选 ComBat 去批次)"),
-          checkboxInput(ns("use_combat"), "启用 ComBat 去批次校正", value = FALSE),
+          h4(tr_("批次设置 (可选 ComBat 去批次)")),
+          checkboxInput(ns("use_combat"), tr_("启用 ComBat 去批次校正"), value = FALSE),
           uiOutput(ns("combat_block"))
         ),
         div(class = "an-card",
-          h4("数据预览 (前 30 行)"),
+          h4(tr_("数据预览 (前 30 行)")),
           if (dt_ok) DT::DTOutput(ns("preview"))
         )
       ),
       # ---- ② 预处理 ----
-      tabPanel("② 预处理",
+      tabPanel(tr_("② 预处理"),
         uiOutput(ns("prep_page")),
-        div(class = "an-card", h4("处理明细"), uiOutput(ns("prep_stats"))),
-        div(class = "an-card", h4("处理告警"), uiOutput(ns("prep_warnings"))),
+        div(class = "an-card", h4(tr_("处理明细")), uiOutput(ns("prep_stats"))),
+        div(class = "an-card", h4(tr_("处理告警")), uiOutput(ns("prep_warnings"))),
         div(class = "an-card",
-          h4("缺失机制诊断 (平均丰度 vs 缺失率)"), uiOutput(ns("prep_missing")),
+          h4(tr_("缺失机制诊断 (平均丰度 vs 缺失率)")), uiOutput(ns("prep_missing")),
           div(class = "an-plot-caption",
-              "低丰度蛋白缺失率偏高 (左图负相关、右图箱体左移) 属 MNAR, 适合 LoD 插补。")),
+              tr_("低丰度蛋白缺失率偏高 (左图负相关、右图箱体左移) 属 MNAR, 适合 LoD 插补。"))),
         div(class = "an-card",
-          h4("归一化前后强度分布"), uiOutput(ns("prep_normbox")))
+          h4(tr_("归一化前后强度分布")), uiOutput(ns("prep_normbox")))
       ),
       # ---- ③ QC 可视化 ----
-      tabPanel("③ QC 可视化",
+      tabPanel(tr_("③ QC 可视化"),
         div(class = "an-mod-params",
           fluidRow(
-            column(4, numericInput(ns("cor_min"), "相关性热图色阶下限",
+            column(4, numericInput(ns("cor_min"), tr_("相关性热图色阶下限"),
                                    value = 0.8, min = -1, max = 1, step = 0.01)),
-            column(4, numericInput(ns("cv_bins"), "QC 直方图分箱数 (检出频率/缺失率分布)",
+            column(4, numericInput(ns("cv_bins"), tr_("QC 直方图分箱数 (检出频率/缺失率分布)"),
                                    value = 40, min = 10, max = 100, step = 5))
           )
         ),
@@ -148,61 +150,61 @@ analysis_ui <- function(id) {
         uiOutput(ns("qc_stats"))
       ),
       # ---- ④ 差异分析 ----
-      tabPanel("④ 差异分析",
+      tabPanel(tr_("④ 差异分析"),
         div(class = "an-mod-params",
           fluidRow(
-            column(2, numericInput(ns("de_logFC"), "|log2FC| 阈值", value = 1, step = 0.1)),
-            column(2, numericInput(ns("de_pval"), "P 值阈值", value = 0.05, step = 0.005)),
-            column(2, selectInput(ns("de_padj"), "P 值校正",
-                                  choices = c("BH" = "BH", "未校正 (原始 P)" = "none"))),
-            column(2, numericInput(ns("de_topn_label"), "火山图标注数", value = 12, min = 0)),
-            column(2, numericInput(ns("de_heatmap_max"), "热图最多蛋白", value = 200, min = 10)),
-            column(2, numericInput(ns("de_topn_box"), "关键蛋白箱线数", value = 9, min = 1))
+            column(2, numericInput(ns("de_logFC"), tr_("|log2FC| 阈值"), value = 1, step = 0.1)),
+            column(2, numericInput(ns("de_pval"), tr_("P 值阈值"), value = 0.05, step = 0.005)),
+            column(2, selectInput(ns("de_padj"), tr_("P 值校正"),
+                                  choices = setNames(c("BH", "none"), c("BH", tr_("未校正 (原始 P)"))))),
+            column(2, numericInput(ns("de_topn_label"), tr_("火山图标注数"), value = 12, min = 0)),
+            column(2, numericInput(ns("de_heatmap_max"), tr_("热图最多蛋白"), value = 200, min = 10)),
+            column(2, numericInput(ns("de_topn_box"), tr_("关键蛋白箱线数"), value = 9, min = 1))
           )
         ),
         uiOutput(ns("de_gate")),
         uiOutput(ns("de_content"))
       ),
       # ---- ⑤ 功能富集 ----
-      tabPanel("⑤ 功能富集",
+      tabPanel(tr_("⑤ 功能富集"),
         div(class = "an-mod-params",
           fluidRow(
-            column(2, numericInput(ns("en_pval"), "pvalue 阈值", value = 0.05, step = 0.005)),
-            column(2, numericInput(ns("en_qval"), "qvalue 阈值", value = 0.2, step = 0.05)),
-            column(2, selectInput(ns("en_padj"), "P 值校正",
-                                  choices = c("BH" = "BH", "未校正 (原始 P)" = "none"))),
-            column(2, numericInput(ns("en_minsig"), "最少显著蛋白数", value = 5, min = 0)),
-            column(2, selectInput(ns("en_kegg"), "KEGG 数据源",
-                                  choices = c("本地 KEGG.db" = "local",
-                                              "在线 KEGG (需联网)" = "online"),
+            column(2, numericInput(ns("en_pval"), tr_("pvalue 阈值"), value = 0.05, step = 0.005)),
+            column(2, numericInput(ns("en_qval"), tr_("qvalue 阈值"), value = 0.2, step = 0.05)),
+            column(2, selectInput(ns("en_padj"), tr_("P 值校正"),
+                                  choices = setNames(c("BH", "none"), c("BH", tr_("未校正 (原始 P)"))))),
+            column(2, numericInput(ns("en_minsig"), tr_("最少显著蛋白数"), value = 5, min = 0)),
+            column(2, selectInput(ns("en_kegg"), tr_("KEGG 数据源"),
+                                  choices = setNames(c("local", "online"),
+                                                     c(tr_("本地 KEGG.db"), tr_("在线 KEGG (需联网)"))),
                                   selected = "local")),
-            column(2, checkboxInput(ns("en_use_kegg"), "启用 KEGG", value = TRUE))
+            column(2, checkboxInput(ns("en_use_kegg"), tr_("启用 KEGG"), value = TRUE))
           )
         ),
         uiOutput(ns("enrich_gate")),
         uiOutput(ns("enrich_content"))
       ),
       # ---- ⑥ 生成报告 ----
-      tabPanel("⑥ 生成报告",
+      tabPanel(tr_("⑥ 生成报告"),
         div(class = "an-card",
-          h4("生成 HTML 报告"),
+          h4(tr_("生成 HTML 报告")),
           uiOutput(ns("report_ready")),
           fluidRow(
             column(6,
-              shinyDirButton(ns("report_dir_pick"), "浏览目录", "选择报告生成位置"),
-              textInput(ns("report_dir"), "报告输出目录 (留空 = ~/diann_gui_analysis_reports):",
+              shinyDirButton(ns("report_dir_pick"), tr_("浏览目录"), tr_("选择报告生成位置")),
+              textInput(ns("report_dir"), tr_("报告输出目录 (留空 = ~/diann_gui_analysis_reports):"),
                         placeholder = "/path/to/output_dir"),
               verbatimTextOutput(ns("report_dir_display"))
             ),
             column(6,
-              actionButton(ns("report_build"), "生成报告", class = "btn-primary",
+              actionButton(ns("report_build"), tr_("生成报告"), class = "btn-primary",
                            icon = icon("file-code")),
               uiOutput(ns("report_actions"))
             )
           ),
           div(class = "an-hint",
-              "报告在服务端生成 (report.html + 图形 + 结果表 + analysis_params.json);",
-              "「下载报告 (zip)」由浏览器保存到本机。")
+              tr_("报告在服务端生成 (report.html + 图形 + 结果表 + analysis_params.json);"),
+              tr_("「下载报告 (zip)」由浏览器保存到本机。"))
         ),
         uiOutput(ns("report_result"))
       )

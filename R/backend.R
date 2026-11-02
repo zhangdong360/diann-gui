@@ -36,7 +36,7 @@ detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL
                                 require_exclusive = TRUE) {
   req <- tolower(trimws(as.character(request %||% exec_backend_request())[1]))
   if (!req %in% c("auto", "slurm", "local")) {
-    stop(sprintf("EXEC_BACKEND 必须是 auto|slurm|local, 当前: %s", req), call. = FALSE)
+    stop(sprintf(tr_("EXEC_BACKEND 必须是 auto|slurm|local, 当前: %s"), req), call. = FALSE)
   }
   if (is.null(cmds)) {
     names6 <- c("sbatch", "squeue", "sacct", "scancel", "scontrol", "sinfo")
@@ -63,16 +63,12 @@ detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL
   if (identical(req, "slurm")) {
     out$backend <- "slurm"
     if (!sbatch_ok) {
-      warns <- c(warns, paste0(
-        "EXEC_BACKEND=slurm 但 PATH 上找不到 sbatch: 提交会失败。",
-        "请先加载 Slurm 模块/修正 PATH, 或改配置 EXEC_BACKEND=\"local\"。"))
+      warns <- c(warns, tr_("EXEC_BACKEND=slurm 但 PATH 上找不到 sbatch: 提交会失败。请先加载 Slurm 模块/修正 PATH, 或改配置 EXEC_BACKEND=\"local\"。"))
     }
   } else if (identical(req, "local")) {
     out$backend <- "local"
     if (out$traces) {
-      warns <- c(warns, paste0(
-        "已显式指定 EXEC_BACKEND=local, 但本机检测到 Slurm 痕迹 (集群登录节点?)。",
-        "GUI 将直接在本机运行 DIA-NN, 可能违反集群使用政策, 请确认。"))
+      warns <- c(warns, tr_("已显式指定 EXEC_BACKEND=local, 但本机检测到 Slurm 痕迹 (集群登录节点?)。GUI 将直接在本机运行 DIA-NN, 可能违反集群使用政策, 请确认。"))
     }
   } else { # auto
     if (sbatch_ok) {
@@ -80,17 +76,9 @@ detect_exec_backend <- function(request = NULL, cmds = NULL, slurm_traces = NULL
     } else {
       out$backend <- "local"
       if (out$traces && isTRUE(require_exclusive)) {
-        errs <- c(errs, paste0(
-          "检测到 Slurm 痕迹 (squeue/sacct/scontrol/sinfo 或 /etc/slurm), 但 PATH 上没有 sbatch。\n",
-          "为避免在 HPC 登录节点上直接运行计算任务, auto 模式拒绝静默回退到本地执行。\n",
-          "请二选一:\n",
-          "  1) 先加载 Slurm 模块 / 修正 PATH 后重新启动 run_app() (推荐);\n",
-          "  2) 确认本机是单机服务器后, 在 config.R 设置 EXEC_BACKEND <- \"local\" ",
-          "(或启动前 export DIANN_GUI_EXEC_BACKEND=local)。"))
+        errs <- c(errs, tr_("检测到 Slurm 痕迹 (squeue/sacct/scontrol/sinfo 或 /etc/slurm), 但 PATH 上没有 sbatch。\n为避免在 HPC 登录节点上直接运行计算任务, auto 模式拒绝静默回退到本地执行。\n请二选一:\n  1) 先加载 Slurm 模块 / 修正 PATH 后重新启动 run_app() (推荐);\n  2) 确认本机是单机服务器后, 在 config.R 设置 EXEC_BACKEND <- \"local\" (或启动前 export DIANN_GUI_EXEC_BACKEND=local)。"))
       } else if (out$traces) {
-        warns <- c(warns, paste0(
-          "检测到 Slurm 痕迹但 sbatch 不在 PATH: 已按 LOCAL_REQUIRE_EXCLUSIVE_HOST=FALSE ",
-          "回退到本地执行, 请确认这不是 HPC 登录节点。"))
+        warns <- c(warns, tr_("检测到 Slurm 痕迹但 sbatch 不在 PATH: 已按 LOCAL_REQUIRE_EXCLUSIVE_HOST=FALSE 回退到本地执行, 请确认这不是 HPC 登录节点。"))
       }
     }
   }
@@ -125,7 +113,7 @@ exec_backend <- function() {
 # UI/文档用的人类可读标签
 backend_label <- function(backend = NULL) {
   backend <- backend %||% exec_backend()
-  if (identical(backend, "local")) "本地单机" else "Slurm 集群"
+  if (identical(backend, "local")) tr_("本地单机") else tr_("Slurm 集群")
 }
 
 # 启动检查: error -> stop (run_app 中调用); warn -> message。返回 invisible(info)。
@@ -180,7 +168,7 @@ backend_submit <- function(p, script_path, backend = NULL) {
       txt <- paste(as.character(res), collapse = " ")
       m <- regmatches(txt, regexpr("Submitted batch job [0-9]+", txt))
       if (!length(m) || status != 0L) {
-        return(fail(if (nzchar(trimws(txt))) txt else "sbatch 未返回 JobID (命令可能不存在或提交被拒绝)"))
+        return(fail(if (nzchar(trimws(txt))) txt else tr_("sbatch 未返回 JobID (命令可能不存在或提交被拒绝)")))
       }
       jid <- sub(".*Submitted batch job ([0-9]+).*", "\\1", txt)
       lp <- backend_log_paths(jid, out_dir, "slurm")
@@ -190,7 +178,7 @@ backend_submit <- function(p, script_path, backend = NULL) {
       local_submit(p, script_path)
     }
   }, error = function(e) {
-    fail(sprintf("提交失败: %s", conditionMessage(e)))
+    fail(tr_("提交失败: %s", conditionMessage(e)))
   })
 }
 
@@ -265,17 +253,17 @@ backend_cancel <- function(job_id, backend = NULL) {
   tryCatch({
     if (identical(backend, "slurm")) {
       jid <- suppressWarnings(as.integer(job_id))
-      if (is.na(jid)) return(list(ok = FALSE, message = sprintf("无效的 Slurm 作业 ID: %s", job_id)))
+      if (is.na(jid)) return(list(ok = FALSE, message = tr_("无效的 Slurm 作业 ID: %s", job_id)))
       res <- suppressWarnings(system2("scancel", as.character(jid), stdout = TRUE, stderr = TRUE))
       if (length(res) && nzchar(trimws(paste(res, collapse = " ")))) {
         list(ok = FALSE, message = paste(res, collapse = " "))
       } else {
-        list(ok = TRUE, message = sprintf("已发送 scancel %d", jid))
+        list(ok = TRUE, message = tr_("已发送 scancel %d", jid))
       }
     } else {
       local_cancel(job_id)
     }
-  }, error = function(e) list(ok = FALSE, message = sprintf("取消失败: %s", conditionMessage(e))))
+  }, error = function(e) list(ok = FALSE, message = tr_("取消失败: %s", conditionMessage(e))))
 }
 
 # 后端可用性 (doctor / 启动日志用)
@@ -293,7 +281,7 @@ backend_available <- function(backend = NULL) {
     proc_ok <- file.exists("/proc/self/stat")
     list(ok = all(have) && proc_ok, backend = backend,
          detail = paste(c(sprintf("%s=%s", need, ifelse(have, "ok", "missing")),
-                          sprintf("setsid=%s", ifelse(setsid_ok, "ok", "missing(退化为子树取消)")),
+                          sprintf("setsid=%s", ifelse(setsid_ok, "ok", tr_("missing(退化为子树取消)"))),
                           sprintf("/proc=%s", ifelse(proc_ok, "ok", "unavailable"))), collapse = ", "))
   }
 }

@@ -478,6 +478,8 @@
     <div class="a">「4. 分析参数」的「修饰」「FASTA搜索/库构建」标签可改酶切与修饰；GUI 没覆盖的参数写到「额外参数」原样追加。参数含义查「参数速查」页（196 个参数的官方说明）。</div></details>
   <details><summary>选哪个 DIA-NN 版本？</summary>
     <div class="a">默认 2.7.0；追求最高鉴定数用 2.6.1（实测识别数最高）；复现历史结果选当初版本。「更新说明」页有各版本实测对比与官方更新日志。</div></details>
+  <details><summary>界面是英文的，如何切换成中文？</summary>
+    <div class="a">v1.15 起界面支持中英文切换：<b>标题栏右上角的语言下拉</b>选择后，设置写回 <code>~/.diann_gui/config.R</code> 的 <code>LANG</code> 键并自动刷新一次页面。默认英文；也可在配置里设 <code>LANG &lt;- "zh"</code>，或启动前 <code>export DIANN_GUI_LANG=zh</code>（优先级最高）。作业状态值（运行中/已完成 等）与脚本/日志共用，保持中文不变。</div></details>
   <details><summary>没有 Slurm 的服务器能用吗？</summary>
     <div class="a">可以（v1.12 起）。默认「自动检测」：PATH 上有 <code>sbatch</code> 就走 Slurm 集群，没有就在 GUI 所在主机本地执行（标题栏显示「执行后端: 本地单机」）。本地模式仍然需要 Apptainer/Singularity 与 <code>.sif</code> 镜像，日志为 <code>local-&lt;作业ID&gt;.out/.err</code>，作业 ID 从 1000001 起。如果启动时报「检测到 Slurm 痕迹但 PATH 上没有 sbatch」，说明本机像 HPC 登录节点——先加载 Slurm 模块；确认是单机服务器再在 config.R 设 <code>EXEC_BACKEND &lt;- "local"</code>。</div></details>
   <details><summary>单机模式下点提交被拦，说 apptainer 未验证？</summary>

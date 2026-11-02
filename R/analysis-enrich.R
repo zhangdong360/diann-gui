@@ -26,11 +26,10 @@ kegg_local_data <- function(species) {
   if (!is.null(kegg_local_cache[[species]])) return(kegg_local_cache[[species]])
   has_db <- analysis_soft_has("KEGG.db")
   if (!has_db)
-    stop("未安装 KEGG.db 包 (Bioconductor 已移除, 需从 archive 安装), 本地 KEGG 分析不可用; ",
-         "可在富集参数中改用「在线 KEGG (需联网)」")
+    stop(tr_("未安装 KEGG.db 包 (Bioconductor 已移除, 需从 archive 安装), 本地 KEGG 分析不可用; 可在富集参数中改用「在线 KEGG (需联网)」"))
   p2e <- as.list(analysis_soft_fun("KEGG.db", "KEGGPATHID2EXTID"))  # 键形如 hsa01100 -> Entrez 向量
   ok  <- grepl(paste0("^", species, "[0-9]+$"), names(p2e))
-  if (!any(ok)) stop(sprintf("KEGG.db 内不含物种 %s 的通路数据", species))
+  if (!any(ok)) stop(tr_("KEGG.db 内不含物种 %s 的通路数据", species))
   p2e <- p2e[ok]
   ids <- names(p2e)
   p2n    <- as.list(analysis_soft_fun("KEGG.db", "KEGGPATHID2NAME"))
@@ -79,9 +78,9 @@ kegg_enrich_run <- function(sig_entrez, universe, prep, pval_cutoff, qval_cutoff
   tryCatch(
     if (isTRUE(online)) run_online() else run_local(),
     error = function(e) {
-      add_warning(sprintf("KEGG 富集失败（%s）: %s",
-                          if (isTRUE(online)) "在线 KEGG, 需联网" else "本地 KEGG.db",
-                          conditionMessage(e)))
+      add_warning(tr_("KEGG 富集失败（%s）: %s",
+                      tr_(if (isTRUE(online)) "在线 KEGG, 需联网" else "本地 KEGG.db"),
+                      conditionMessage(e)))
       NULL
     })
 }
@@ -101,7 +100,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
   p_adjust_method <- as.character(p_adjust_method %||% "BH")
   if (!p_adjust_method %in% c("BH", "none")) p_adjust_method <- "BH"
   if (identical(p_adjust_method, "none")) {
-    add_warning("P 值未校正：按原始 p 值筛选，qvalue 阈值不参与")
+    add_warning(tr_("P 值未校正：按原始 p 值筛选，qvalue 阈值不参与"))
     qval_cutoff <- 1          # 未校正时不再用 q 值做二次过滤
   }
 
@@ -113,8 +112,8 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
 
   # ---- 前置检查 ----
   if (nrow(sig) < min_sig) {
-    add_warning(sprintf("显著差异蛋白 < %d（当前 %d 个），跳过功能富集", min_sig, nrow(sig)))
-    return(skip_result(sprintf(
+    add_warning(tr_("显著差异蛋白 < %d（当前 %d 个），跳过功能富集", min_sig, nrow(sig)))
+    return(skip_result(tr_(
       "当前显著差异蛋白仅 %d 个（少于富集分析所需的最小数量 %d），未执行 GO/KEGG 富集。",
       nrow(sig), min_sig)))
   }
@@ -124,51 +123,49 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
   need_pkgs <- c("clusterProfiler", "AnnotationDbi", org_pkg)
   miss <- need_pkgs[!vapply(need_pkgs, requireNamespace, logical(1), quietly = TRUE)]
   if (length(miss)) {
-    add_warning(paste0("缺少富集依赖包: ", paste(miss, collapse = ", ")))
-    return(skip_result(paste0(
-      "缺少富集依赖包: ", paste(miss, collapse = ", "),
-      "。请在 R 中执行 BiocManager::install(c(\"", paste(miss, collapse = "\", \""),
-      "\")) 后重试。")))
+    add_warning(tr_("缺少富集依赖包: %s", paste(miss, collapse = ", ")))
+    return(skip_result(tr_(
+      "缺少富集依赖包: %s。请在 R 中执行 BiocManager::install(c(\"%s\")) 后重试。",
+      paste(miss, collapse = ", "), paste(miss, collapse = "\", \""))))
   }
   if (isTRUE(use_kegg) && !isTRUE(kegg_online) &&
       !analysis_soft_has("KEGG.db")) {
-    add_warning("未安装 KEGG.db (Bioconductor 已移除), 本次 KEGG 富集跳过; ",
-                "可在富集参数中启用「在线 KEGG (需联网)」")
+    add_warning(tr_("未安装 KEGG.db (Bioconductor 已移除), 本次 KEGG 富集跳过; 可在富集参数中启用「在线 KEGG (需联网)」"))
     use_kegg <- FALSE
   }
   local_dre_no_path <- isTRUE(use_kegg) && !isTRUE(kegg_online) &&
     identical(prep$kegg_org, "dre")
   if (local_dre_no_path)
-    add_warning("本地 KEGG.db 不含斑马鱼（dre）通路，斑马鱼仅支持 GO 富集（或改用在线 KEGG）")
+    add_warning(tr_("本地 KEGG.db 不含斑马鱼（dre）通路，斑马鱼仅支持 GO 富集（或改用在线 KEGG）"))
 
   OrgDb <- tryCatch(getExportedValue(org_pkg, org_pkg), error = function(e) NULL)
   if (is.null(OrgDb)) {
-    add_warning(sprintf("注释库 %s 不可用，跳过功能富集", org_pkg))
-    return(skip_result(sprintf("注释库 %s 不可用。", org_pkg)))
+    add_warning(tr_("注释库 %s 不可用，跳过功能富集", org_pkg))
+    return(skip_result(tr_("注释库 %s 不可用。", org_pkg)))
   }
 
   entrez <- tryCatch(map_symbol2entrez(annot$Genes, OrgDb),
                      error = function(e) {
-                       add_warning(paste("背景基因 ID 转换失败:", conditionMessage(e))); NULL })
+                       add_warning(tr_("背景基因 ID 转换失败: %s", conditionMessage(e))); NULL })
   if (is.null(entrez) || nrow(entrez) == 0) {
-    add_warning("背景基因 ID 转换失败，跳过功能富集")
-    return(skip_result("背景基因无法映射到 ENTREZID。"))
+    add_warning(tr_("背景基因 ID 转换失败，跳过功能富集"))
+    return(skip_result(tr_("背景基因无法映射到 ENTREZID。")))
   }
 
   sig_genes  <- unique(sub(";.*$", "", sig$Genes))
   sig_entrez <- tryCatch(map_symbol2entrez(sig_genes, OrgDb),
                          error = function(e) {
-                           add_warning(paste("差异基因 ID 转换失败:", conditionMessage(e))); NULL })
+                           add_warning(tr_("差异基因 ID 转换失败: %s", conditionMessage(e))); NULL })
   if (is.null(sig_entrez) || nrow(sig_entrez) < 3) {
-    add_warning("显著差异基因映射后不足 3 个，跳过功能富集")
-    return(skip_result("显著差异基因映射到 ENTREZID 后不足 3 个。"))
+    add_warning(tr_("显著差异基因映射后不足 3 个，跳过功能富集"))
+    return(skip_result(tr_("显著差异基因映射到 ENTREZID 后不足 3 个。")))
   }
 
   universe <- unique(entrez$ENTREZID)
   # v1.14.1: 多基因形式 ID ("A;B") 映射时静默截断为首基因 — 显式告知, 不再无声
   n_multi <- sum(grepl(";", annot$Genes %||% character(0), fixed = TRUE))
   if (n_multi > 0)
-    add_warning(sprintf("%d 个基因 ID 为多基因形式 (如 \"A;B\"), ID 映射只取第一个基因", n_multi))
+    add_warning(tr_("%d 个基因 ID 为多基因形式 (如 \"A;B\"), ID 映射只取第一个基因", n_multi))
   enrich_list <- list()
 
   # ---- GO ----
@@ -180,11 +177,11 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
                                 qvalueCutoff = qval_cutoff, readable = FALSE,
                                 minGSSize = min_gssize, maxGSSize = max_gssize),
       error = function(e) {
-        add_warning(sprintf("GO-%s 富集失败: %s", o, conditionMessage(e))); NULL })
+        add_warning(tr_("GO-%s 富集失败: %s", o, conditionMessage(e))); NULL })
     if (!is.null(go_res) && nrow(as.data.frame(go_res)) > 0) {
       enrich_list[[paste0("GO_", o)]] <- go_res
     } else {
-      add_warning(sprintf("GO-%s: 无显著富集结果", o))
+      add_warning(tr_("GO-%s: 无显著富集结果", o))
     }
   }
 
@@ -199,7 +196,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
     } else if (is.null(kegg_res)) {
       # 失败原因已由 kegg_enrich_run 写入 warnings
     } else {
-      add_warning("KEGG: 无显著富集结果")
+      add_warning(tr_("KEGG: 无显著富集结果"))
     }
   }
 
@@ -238,7 +235,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
                       x = NULL, y = "Gene count") +
         theme_proteo() + ggplot2::theme(axis.text.y = ggplot2::element_text(size = 9))
     }), kind = "ggplot", width = 9, height = 6,
-      label = sprintf("GO-%s 富集条形图", onto))
+      label = tr_("GO-%s 富集条形图", onto))
   }
 
   if (length(go_res_plot) > 0) {
@@ -265,7 +262,7 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
         theme_proteo() +
         ggplot2::theme(axis.text.y = ggplot2::element_text(size = 8.5),
                        strip.text.y = ggplot2::element_text(face = "bold"))
-    }), kind = "ggplot", width = 9.5, height = 8, label = "GO 富集气泡图")
+    }), kind = "ggplot", width = 9.5, height = 8, label = tr_("GO 富集气泡图"))
   }
 
   if ("KEGG" %in% names(enrich_list)) {
@@ -286,10 +283,10 @@ enrich_compute <- function(prep, de, pval_cutoff = 0.05, qval_cutoff = 0.2,
         ggplot2::labs(title = sprintf("KEGG pathway enrichment (%s)", org),
                       x = "Gene ratio", y = NULL) +
         theme_proteo() + ggplot2::theme(axis.text.y = ggplot2::element_text(size = 9))
-    }), kind = "ggplot", width = 9.5, height = 7, label = "KEGG 通路富集气泡图")
+    }), kind = "ggplot", width = 9.5, height = 7, label = tr_("KEGG 通路富集气泡图"))
   }
 
-  if (length(enrich_list) == 0) add_warning("无功能富集结果，未输出富集图表")
+  if (length(enrich_list) == 0) add_warning(tr_("无功能富集结果，未输出富集图表"))
 
   # 富集表拆分 (报告 iframe 用)
   tables <- list()

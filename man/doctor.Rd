@@ -5,7 +5,7 @@
 doctor(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
        sif_dirs = NULL, sif_probe = NULL, mail_conf = NULL, state_dir = NULL,
        deps = c("shiny", "shinydashboard", "shinyFiles", "htmltools"),
-       backend = NULL, local_cmds = NULL)
+       backend = NULL, local_cmds = NULL, lang = NULL)
 }
 \arguments{
 \item{apptainer_cands}{apptainer 候选 data.frame (默认调用 apptainer_candidates())}
@@ -20,6 +20,8 @@ doctor(apptainer_cands = NULL, partitions = NULL, slurm_cmds = NULL,
 (默认 slurm)。}
 \item{local_cmds}{命名字符向量: 本地原语命令名 -> 路径 (默认 Sys.which;
 仅本地模式展示)}
+\item{lang}{输出语言 \code{"zh"}/\code{"en"} (v1.15); \code{NULL} = 按配置
+LANG (环境变量 \code{DIANN_GUI_LANG} > 配置键 > 默认 \code{"en"})。}
 }
 \description{按重要性分组检查并打印: [0] 执行后端、[1] R 环境、[2] 依赖包
 (本地模式追加 setsid/nohup/timeout/bash 与 /proc)、[3] apptainer 依赖、

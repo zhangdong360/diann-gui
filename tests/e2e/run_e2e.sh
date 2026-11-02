@@ -135,6 +135,8 @@ MAIL_PYTHON <- ""
 RETENTION_DAYS <- 7
 EOF
   export DIANN_GUI_CONFIG="$CLEANUP_DIR/config.R"
+  # v1.15: e2e 断言基于中文文案 (应用默认英文), 套件级钉回 zh
+  export DIANN_GUI_LANG="zh"
   export E2E_FAKE_CTL="$CLEANUP_DIR/fake_ctl"
   export E2E_FAKE_APPTAINER_LOG="$CLEANUP_DIR/fake_apptainer_exec.log"
   echo "[e2e] 启动本地实例 :$PORT (后端 $E2E_BACKEND, 日志 $LOG)"

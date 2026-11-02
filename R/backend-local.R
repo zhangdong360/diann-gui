@@ -47,16 +47,14 @@ local_jobs_note_corrupt <- function(f, why, rename_fn = file.rename) {
       # v1.14.1: copy 成功后删除损坏原件 — 此前原件留存, 每次轮询 (10s) 都会
       # 重新检测损坏并再备一份 .corrupt-<ts>, 无上限累积
       unlink(f, force = TRUE)
-    } else bak <- "(备份失败)"
+    } else bak <- tr_("(备份失败)")
   }
   logf <- file.path(local_state_dir(), "diann_gui_local_state.log")
   try(cat(sprintf("%s local_jobs_load: %s; 备份: %s\n",
                   format(Sys.time(), "%Y-%m-%d %H:%M:%S"), why, bak),
           file = logf, append = TRUE), silent = TRUE)
-  warn <- sprintf(paste0("本地作业状态文件损坏 (%s), 已备份为 %s — 在跑作业已从面板移除, ",
-                         "进程可能仍在运行: 可用 ps -ef | grep local_runner 查看/手动结束; ",
-                         "详见 diann_gui_local_state.log"),
-                  basename(f), bak)
+  warn <- tr_("本地作业状态文件损坏 (%s), 已备份为 %s — 在跑作业已从面板移除, 进程可能仍在运行: 可用 ps -ef | grep local_runner 查看/手动结束; 详见 diann_gui_local_state.log",
+              basename(f), bak)
   try(assign("LOCAL_JOBS_WARN", warn, envir = .cfg), silent = TRUE)
 }
 
@@ -86,13 +84,13 @@ local_jobs_load <- function(recover = TRUE) {
 # 只读健康检查 (doctor 用): 不修改任何文件, 返回 list(ok, detail, warn)
 local_jobs_status <- function() {
   f <- local_jobs_file()
-  if (!file.exists(f)) return(list(ok = TRUE, detail = "尚未创建 (无本地作业历史)", warn = ""))
+  if (!file.exists(f)) return(list(ok = TRUE, detail = tr_("尚未创建 (无本地作业历史)"), warn = ""))
   w <- cfg_get("LOCAL_JOBS_WARN") %||% ""
   x <- tryCatch(readRDS(f), error = function(e) NULL)
   if (!is.list(x) || is.null(x$recs) || !is.list(x$recs)) {
-    return(list(ok = FALSE, detail = sprintf("文件存在但不可解析: %s", f), warn = w))
+    return(list(ok = FALSE, detail = tr_("文件存在但不可解析: %s", f), warn = w))
   }
-  list(ok = TRUE, detail = sprintf("%d 条记录, %s", length(x$recs), f), warn = w)
+  list(ok = TRUE, detail = tr_("%d 条记录, %s", length(x$recs), f), warn = w)
 }
 
 # 调用方负责锁; 这里只做最近 300 条截断 + 原子写
@@ -510,7 +508,7 @@ local_next_slot_info <- function(now = Sys.time()) {
   run <- Filter(function(r) local_job_state(r) %in% c("RUNNING", "PENDING"), recs)
   n <- length(run)
   if (!n) return(list(n = 0L, eta = NA_real_, earliest_job = "", unknown_limit = FALSE,
-                      detail = "当前没有本地作业在运行"))
+                      detail = tr_("当前没有本地作业在运行")))
   lim <- vapply(run, function(r) {
     ts <- suppressWarnings(as.numeric(r$time_sec %||% 0))
     se <- suppressWarnings(as.numeric(r$submitted_epoch %||% NA_real_))
@@ -519,19 +517,19 @@ local_next_slot_info <- function(now = Sys.time()) {
   unknown <- sum(is.na(lim))
   if (unknown == n) {
     return(list(n = n, eta = NA_real_, earliest_job = "", unknown_limit = TRUE,
-                detail = sprintf("当前 %d 个本地作业在运行, 均未设时限, 结束时间未知", n)))
+                detail = tr_("当前 %d 个本地作业在运行, 均未设时限, 结束时间未知", n)))
   }
   k <- which.min(replace(lim, is.na(lim), Inf))
   eta <- unname(lim[k])
   mins <- max(0, round((eta - as.numeric(now)) / 60))
   job <- tryCatch(as.character(run[[k]]$jobid), error = function(e) "")
   detail <- if (mins <= 0) {
-    sprintf("最早作业 (ID %s) 已到/超过时限, 预计即将结束", job)
+    tr_("最早作业 (ID %s) 已到/超过时限, 预计即将结束", job)
   } else {
-    sprintf("最早作业 (ID %s) 预计 %s 前结束 (约 %d 分钟)", job,
-            format(as.POSIXct(eta, origin = "1970-01-01"), "%H:%M"), mins)
+    tr_("最早作业 (ID %s) 预计 %s 前结束 (约 %d 分钟)", job,
+        format(as.POSIXct(eta, origin = "1970-01-01"), "%H:%M"), mins)
   }
-  if (unknown > 0) detail <- paste0(detail, sprintf("; 另有 %d 个未设时限", unknown))
+  if (unknown > 0) detail <- paste0(detail, tr_("; 另有 %d 个未设时限", unknown))
   list(n = n, eta = eta, earliest_job = job, unknown_limit = FALSE, detail = detail)
 }
 
@@ -590,22 +588,22 @@ local_submit <- function(p, script_path) {
   fail <- function(msg) list(ok = FALSE, backend = backend, job_id = NA_character_,
                              message = msg, log_out = "", log_err = "", pid = NA_integer_)
   out_dir <- as.character(p$out_dir %||% "")[1]
-  if (is.na(out_dir) || !nzchar(out_dir)) return(fail("本地模式提交失败: 输出目录为空"))
+  if (is.na(out_dir) || !nzchar(out_dir)) return(fail(tr_("本地模式提交失败: 输出目录为空")))
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-  if (!dir.exists(out_dir)) return(fail(sprintf("本地模式提交失败: 输出目录不存在且无法创建: %s", out_dir)))
+  if (!dir.exists(out_dir)) return(fail(tr_("本地模式提交失败: 输出目录不存在且无法创建: %s", out_dir)))
   if (length(script_path) != 1 || !nzchar(script_path) || !file.exists(script_path)) {
-    return(fail(sprintf("本地模式提交失败: 作业脚本不存在: %s", script_path)))
+    return(fail(tr_("本地模式提交失败: 作业脚本不存在: %s", script_path)))
   }
   runner <- local_runner_path()
   if (!nzchar(runner) || !file.exists(runner)) {
-    return(fail("本地模式提交失败: 找不到 local_runner.sh (包安装不完整?), 请重新安装 diann.gui"))
+    return(fail(tr_("本地模式提交失败: 找不到 local_runner.sh (包安装不完整?), 请重新安装 diann.gui")))
   }
   backend_available_check <- backend_available("local")
   if (!isTRUE(backend_available_check$ok)) {
-    return(fail(sprintf("本地模式提交失败: 缺少本地执行所需工具 (%s)", backend_available_check$detail)))
+    return(fail(tr_("本地模式提交失败: 缺少本地执行所需工具 (%s)", backend_available_check$detail)))
   }
   job_id <- local_seq_next()
-  if (is.na(job_id)) return(fail("本地模式提交失败: 无法分配本地作业 ID (状态目录不可写?)"))
+  if (is.na(job_id)) return(fail(tr_("本地模式提交失败: 无法分配本地作业 ID (状态目录不可写?)")))
   lp <- backend_log_paths(job_id, out_dir, "local", script_path)
   nice <- suppressWarnings(as.integer(cfg_get("LOCAL_NICE") %||% 10L))
   if (is.na(nice)) nice <- 10L
@@ -624,7 +622,7 @@ local_submit <- function(p, script_path) {
     submitted_epoch = as.numeric(Sys.time()),
     time_sec = time_sec, backend = "local")
   if (!isTRUE(local_jobs_add(rec))) {
-    return(fail(sprintf("本地模式提交失败: 无法写入本地作业状态文件 (%s)", local_jobs_file())))
+    return(fail(tr_("本地模式提交失败: 无法写入本地作业状态文件 (%s)", local_jobs_file())))
   }
   pidfile <- local_pidfile(job_id)
   spawn_log <- local_spawn_log(job_id)
@@ -641,7 +639,7 @@ local_submit <- function(p, script_path) {
   tryCatch(system(cmd, wait = TRUE), error = function(e) spawn_err <<- conditionMessage(e))
   if (!is.null(spawn_err)) {
     local_jobs_remove(job_id)
-    return(fail(sprintf("本地模式提交失败: 无法派生本地运行器 (%s)", spawn_err)))
+    return(fail(tr_("本地模式提交失败: 无法派生本地运行器 (%s)", spawn_err)))
   }
   pid <- NA_integer_
   for (i in seq_len(30)) {
@@ -656,27 +654,27 @@ local_submit <- function(p, script_path) {
     detail <- if (file.exists(spawn_log)) {
       paste(utils::tail(readLines(spawn_log, warn = FALSE), 3), collapse = " | ")
     } else ""
-    return(fail(paste0("本地模式提交失败: 运行器未在 3 秒内启动 (检查状态目录权限/setsid/nohup)",
-                       if (nzchar(detail)) paste0("; 启动日志: ", detail) else "")))
+    return(fail(paste0(tr_("本地模式提交失败: 运行器未在 3 秒内启动 (检查状态目录权限/setsid/nohup)"),
+                       if (nzchar(detail)) tr_("; 启动日志: %s", detail) else "")))
   }
   rec$pid <- as.integer(pid)
   rec$pid_start <- local_proc_starttime(pid)
   local_jobs_update(rec)
   try(local_cleanup(), silent = TRUE)
   list(ok = TRUE, backend = backend, job_id = as.character(job_id),
-       message = sprintf("已启动本地作业 %d (pid %d)", job_id, pid),
+       message = tr_("已启动本地作业 %d (pid %d)", job_id, pid),
        log_out = lp$out, log_err = lp$err, pid = as.integer(pid))
 }
 
 # 取消本地作业: 同 UID 校验 -> .cancelled 标记 (状态立即显示已取消) -> 整组 TERM -> KILL
 local_cancel <- function(job_id) {
   rec <- local_jobs_find(job_id)
-  if (is.null(rec)) return(list(ok = FALSE, message = sprintf("未找到本地作业 %s 的记录", job_id)))
-  if (!local_job_alive(rec)) return(list(ok = TRUE, message = sprintf("本地作业 %s 已结束", job_id)))
+  if (is.null(rec)) return(list(ok = FALSE, message = tr_("未找到本地作业 %s 的记录", job_id)))
+  if (!local_job_alive(rec)) return(list(ok = TRUE, message = tr_("本地作业 %s 已结束", job_id)))
   uid <- local_proc_uid(rec$pid)
   cur_uid <- local_current_uid()
   if (!is.na(uid) && !is.na(cur_uid) && uid != cur_uid) {
-    return(list(ok = FALSE, message = "无权取消其他用户的本地进程"))
+    return(list(ok = FALSE, message = tr_("无权取消其他用户的本地进程")))
   }
   mk <- local_marker(rec, "cancelled")
   if (nzchar(mk)) try(file.create(mk), silent = TRUE)
@@ -688,7 +686,7 @@ local_cancel <- function(job_id) {
     local_kill_tree(pid, "TERM")
   }
   for (i in seq_len(10)) {
-    if (!local_job_alive(rec)) return(list(ok = TRUE, message = sprintf("已取消本地作业 %s", job_id)))
+    if (!local_job_alive(rec)) return(list(ok = TRUE, message = tr_("已取消本地作业 %s", job_id)))
     Sys.sleep(0.5)
   }
   if (!is.na(pgid) && pgid == pid) {
@@ -696,5 +694,5 @@ local_cancel <- function(job_id) {
   } else {
     local_kill_tree(pid, "KILL")
   }
-  list(ok = TRUE, message = sprintf("本地作业 %s 已强制取消", job_id))
+  list(ok = TRUE, message = tr_("本地作业 %s 已强制取消", job_id))
 }
